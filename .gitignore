@@ -261,3 +261,6 @@ maizsim.dll
 
 /Crop source/$tf1/*
 /Soil Source/2dsoil.u2d
+# pixi environments
+.pixi/*
+!.pixi/config.toml

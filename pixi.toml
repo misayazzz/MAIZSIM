@@ -1,0 +1,18 @@
+[workspace]
+authors = ["Misaya <gz06324@163.com>"]
+channels = ["conda-forge"]
+name = "MAIZSIM"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[pypi-options]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+extra-index-urls = ["https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"]
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+numpy = ">=2.4.3,<3"
+pandas = ">=3.0.2,<4"
+openpyxl = ">=3.1.5,<4"

@@ -1,0 +1,41 @@
+
+10/20/2020 added more lines of input data to the variety file - leaf morphology, temperature parameters - modifications to variety module only
+8/5/2019 added a file for drip input but am not using it yet
+8/14/2019 program started formatting some values as dates. I had to explicitly
+format some cells as general. I also made sure all the record sets were closed after running 
+a module.
+9/10/2019 added columns for residue to the fertilization table. Now output this to the layer file
+9/17/20189 removed location string from query in create climate table module. Can probably remove it from
+     the spreadsheet. I added a location to the weather table. This way we can choose specific rows from the file.
+  ths location in the description table should point to the rows in the weather table
+1/27/2020 Version 5 - added option to input water or matric potential. This needed an extra variable in the soils table called InitType placed after hnew. it probably should go in the initials table.
+2/20/2020 changed all references of soilName to soilFile. in both the database and code. Manually added strings to paste additional variety data to the end of the variety file. Need to put this in the database later.
+this is the version used for agmip2
+
+2/27/2020 removed gridx from the macros. Added ROWspacing to where CO2 was in the excel file. Now we send row spacing to the createsoils program and it creates the x-axis coordinates.
+
+03/02/2020 removed writing of GDD to Maturity
+
+4/20/2020  modified fertilizer input to use a depth rathe than nodes for input
+           completely removed xgrid from macros and input database. 
+           changed header for ID in soil table to soilfilename
+
+5/1/2020   created new version, 6 modifed code to write out climate file so it is consistent with maizsim. always need at least an average for concentration of N in precipititation for site averages at the end of the file. Irav is only used for daily weather data
+          writes another filename in the run file at the end for runoff mass balance
+
+Nov 22, 2022
+The versions loaded today add CO2 and O2 gas transport. New parameter files were added and new columns for the soil data (CO2 and O2 concentrations are soil properties). A new sheet “GAS” was added to hold the gas params
+
+Added new categories for fertilization litter and manure carbon and nitrogen. These are Kg/ha total carbon and nitrogen for any fertilizer as incorporated manure or litter (like biomass from prev crop)
+
+Added a tillage operation - only moldboard for now
+
+Added the ability to read weather from a csv file and create weather files for each folder. 
+
+Also started adding units to some of the field headers to reduce confusion when creating data files.
+
+
+6/20/2024  not keeping up with changes well. Since February added nitrous as a gas and ponded infiltration.
+9/17/2024  clarified units for irrigation. added parameters for ponded irrigation by flux. added water parameter file to the database
+
+
