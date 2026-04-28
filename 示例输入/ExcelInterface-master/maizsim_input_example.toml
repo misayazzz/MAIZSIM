@@ -1,0 +1,38 @@
+[paths]
+
+# 必填. Excel 参数表路径, 即包含 Description, Climate, Weather 等 sheet 的输入工作簿. 可以写相对路径, 脚本会在调用 Excel 宏前解析为绝对路径.
+input_excel_file = "Example input/MDEasternShore (maize)/MD-DE inputs.xlsx"
+
+# 必填. 模型输入生成根目录, 宏会在此目录下按 Description.Path 创建 run 子目录. 可以写相对路径, 但该目录必须已存在. filecheat 会把宏生成的 run<ID>.dat 规范化为 run.dat, 把 WaterBound.DAT 放到每个 selected run 子目录, 并改写 run.dat 引用.
+# root_path = "Example input/MDEasternShore (maize)"
+root_path = "./"
+
+# 必填. Maizsim 可执行程序所在目录, 对应 Excel 接口中的 MaizsimPath. 可以写相对路径, 脚本会写入解析后的绝对路径. filecheat 另会从 Models 目录复制 2dMAIZSIM.exe 和 Maizsim.dll 到每个 selected run 子目录.
+maizsim_path = "Example input"
+
+# 必填. CreateSoilFiles.exe 所在目录, 用于自动生成 soil/grid 文件, 也会写入 grid1.bat 供排查. 可以写相对路径, 脚本会写入解析后的绝对路径.
+create_soils = "CreateSoilFIles"
+
+# 必填. Excel 宏接口目录, 通常是 read plant filesV9_mulch (integrated).xlsm 所在目录. 可以写相对路径, 脚本会写入解析后的绝对路径.
+excel_interface = "ExcelInterface"
+
+# 必填. 原始宏工作簿路径. 可以写相对路径. 脚本不会直接修改该文件, 只会复制自动化副本.
+macro_workbook = "ExcelInterface/read plant filesV9_mulch (integrated).xlsm"
+
+# 必填. 天气 CSV 所在目录, 对应 Excel 接口中的 Weather CSV File Folder. 可以写相对路径, 脚本会写入解析后的绝对路径.
+weather_csv_folder = "Example input/MDEasternShore (maize)"
+
+
+[run]
+
+# 必填. 需要生成输入目录的 Description.ID 列表. 每个 ID 必须存在于参数表的 Description sheet.
+selected_ids = ["WYE07"]
+
+# 必填. 自动化宏工作簿副本路径. 可以写相对路径. 脚本会复制 macro_workbook 到此路径并注入非交互入口.
+automation_workbook = ".generated/read_plant_files_automation.xlsm"
+
+# 可选. 是否显示 Excel 窗口. 调试宏错误时建议设为 true, 正常批量生成时设为 false.
+visible_excel = false
+
+# 可选. 宏运行后是否保存自动化副本. 建议保留 true, 便于复查 Interface 页和隐藏配置页.
+save_after_run = true

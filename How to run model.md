@@ -1,5 +1,13 @@
 
-Maizsim has to be run from the command line. A "run" file will contain paths and filenames of the input files:
+Maizsim has to be run from the command line. In the current Python/TOML workflow, `pixi run filecheat` creates a self-contained run folder. The Excel macro first writes a `run<ID>.dat` file, then Python renames it to `run.dat`, copies `2dMAIZSIM.exe`, `Maizsim.dll`, and `WaterBound.DAT` into the run folder, and rewrites the `WaterBound.DAT` reference inside `run.dat`.
+
+From a generated run folder, run the model as:
+
+```powershell
+.\2dMAIZSIM.exe .\run.dat
+```
+
+The `run.dat` file contains paths and filenames of the input files:
 
 D:\MAIZSIM07\MDEasternShore\Del06\DEL06.wea
 
@@ -21,11 +29,7 @@ D:\MAIZSIM07\MDEasternShore\Del06\WyeSoil.soi
 
 .
 
-In the examples, the run file is always prefixed with 'run' and has dat  as an extension, i.e., "RunDel06.dat". The model is run on the command from a DOS prompt. Assuming your executable is in the folder d:\maizsim07\MDEasternShore and the input data are in subfolders - d:\maizsim07\MDEasternShore\DEL06 and d:\maizsim07\MDEasternShore\DEL07 for example, you would run the model as:
-
-D:\Maizsim07\MDEasternShore>2dsoil .\DEL06\runDEL06.dat
-
-the .\ is a relative path address and will tell the operating system to look for the run file in a subdirectory called wye06. The model executable (exe file) is still called 2dsoil because of how the compiler was originally set up. We plan to change it in the future. The folder with the 2dsoil.exe file should also have the files crop.dll and lightenv.dll. For this version there are two general files I keep in the root folder (Maizsim07\MDEasternShore) in this case. These are the water.dat (parameters for the water mover submodel) and WaterBound.dat which contains time dependent boundary conditions. This file is only read if there are time dependent boundary conditions (code =+3 or -3). But, is is opened so the file must be present. The contents are not used unless the BC is specified. 
+Older Excel-only examples may show names such as `runDEL06.dat` and may run the executable from a shared root folder. That is the legacy pattern. In the current automated workflow, use the generated `run.dat` in the run folder. `WaterBound.DAT` must still be present because the model opens it, even when the contents are not used unless the water boundary code requires time-dependent boundary conditions.
 
 
 There are 5 output files:
@@ -43,4 +47,4 @@ DEL06.G05  -- surface fluxes, et, rain, transpiration
 DEL06.G06  bottom and top boundary fluxes
 
 
-I usually make a folder for each simulation and keep all the related files in that folder. One can put some files in other folders to reduce duplication, for example put all the grid files into a grid folder. Initially, I used to put all the related data in the same folder, for example the weather files in a weather folder or the variety files in a variety folder. Since the full file paths are specified in the run.dat file, the files can be located anywhere. 
+The current automated workflow keeps each selected run self-contained. One can still put files in other folders because the full file paths are specified in `run.dat`, but the recommended generated layout keeps the executable, DLL, boundary file, grid files, soil file, and run file in the same run folder.

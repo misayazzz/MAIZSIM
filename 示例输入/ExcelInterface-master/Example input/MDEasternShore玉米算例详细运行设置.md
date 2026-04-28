@@ -1,12 +1,22 @@
-# MDEasternShore (maize) 算例极详细设置
+# MDEasternShore 玉米算例详细运行设置
 
-本文档从 `case_run_details_zh.md` 分离而来, 专门记录 `MDEasternShore (maize)` 算例的完整运行设置。
+## 算例来源与适用边界
 
-返回主文档: [Example input 算例运行情况详细说明](case_run_details_zh.md)
+本算例来源于仓库 README 中标注的 Maryland Eastern Shore 示例, 对应 Kim et al., 2012 的 MAIZSIM 论文: "Modeling temperature responses of leaf growth, development, and biomass in maize with MAIZSIM", Agronomy Journal 104:1523-1537, DOI: `10.2134/agronj2011.0321`.
 
-## 5. MDEasternShore (maize)
+论文中 MAIZSIM 与 2DSOIL 耦合, 用于模拟 Maryland Wye 和 Delaware Georgetown 的玉米田间数据. 其中 Delaware 包括 2006 和 2007 两个年份, Maryland Wye 包括 2006, 2007 和 2008 三个年份. 因此, 论文直接对应的是 5 个站点年份案例.
 
-### 文件与总体设计
+本地 `MD-DE inputs.xlsx` 将该案例整理为 ExcelInterface 输入格式, 并包含 7 个 run: `WYE06`, `WYE07`, `WYE08`, `DEL06`, `DEL07`, `DEL08`, `DEL09`. 其中 `WYE06`, `WYE07`, `WYE08`, `DEL06`, `DEL07` 与论文中的站点年份设置高度对应. `DEL08` 和 `DEL09` 不是论文中独立的 Delaware 2008 或 2009 田间年份, 而是在 `DEL07` 的同一地点, 同一天气, 同一模拟期和同一品种条件下替换土壤文件形成的派生土壤对照.
+
+需要特别区分本地 Excel 输入和论文田间管理描述. 本地 `Irrig`, `Drip` 和 `DripNodes` 表没有实际灌溉事件, 因而本文后续按无显式灌溉输入解释这 7 个 run. 但 Kim et al., 2012 的论文材料方法中描述 Delaware 2006 和 2007 的氮肥随灌溉水施入. 因此, "本地算例无显式灌溉记录" 只适用于当前 ExcelInterface 输入文件, 不能外推为原论文 Delaware 田间试验没有灌溉.
+
+综上, 本文后续分析的是仓库中 `MDEasternShore (maize)` 目录下的模型输入算例, 不是对 Kim et al., 2012 原始试验所有管理细节的完整复刻. 若用于论文复现或严谨对比, 应同时核对原论文的田间管理描述和本地 Excel 表中的运行设置.
+
+本文档专门记录 `MDEasternShore (maize)` 算例的完整运行设置。
+
+返回主文档: [Example input 算例总览与选型建议](Example输入算例总览与选型建议.md)
+
+## 文件与总体设计
 
 - 参数表: `MDEasternShore (maize)/MD-DE inputs.xlsx`
 - 天气文件: `MDEasternShore (maize)/MD_Del_weather.csv`

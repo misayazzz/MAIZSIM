@@ -10,9 +10,15 @@ index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 extra-index-urls = ["https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"]
 
 [tasks]
+check = { cmd = 'python "ExcelInterface-master/maizsim_generate_inputs.py" --dry-run', cwd = "示例输入" }
+filecheat = { cmd = 'python "ExcelInterface-master/maizsim_generate_inputs.py"', cwd = "示例输入" }
 
 [dependencies]
 python = "3.12.*"
 numpy = ">=2.4.3,<3"
 pandas = ">=3.0.2,<4"
 openpyxl = ">=3.1.5,<4"
+pywin32 = ">=311,<312"
+matplotlib = ">=3.10.9,<4"
+seaborn = ">=0.13.2,<0.14"
+pyemu = ">=1.4.0,<2"

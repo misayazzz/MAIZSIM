@@ -1,12 +1,10 @@
-# Kansas 算例极详细设置
+# Kansas 算例详细运行设置
 
-本文档从 `case_run_details_zh.md` 分离而来, 专门记录 `Kansas` 算例的完整运行设置。
+本文档专门记录 `Kansas` 算例的完整运行设置。
 
-返回主文档: [Example input 算例运行情况详细说明](case_run_details_zh.md)
+返回主文档: [Example input 算例总览与选型建议](Example输入算例总览与选型建议.md)
 
-## 4. Kansas
-
-### 文件与总体设计
+## 文件与总体设计
 
 - 参数表: `Kansas/kansas inputs.xlsx`
 - 天气文件: `Kansas/KansasWea.csv`
@@ -162,13 +160,15 @@
 | `MOSI06` | Moscow 2006 常规运行 | Moscow, 日天气 | Pioneer 33B51 | MOSI06.soi | 2006-04-12 到 2006-11-01 | 2006-04-26 / 2006-11-01 | 74239 | 125.798 | `Irrig_data` 19 条, 合计 343.7 |
 | `MAND06` | Manhattan 2006 常规运行 | Manhattan, 日天气 | Pioneer 32B29 | MAND06.soi | 2006-03-04 到 2006-11-01 | 2006-04-19 / 2006-11-01 | 63749 | 126.784 | `Irrig_data` 只有空记录, 无有效灌溉量 |
 | `HUTD06` | Hutchingson 2006 常规运行 | Hutchingson, 日天气 | Pioneer 32B29 | HUTD06.soi | 2006-03-31 到 2006-11-01 | 2006-04-14 / 2006-11-01 | 49852 | 112.0 | `Irrig_data` 只有空记录, 无有效灌溉量 |
-| `ASHD05` | Ashland 2005 dry 运行 | AshDry, 小时天气 | DKC60-19RR | Eudora.soi | 2005-04-12 到 2005-11-01 | 2005-05-05 / 2005-11-01 | 68000 | 224.0 | `Irrig_data` 2 条, 合计 101.6 |
+| `ASHD05` | Ashland 2005 `AshDry` 标签运行 | AshDry, 小时天气 | DKC60-19RR | Eudora.soi | 2005-04-12 到 2005-11-01 | 2005-05-05 / 2005-11-01 | 68000 | 224.0 | `Irrig_data` 2 条, 合计 101.6 |
 | `ASHI05` | Ashland 2005 irrigated 运行 | AshIrr, 小时天气 | DKC60-19RR | Eudora.soi | 2005-04-12 到 2005-11-01 | 2005-05-05 / 2005-11-01 | 68000 | 348.0 | `Irrig_data` 6 条, 合计 304.8 |
-| `ASHD06` | Ashland 2006 dry 运行 | AshDry, 小时天气 | DKC60-19RR | Belvue.soi | 2006-04-12 到 2006-11-01 | 2006-05-11 / 2006-11-01 | 78736 | 224.0 | `Irrig_data` 1 条, 合计 50.8 |
+| `ASHD06` | Ashland 2006 `AshDry` 标签运行 | AshDry, 小时天气 | DKC60-19RR | Belvue.soi | 2006-04-12 到 2006-11-01 | 2006-05-11 / 2006-11-01 | 78736 | 224.0 | `Irrig_data` 1 条, 合计 50.8 |
 | `ASHI06` | Ashland 2006 irrigated 运行 | AshIrr, 小时天气 | DKC60-19RR | Belvue.soi | 2006-04-12 到 2006-11-01 | 2006-05-11 / 2006-11-01 | 78189 | 224.0 | `Irrig_data` 8 条, 合计 406.4 |
 | `ASHD06IR` | Ashland 2006 额外显式灌溉运行 | AshDry, 小时天气 | DKC60-19RR | Belvue.soi | 2006-04-12 到 2006-11-01 | 2006-05-11 / 2006-11-01 | 78736 | 224.0 | `Irrig` 4 条显式灌溉规则 |
 | `CULI05IR` | Cullison 2005 额外显式灌溉运行 | Cullison, 日天气 | Pioneer 32B33 | CULI05.soi | 2005-04-05 到 2005-11-01 | 2005-04-19 / 2005-11-01 | 69936 | 192.077 | `Irrig` 1 条 sprinkler 规则 |
 | `MOSI06IR` | Moscow 2006 额外显式灌溉运行 | Moscow, 日天气 | Pioneer 33B51 | MOSI06.soi | 2006-04-12 到 2006-11-01 | 2006-04-26 / 2006-11-01 | 74239 | 125.798 | `Irrig` 2 条 flood_H 规则, 其中 1 条日期异常 |
+
+注意: `AshDry` 和 `AshIrr` 是源表中的 `WeatherID` 或处理标签。由于 `ASHD05` 和 `ASHD06` 仍有 `Irrig_data` 灌溉记录, `AshDry` 不应直接理解为完全无灌溉。
 
 ### 施肥事件完整设置
 
@@ -417,7 +417,7 @@
 - 非 Ashland 站点使用日天气源, 但 `Time` 表仍设置 `Hourly=1`; 区分天气尺度的关键字段是 `WeatherDaily/WeatherHourly`。
 - `MAND06` 使用的 `Manhattan` 日天气只覆盖到 2006-10-22, 短于 `Time.EndDate=2006-11-01`; 这在正式运行或数据同化前需要优先核查。
 - `MOSI05` 的模拟期内包含 `Moscow` 天气在 2005-07-03 的重复日记录, 其期内天气行数为 236 行而不是 235 行; 若模型天气读取器要求每天唯一记录, 也需要核查。
-- Ashland 有最清晰的 dry/irrigated 对照:
+- Ashland 有最清晰的 `AshDry`/`AshIrr` 标签对照, 但 `AshDry` 不等同于完全无灌溉:
   - `ASHD05` vs `ASHI05`: 同年, 同品种, 同土壤 `Eudora.soi`, 主要改变 `WeatherID`, 施肥和灌溉记录。
   - `ASHD06` vs `ASHI06`: 同年, 同品种, 同土壤 `Belvue.soi`, 主要改变 `WeatherID`, 种植密度略有差异, 施肥日期和灌溉记录不同。
 - `ASHD06IR`, `CULI05IR`, `MOSI06IR` 是额外显式灌溉运行, 与其对应基础运行共享品种, 土壤, 天气文件和大部分管理设置, 但灌溉从 `Irrig_data` 转为 `Irrig` 表规则。

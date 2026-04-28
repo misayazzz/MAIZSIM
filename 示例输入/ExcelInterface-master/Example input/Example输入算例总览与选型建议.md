@@ -1,4 +1,4 @@
-# Example input 算例运行情况详细说明
+# Example input 算例总览与选型建议
 
 本文档根据 `Example input` 目录下各算例的 Excel 参数表和天气 CSV 文件整理。整理时只读取输入文件, 没有运行模型, 也没有生成或修改任何模型输入目录。
 
@@ -33,7 +33,7 @@
 | 排名 | 算例目录 | 推荐程度 | 最适合的同化研究方向 | 不建议作为主算例的原因或风险 |
 |---:|---|---|---|---|
 | 1 | `MDEasternShore (maize)` | 最推荐 | 无灌溉条件下的土壤水分, 作物生长状态, 土壤参数和天气驱动响应同化 | 需要外部观测或合成观测。`DEL08` 和 `DEL09` 没有施肥记录, 若研究生长或产量需要谨慎处理。 |
-| 2 | `Kansas` | 推荐作为第二阶段 | 旱作/灌溉对比, 水分管理, 灌溉处理下的土壤水分或作物状态同化 | 地点多, 天气尺度混合, 管理差异更复杂, 不如 `MDEasternShore (maize)` 适合作为第一套框架。 |
+| 2 | `Kansas` | 推荐作为第二阶段 | `AshDry`/`AshIrr` 水分处理标签对比, 水分管理, 灌溉处理下的土壤水分或作物状态同化 | 地点多, 天气尺度混合, 管理差异更复杂, 不如 `MDEasternShore (maize)` 适合作为第一套框架。 |
 | 3 | `AgmipET2` | 推荐作为扩展验证 | 多年份, 多水分处理, AgMIP 背景下的模型泛化和水分管理同化 | 年份, 品种, 土壤, 施肥和灌溉系统同时变化, 初期解释成本高。 |
 | 4 | `CO2_Respiration_CaseStudy1` | 条件推荐 | 土壤 CO2, 土壤呼吸, 气体扩散或土壤参数反演 | 主题偏土壤气体和呼吸参数敏感性, 不适合作为一般玉米生长同化主算例。 |
 | 5 | `Tropical_Temperate_Study` | 适合作为泛化检验 | 热带/温带地点差异, 年际气候差异, 跨气候带参数可迁移性 | 日天气, 无明显水分处理梯度, 更适合在同化方法稳定后做跨气候验证。 |
@@ -44,7 +44,7 @@
 | 算例目录 | 推荐结论 | 最推荐的切入方式 | 后续建议 |
 |---|---|---|---|
 | `MDEasternShore (maize)` | 作为数据同化研究的首选主算例。它运行数量少, 全部是小时天气, 没有显式灌溉, 管理扰动相对少, 而且 `DEL07`, `DEL08`, `DEL09` 构成清晰的土壤替换对照。 | 第一阶段选 `WYE07` 或 `DEL07` 做单运行同化流程验证。第二阶段使用 `DEL07`, `DEL08`, `DEL09` 做土壤差异和土壤水分状态同化。第三阶段再加入 `WYE06`, `WYE08`, `DEL06` 检查跨年和跨地点稳定性。 | 优先同化土壤水分剖面, LAI, 生物量或产量。若没有实测数据, 先做合成观测。若研究生长和产量, 必须先处理 `DEL08` 和 `DEL09` 没有施肥记录的问题, 否则土壤差异会和施肥差异混杂。Del 组降雨很高, 适合研究湿润条件下土壤水分和排水过程, 不适合作为干旱胁迫主案例。 |
-| `Kansas` | 适合作为第二推荐算例, 尤其适合把同化研究从无灌溉场景扩展到旱作/灌溉和多地点场景。 | 先选一个地点和一个处理对照, 例如 Ashland 的旱作/灌溉小时天气组, 或显式灌溉运行 `ASHD06IR`, `CULI05IR`, `MOSI06IR`。不要一开始同时使用所有 13 个运行。 | 适合研究土壤水分同化对灌溉处理识别, 水分胁迫估计和产量预测的改进。后续可以比较“只同化作物状态”, “只同化土壤水分”, “联合同化作物状态和土壤水分”的效果。需要注意 Kansas 同时包含日天气和小时天气, 同化时间步和观测时间尺度要单独统一。 |
+| `Kansas` | 适合作为第二推荐算例, 尤其适合把同化研究从无灌溉场景扩展到水分处理和多地点场景。 | 先选一个地点和一个处理对照, 例如 Ashland 的 `AshDry`/`AshIrr` 小时天气组, 或显式灌溉运行 `ASHD06IR`, `CULI05IR`, `MOSI06IR`。不要一开始同时使用所有 13 个运行。 | 适合研究土壤水分同化对灌溉处理识别, 水分胁迫估计和产量预测的改进。后续可以比较“只同化作物状态”, “只同化土壤水分”, “联合同化作物状态和土壤水分”的效果。需要注意 Kansas 同时包含日天气和小时天气, 且 `AshDry` 是源数据处理标签, 不等同于完全无灌溉; 同化时间步和观测时间尺度要单独统一。 |
 | `AgmipET2` | 适合作为方法成熟后的扩展算例, 不建议作为第一套同化主算例。它的优势是 AgMIP 背景, 多年份, 多水分处理和灌溉系统丰富。 | 先用 Mead 成对组比较 `MeadNE2` 灌溉和 `MeadNE3` 雨养, 因为它们年份成对且结构清楚。待流程稳定后再分析 Bush 的 `NW-MESA-75%`, `SW-MESA-100%`, `NE-SDI-100%`, `SE-SDI-100%` 灌溉系统差异。 | 适合研究同化方法在多年份和多水分管理下的泛化能力。后续可以把 `MDEasternShore (maize)` 得到的同化框架迁移到 `AgmipET2`, 检查不同年份和不同灌溉制度下参数是否需要重新校准。需要谨慎区分年份, 品种, 土壤文件, 施肥和灌溉制度的共同变化。 |
 | `CO2_Respiration_CaseStudy1` | 只在研究重点明确指向土壤 CO2, 土壤呼吸, 气体扩散或土壤参数反演时推荐。它不适合作为一般作物生长同化主算例。 | 以 `OCA2003_Run1` 或中心参数运行为基准, 再利用 `bTort`, `fe`, `kh`, `kL`, `fh`, `rL`, `r0` 的单参数和双参数组合做参数可辨识性分析。 | 后续应把研究问题写成“利用 CO2/呼吸或土壤气体观测反演气体扩散和土壤呼吸参数”, 而不是泛泛的玉米产量同化。若没有 CO2 或土壤呼吸观测, 可先做合成观测实验, 检查哪些参数能被观测约束, 哪些参数存在等效性或不可辨识问题。 |
 | `CO2_Respiration_CaseStudy2` | 不建议作为正式主算例, 但适合做最小化调试。 | 用 `SCA2004_Run1` 检查 Excel 接口, 天气读取, 单运行生成输入, CO2/气体模块是否能执行。 | 后续只把它作为调试用例或补充说明。由于只有 1 个运行, 无法支撑跨年份, 跨地点, 多处理或参数组合的同化结论。 |
@@ -68,7 +68,7 @@
 | `AgmipET2` | 该算例用于复现或测试 AgMIP ET2 相关玉米模拟输入, 重点覆盖两个地点和多种水分管理条件。它把 Mead 的灌溉/雨养对照与 Bush 的不同灌溉系统处理放在同一套参数表中, 适合检查 Excel 接口能否批量生成多年份, 多品种, 多水分处理的 Maizsim 输入。 | 地点 `Mead` 与 `Bush`, `MeadNE2` 与 `MeadNE3`, `M_75`, `M_100`, `S_100`, 年份, 品种, 施肥和灌溉记录。 |
 | `CO2_Respiration_CaseStudy1` | 该算例用于 CO2/土壤呼吸相关参数敏感性测试。虽然 `Weather` 表中列出了 CO2, 温度和降雨扰动天气 ID, 但当前 87 个运行实际都接入 OCA 日天气, 主要目的是在同一地点和基本相同作物管理下系统改变气体扩散参数和土壤参数, 观察土壤 CO2 或呼吸过程对参数变化的响应。 | `Gas_CO2/Gas_O2` 的 `bTort`, 土壤参数 `fe`, `kh`, `kL`, `fh`, `rL`, `r0`, 以及 `kL x fe` 双参数组合。 |
 | `CO2_Respiration_CaseStudy2` | 该算例是 CO2/土壤呼吸案例的最小单运行版本。它使用 Sacramento California 的 `SCA` 日天气和一个 SCA 土壤文件, 适合作为 CaseStudy1 之前的快速检查案例, 或用于确认 CO2/气体模块在单一运行下能否正常生成输入和执行。 | 单一运行 `SCA2004_Run1`, `SCA_Wea`, `SCA_Soil_SCA2004_Run1.soi`, 默认气体参数。 |
-| `Kansas` | 该算例用于测试 Kansas 多站点玉米模拟, 同时覆盖日天气和小时天气, 以及旱作/灌溉处理。它适合检查接口对多地点, 多天气尺度, 多土壤和补充灌溉记录的处理能力。 | `AshDry` 与 `AshIrr`, Ashland 小时天气, 其他站点日天气, `ASHD06IR`, `CULI05IR`, `MOSI06IR` 的显式灌溉设置。 |
+| `Kansas` | 该算例用于测试 Kansas 多站点玉米模拟, 同时覆盖日天气和小时天气, 以及 `AshDry`/`AshIrr` 水分处理标签。它适合检查接口对多地点, 多天气尺度, 多土壤和补充灌溉记录的处理能力。 | `AshDry` 与 `AshIrr`, Ashland 小时天气, 其他站点日天气, `ASHD06IR`, `CULI05IR`, `MOSI06IR` 的显式灌溉设置。 |
 | `MDEasternShore (maize)` | 该算例用于 Maryland Eastern Shore 玉米案例模拟, 重点是 Wye 和 Del 两个地点的小时天气运行。它没有显式灌溉, 依赖天气文件中的降雨输入, 适合做无灌溉条件下的地点, 年份, 品种和土壤对照。Del 组降雨很高, `DEL07`, `DEL08`, `DEL09` 还构成清晰的土壤替换对照。 | Wye 逐年运行, Del 逐年运行, `WyeSoil.soi`, `Caswell.soi`, `Piedmont.soi`, 高降雨天气, 无显式灌溉。 |
 | `Tropical_Temperate_Study` | 该算例用于热带地点 Rahuri 与温带地点 Marshall 的多年对比。它把两个地点各 13 年的日天气, 独立土壤文件和固定管理方案整理在同一参数表中, 适合比较气候带差异, 年际天气差异和地点差异对模型结果的影响。 | `Rahuri` 与 `Marshall`, 2009 到 2021 年逐年天气 ID, 两个品种, 两套土壤和施肥总量差异。 |
 
@@ -79,7 +79,7 @@
 | `AgmipET2` | `AGMIPET2Sim.xlsx` | `AgMipET2weather.csv` | 20 | `Mead`, `Bush` | 小时天气源, `Time` 表为 `WeatherHourly=1` | AgMIP ET2, 包括 Mead 灌溉/雨养和 Bush 不同灌溉系统处理 |
 | `CO2_Respiration_CaseStudy1` | `CaseStudy1.xlsx` | `CaseStudy1_2_Weather.csv` | 87 | `OCA` / `OntCA` | 当前运行接入日天气, `WeatherDaily=1` | CO2/土壤呼吸案例 1, 以 OCA 为主, 包含气体扩散和土壤参数敏感性 |
 | `CO2_Respiration_CaseStudy2` | `CaseStudy2.xlsx` | `CaseStudy1_2_Weather.csv` | 1 | `SCA` / `SacCA` | 日天气, `WeatherDaily=1` | CO2/土壤呼吸案例 2, Sacramento 单运行 |
-| `Kansas` | `kansas inputs.xlsx` | `KansasWea.csv` | 13 | `Ashland`, `Cullison`, `Hutchingson`, `Manhattan`, `Moscow` | 混合, Ashland 为小时天气, 其他站点为日天气 | Kansas 多站点, 包含旱作/灌溉处理和若干补充灌溉运行 |
+| `Kansas` | `kansas inputs.xlsx` | `KansasWea.csv` | 13 | `Ashland`, `Cullison`, `Hutchingson`, `Manhattan`, `Moscow` | 混合, Ashland 为小时天气, 其他站点为日天气 | Kansas 多站点, 包含 `AshDry`/`AshIrr` 水分处理标签和若干补充灌溉运行 |
 | `MDEasternShore (maize)` | `MD-DE inputs.xlsx` | `MD_Del_weather.csv` | 7 | `Wye`, `Del` | 小时天气 | Maryland Eastern Shore 玉米案例, 两个地点, 三个品种/土壤组合 |
 | `Tropical_Temperate_Study` | `Temperate_Tropical_Sites.xlsx` | `Temperate_Tropical_Weather.csv` | 26 | `Rahuri`, `Marshall` | 日天气 | 热带地点 Rahuri 与温带地点 Marshall 对比, 2009-2021 年逐年运行 |
 
@@ -103,7 +103,7 @@
 
 ## 算例总体描述
 
-本节只保留每个算例的总体目的, 文件组成, 运行数量, 天气尺度, 主要差异和使用建议。`Kansas` 与 `MDEasternShore (maize)` 的极详细设置已经拆分到独立文档。
+本节只保留每个算例的总体目的, 文件组成, 运行数量, 天气尺度, 主要差异和使用建议。`Kansas` 与 `MDEasternShore (maize)` 的详细运行设置已经拆分到独立文档。
 
 ### 1. AgmipET2
 
@@ -148,11 +148,11 @@
 - 运行数: 13
 - 主要地点: `Ashland`, `Cullison`, `Hutchingson`, `Manhattan`, `Moscow`
 - 天气尺度: 混合天气尺度。`AshDry` 和 `AshIrr` 为小时天气; `Cullison`, `Moscow`, `Manhattan`, `Hutchingson` 为日天气。
-- 总体目的: Kansas 多站点玉米模拟, 覆盖日/小时天气, 多地点, 多土壤, 品种差异和旱作/灌溉处理。
-- 主要差异: Ashland 有 `AshDry`/`AshIrr` 旱作和灌溉天气对照; `ASHD06IR`, `CULI05IR`, `MOSI06IR` 是额外显式灌溉运行。
+- 总体目的: Kansas 多站点玉米模拟, 覆盖日/小时天气, 多地点, 多土壤, 品种差异和 `AshDry`/`AshIrr` 水分处理标签。
+- 主要差异: Ashland 有 `AshDry`/`AshIrr` 天气和管理标签对照; `ASHD05` 和 `ASHD06` 仍有 `Irrig_data` 记录, 因此 `AshDry` 不等同于完全无灌溉。`ASHD06IR`, `CULI05IR`, `MOSI06IR` 是额外显式灌溉运行。
 - 适合用途: 适合作为数据同化研究的第二阶段算例, 尤其适合研究灌溉处理, 水分管理和多地点泛化。
 - 注意事项: `MOSI06IR` 的 `Irrig` 表有一条日期范围反向或跨年异常记录, 正式运行前需要核查。
-- 详细设置: [查看 Kansas 极详细设置](Kansas_settings_zh.md)
+- 详细设置: [查看 Kansas 算例详细运行设置](Kansas算例详细运行设置.md)
 
 ### 5. MDEasternShore (maize)
 
@@ -165,7 +165,7 @@
 - 主要差异: Wye 组覆盖 2006 到 2008 年逐年运行; Del 组包含 2006/2007 年运行, 其中 `DEL07`, `DEL08`, `DEL09` 是同天气, 同模拟期, 同品种下的土壤替换对照。
 - 适合用途: 最适合作为数据同化研究的首选主算例, 尤其适合土壤水分, 作物状态和土壤参数同化框架搭建。
 - 注意事项: `DEL08` 和 `DEL09` 没有施肥行; Del 组模拟期降雨非常高, 更适合湿润条件下水分过程分析。
-- 详细设置: [查看 MDEasternShore (maize) 极详细设置](MDEasternShore_maize_settings_zh.md)
+- 详细设置: [查看 MDEasternShore 玉米算例详细运行设置](MDEasternShore玉米算例详细运行设置.md)
 
 ### 6. Tropical_Temperate_Study
 
