@@ -1,0 +1,18 @@
+[paths]
+
+# Single-layer loam 2D baseline for sensitivity analysis.
+input_excel_file = "Example input/SingleLayerLoam2D/SingleLayerLoam2D.xlsx"
+root_path = "Example input/SingleLayerLoam2D"
+maizsim_path = "Example input"
+create_soils = "CreateSoilFIles"
+excel_interface = "ExcelInterface"
+macro_workbook = "ExcelInterface/read plant filesV9_mulch (integrated).xlsm"
+weather_csv_folder = "Example input/SingleLayerLoam2D"
+
+
+[run]
+
+selected_ids = ["LOAM2D"]
+automation_workbook = ".generated/read_plant_files_loam2d_automation.xlsm"
+visible_excel = false
+save_after_run = true

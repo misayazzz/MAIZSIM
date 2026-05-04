@@ -1,1 +1,11 @@
 /Input files for ( Ag  water mgmt  root growth paper)/
+
+# Generated sensitivity-analysis run histories.
+**/sensitivity_runs/
+
+# Local generated files for SingleLayerLoam2D.
+/SingleLayerLoam2D/figures/
+/SingleLayerLoam2D/Loam2D/run.dat
+/SingleLayerLoam2D/Loam2D/grid*.bat
+/SingleLayerLoam2D/Loam2D/plantstress.crp
+/SingleLayerLoam2D/Loam2D/LOAM2D.G07

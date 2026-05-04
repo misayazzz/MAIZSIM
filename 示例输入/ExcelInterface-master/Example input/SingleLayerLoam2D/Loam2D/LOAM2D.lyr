@@ -1,0 +1,12 @@
+surface ratio    internal ratio: ratio of the distance between two neighboring nodes
+ 1.6           0.05          2.1           2 
+Row Spacing
+ 76.2 
+ Planting Depth  X limit for roots 
+ 10            23            0 
+Surface water Boundary Code  surface and bottom Gas boundary codes(for all bottom nodes) 1 constant -2 seepage face,  7 drainage 4 atmospheric
+water boundary code for bottom layer, gas BC for the surface and bottom layers 
+-7            -4             1 
+ Bottom depth Init Type  OM (%/100)    Humus_C     Humus_N      Litter_C      Litter_N      Manure_C      Manure_N       no3(ppm)           NH4          hNew           Tmpr            CO2         O2         N2O      Sand       Silt        Clay          BD         TH33       TH1500  thr ths tha th  Alfa    n   Ks  Kk  thk
+ cm         w/m            Frac        ug/cm3       ug/cm3       ug/cm3        ug/cm3        ug/cm3        ug/cm3            ppm          ppm              cm           0C            ppm            ppm          ppm       ----  fraction---             g/cm3         cm3/cm3        cm3/cm3
+ 200          'm'            0.0025       -1            -1             0             0             0             0             6             0            -100           23            400           206000        0  0.4        0.4           0.2           1.4          -1            -1             0.078         0.43          0.078         0.43          0.036         1.56          24.96         24.96         0.43 

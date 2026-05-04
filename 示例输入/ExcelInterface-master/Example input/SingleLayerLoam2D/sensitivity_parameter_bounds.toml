@@ -1,0 +1,308 @@
+# LOAM2D first-round sensitivity parameter bounds.
+# Bounds combine source-code constraints, repository examples, and literature ranges.
+
+[metadata]
+case_id = "LOAM2D"
+description = "Single-layer loam 2D baseline bounds for first-round local Morris sensitivity analysis."
+input_workbook = "Example input/SingleLayerLoam2D/SingleLayerLoam2D.xlsx"
+baseline_run_dir = "Example input/SingleLayerLoam2D/Loam2D"
+baseline_variety_file = "Loam2D/PI34M91.var"
+baseline_soil_file = "Loam2D/Loam_200cm.soi"
+output_frequency = "daily"
+weather_frequency = "hourly"
+sampling_note = "Bounds are narrowed around current values for the first stable local Morris run."
+
+[global_constraints]
+soil_water_order = "0 <= thetaR < thetaS < 1"
+soil_alpha = "Alfa > 0"
+soil_n = "n > 1"
+soil_ks = "Ks > 0"
+theta_r_linkage = "Update thr and tha together."
+theta_s_linkage = "Update ths, th/thm, and thk together."
+ks_linkage = "Update Ks and Kk together."
+integer_parameters = ["JuvenileLeaves"]
+positive_parameters = [
+    "Rmax_LTAR",
+    "Rmax_LTIR",
+    "PhyllFrmTassel",
+    "StayGreen",
+    "LM_min",
+    "Alfa",
+    "n",
+    "Ks",
+]
+nonnegative_parameters = ["Diffx", "Diffz"]
+
+[morris_defaults]
+library = "SALib"
+sample_function = "SALib.sample.morris.sample"
+analyze_function = "SALib.analyze.morris.analyze"
+num_levels = 4
+seed = 20260429
+rejection_max_attempts = 100
+rejection_tolerance = 1e-9
+smoke_trajectories = 2
+formal_trajectories = 300
+optimal_trajectories = false
+analysis_num_resamples = 1000
+analysis_conf_level = 0.95
+analysis_scaled = true
+
+[parallel_execution]
+required = true
+max_workers_rule = "min(8, os.cpu_count() or 1)"
+minimum_parallel_workers = 2
+run_root = "Example input/SingleLayerLoam2D/sensitivity_runs"
+sample_dir_pattern = "{analysis_id}/samples/sample_{sample_id:06d}"
+baseline_run_dir = "Example input/SingleLayerLoam2D/Loam2D"
+rewrite_run_dat_paths = true
+clean_stale_outputs = true
+timeout_seconds = 900
+slow_seconds = 120
+failure_policy = "Record failed samples in failures.csv and exclude them from Morris analysis unless explicitly allowed."
+
+[[output_metrics]]
+name = "max_lai"
+reference_output = "LAI"
+source_file = "LOAM2D.g01"
+source_columns = ["LAI"]
+aggregation = "Maximum LAI over the crop growth window."
+required = true
+
+[[output_metrics]]
+name = "final_shoot_dm"
+reference_output = "aboveground biomass"
+source_file = "LOAM2D.g01"
+source_columns = ["shootDM", "Note"]
+aggregation = "shootDM at the first Matured record; use the last record and mark matured=false if Matured is absent."
+required = true
+
+[[output_metrics]]
+name = "final_ear_dm"
+reference_output = "grain yield"
+source_file = "LOAM2D.g01"
+source_columns = ["earDM", "Note"]
+aggregation = "earDM at the first Matured record; use the last record and mark matured=false if Matured is absent."
+required = true
+
+[[output_metrics]]
+name = "mean_top20_theta"
+reference_output = "SSM"
+source_file = "LOAM2D.G03"
+source_columns = ["Date", "Y", "thNew", "Area"]
+aggregation = "Area-weighted daily mean thNew for nodes with Y <= 20 cm, then time mean over the crop growth window."
+required = true
+
+[[output_metrics]]
+name = "seasonal_transpiration_deficit"
+reference_output = "WS"
+source_file = "LOAM2D.G05"
+source_columns = ["SeasPTran", "SeasATran"]
+aggregation = "1 - SeasATran / SeasPTran on the last day. Mark missing when SeasPTran <= 0."
+required = true
+
+[[output_metrics]]
+name = "seasonal_potential_transpiration"
+reference_output = "crop potential transpiration"
+source_file = "LOAM2D.G05"
+source_columns = ["SeasPTran"]
+aggregation = "SeasPTran on the last day over the crop growth window."
+required = true
+
+[[output_metrics]]
+name = "seasonal_actual_transpiration"
+reference_output = "crop actual transpiration"
+source_file = "LOAM2D.G05"
+source_columns = ["SeasATran"]
+aggregation = "SeasATran on the last day over the crop growth window."
+required = true
+
+[[parameters]]
+name = "JuvenileLeaves"
+category = "crop_phenology_leaf"
+current = 18
+lower = 16
+upper = 20
+value_type = "integer"
+unit = "leaves"
+source_table = "Variety"
+source_column = "JuvenileLeaves"
+target_file = "PI34M91.var"
+target_fields = ["genericLeafNo"]
+notes = "Controls juvenile leaf number and induction timing. Round sampled values to integers before writing."
+
+[[parameters]]
+name = "Rmax_LTAR"
+category = "crop_phenology_leaf"
+current = 0.53
+lower = 0.477
+upper = 0.58
+value_type = "continuous"
+unit = "leaves/day"
+source_table = "Variety"
+source_column = "Rmax_LTAR"
+target_file = "PI34M91.var"
+target_fields = ["Rmax_LTAR"]
+notes = "Maximum leaf tip appearance rate at optimum temperature."
+
+[[parameters]]
+name = "Rmax_LTIR"
+category = "crop_phenology_leaf"
+current = 0.978
+lower = 0.880
+upper = 1.00
+value_type = "continuous"
+unit = "leaves/day"
+source_table = "Variety"
+source_column = "Rmax_LTIR"
+target_file = "PI34M91.var"
+target_fields = ["Rmax_LIR"]
+aliases = ["Rmax_LIR"]
+notes = "Maximum leaf tip initiation rate at optimum temperature. Excel uses Rmax_LTIR; source code uses Rmax_LIR."
+
+[[parameters]]
+name = "PhyllFrmTassel"
+category = "crop_phenology_leaf"
+current = 3.0
+lower = 2.7
+upper = 3.3
+value_type = "continuous"
+unit = "phyllochrons"
+source_table = "Variety"
+source_column = "PhyllFrmTassel"
+target_file = "PI34M91.var"
+target_fields = ["PhyllochronsToSilk"]
+aliases = ["PhyllochronsToSilk"]
+notes = "Threshold from tassel emergence to silking. Responses can be step-like."
+
+[[parameters]]
+name = "StayGreen"
+category = "crop_phenology_leaf"
+current = 4.5
+lower = 4.05
+upper = 4.95
+value_type = "continuous"
+unit = "unitless"
+source_table = "Variety"
+source_column = "StayGreen"
+target_file = "PI34M91.var"
+target_fields = ["stayGreen"]
+notes = "Multiplier for post-maturity green-leaf duration."
+
+[[parameters]]
+name = "LM_min"
+category = "crop_phenology_leaf"
+current = 125.0
+lower = 112.5
+upper = 130.0
+value_type = "continuous"
+unit = "cm"
+source_table = "Variety"
+source_column = "LM_min"
+target_file = "PI34M91.var"
+target_fields = ["LM_min"]
+notes = "Potential length scale for the largest leaf and leaf area."
+
+[[parameters]]
+name = "Diffx"
+category = "root_spatial_distribution"
+current = 20.0
+lower = 18.0
+upper = 22.0
+value_type = "continuous"
+unit = "time^-1"
+source_table = "Variety"
+source_column = "Diffx"
+target_file = "PI34M91.var"
+target_fields = ["DMolx"]
+aliases = ["DMolx"]
+notes = "Horizontal root mass diffusion coefficient. Keep nonnegative."
+
+[[parameters]]
+name = "Diffz"
+category = "root_spatial_distribution"
+current = 1.0
+lower = 0.9
+upper = 1.1
+value_type = "continuous"
+unit = "time^-1"
+source_table = "Variety"
+source_column = "Diffz"
+target_file = "PI34M91.var"
+target_fields = ["DMolz"]
+aliases = ["DMolz"]
+notes = "Vertical root mass diffusion coefficient. Keep nonnegative."
+
+[[parameters]]
+name = "thetaR"
+category = "soil_hydraulic"
+current = 0.078
+lower = 0.070
+upper = 0.086
+value_type = "continuous"
+unit = "cm3/cm3"
+source_table = "Soil"
+source_column = "thr"
+target_file = "Loam_200cm.soi"
+target_fields = ["thr", "tha"]
+aliases = ["thr"]
+notes = "Residual water content. In this code path, update thr and tha together for an effective curve response."
+
+[[parameters]]
+name = "thetaS"
+category = "soil_hydraulic"
+current = 0.430
+lower = 0.387
+upper = 0.473
+value_type = "continuous"
+unit = "cm3/cm3"
+source_table = "Soil"
+source_column = "ths"
+target_file = "Loam_200cm.soi"
+target_fields = ["ths", "th", "thm", "thk"]
+aliases = ["ths"]
+notes = "Saturated water content. Keep greater than thetaR and lower than 1."
+
+[[parameters]]
+name = "Alfa"
+category = "soil_hydraulic"
+current = 0.036
+lower = 0.032
+upper = 0.040
+value_type = "continuous"
+unit = "cm^-1"
+source_table = "Soil"
+source_column = "alfa"
+target_file = "Loam_200cm.soi"
+target_fields = ["Alfa"]
+notes = "van Genuchten alpha shape-scale parameter. Keep positive."
+
+[[parameters]]
+name = "n"
+category = "soil_hydraulic"
+current = 1.56
+lower = 1.40
+upper = 1.72
+value_type = "continuous"
+unit = "unitless"
+source_table = "Soil"
+source_column = "n"
+target_file = "Loam_200cm.soi"
+target_fields = ["n"]
+aliases = ["npar"]
+notes = "van Genuchten pore-size shape parameter. Keep above 1 and away from 1."
+
+[[parameters]]
+name = "Ks"
+category = "soil_hydraulic"
+current = 24.96
+lower = 22.5
+upper = 27.5
+value_type = "continuous"
+unit = "cm/day"
+source_table = "Soil"
+source_column = "ks"
+target_file = "Loam_200cm.soi"
+target_fields = ["Ks", "Kk"]
+aliases = ["Ksat"]
+notes = "Saturated hydraulic conductivity. Update Ks and Kk together in the LOAM2D baseline."

@@ -103,6 +103,20 @@ def format_field(value):
     return f"{number:.10g}"
 
 
+def clamp_relative_humidity(value, source_path):
+    """把相对湿度限制在 0-100, 防止非物理 RH 写入模型天气文件."""
+    if pd.isna(value):
+        return value
+    text_value = str(value).strip()
+    if not text_value:
+        return value
+    try:
+        number = float(text_value)
+    except ValueError as exc:
+        raise ConfigError(f"天气 CSV 的 RH 字段无法解析为数值: {value}. 来源: {source_path}") from exc
+    return min(100.0, max(0.0, number))
+
+
 def write_fields(file_handle, fields):
     """写出一行空格分隔字段."""
     line = " ".join(format_field(value) for value in fields).rstrip()
@@ -188,7 +202,7 @@ def write_hourly_weather(target_path, run, weather_info):
                 if include_wind:
                     fields.append(row[wind_column])
                 if include_rh:
-                    fields.append(row[rh_column])
+                    fields.append(clamp_relative_humidity(row[rh_column], weather_info["source_path"]))
                 if include_co2:
                     fields.append(row[co2_column])
                 write_fields(file_handle, fields)
@@ -230,7 +244,7 @@ def write_daily_weather(target_path, run, weather_info):
                 if include_wind:
                     fields.append(row[wind_column])
                 if include_rh:
-                    fields.append(row[rh_column])
+                    fields.append(clamp_relative_humidity(row[rh_column], weather_info["source_path"]))
                 if include_co2:
                     fields.append(row[co2_column])
                 write_fields(file_handle, fields)
