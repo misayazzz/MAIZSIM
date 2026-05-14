@@ -1,0 +1,3 @@
+﻿version,output_file,sample_count,trajectory_count,slow_sample_count_included,dropped_trajectory_ids,morris_index_rows
+all_samples,morris_indices_all.csv,4200,300,54,,91
+without_slow_trajectories,morris_indices_without_slow_trajectories.csv,3892,278,0,"7,16,18,26,46,49,69,103,119,125,152,154,168,170,173,180,181,202,235,260,274,295",91

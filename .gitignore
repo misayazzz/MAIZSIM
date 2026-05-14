@@ -19,6 +19,8 @@ tmp/
 *.g04
 *.g05
 *.g06
+*.g07
+*.G07
 *.$$$
 *.dbg
 *.out
@@ -247,7 +249,6 @@ Test_Ver9.1/2dsoil.exe
 /Soil Source/$tf
 /Field2005
 /Runoff and Ponding
-/Test_Ver9.1git status
 /SolarCorr
 /Test_Ver9.1/Graphics
 /Test_Ver9.1.1.3

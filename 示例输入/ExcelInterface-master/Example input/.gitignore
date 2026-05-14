@@ -1,7 +1,19 @@
 /Input files for ( Ag  water mgmt  root growth paper)/
 
 # Generated sensitivity-analysis run histories.
-**/sensitivity_runs/
+# Keep bulky raw sample histories ignored, but track compact summaries and final figures.
+**/sensitivity_runs/**
+!**/sensitivity_runs/
+!**/sensitivity_runs/*/
+!**/sensitivity_runs/*/figures/
+!**/sensitivity_runs/*/*.csv
+!**/sensitivity_runs/*/*.xlsx
+!**/sensitivity_runs/*/figures/*.png
+!**/sensitivity_runs/*/figures/*.pdf
+!**/sensitivity_runs/*/figures/*.svg
+!**/sensitivity_runs/*/figures/*.tif
+!**/sensitivity_runs/*/figures/*.tiff
+!**/sensitivity_runs/*/figures/*.xlsx
 
 # Local generated files for SingleLayerLoam2D.
 /SingleLayerLoam2D/figures/
