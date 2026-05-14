@@ -19,6 +19,7 @@ tmp/
 *.g04
 *.g05
 *.g06
+*.g07
 *.$$$
 *.dbg
 *.out
@@ -92,6 +93,7 @@ build/
 *.scc
 *.vcproj
 *.sln
+!maizsim07.sln
 
 # Visual C++ cache files
 ipch/
