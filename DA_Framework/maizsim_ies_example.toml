@@ -1,0 +1,70 @@
+[assimilation]
+n_ensemble = 100
+n_iter = 3
+random_seed = 20240514
+
+[juvenile_leaves]
+enabled = true
+candidates = [16, 17, 18, 19, 20]
+
+[model]
+base_run_dir = "base_runs/SingleLayerLoam2D"
+executable = "2dMAIZSIM.exe"
+run_file = "run.dat"
+var_file = "PI34M91.var"
+soi_file = "Loam_200cm.soi"
+minimal_outputs = true
+max_workers = 12
+# timeout_seconds = 600
+
+[observation]
+file = "examples/synthetic_observations.csv"
+
+[output]
+run_root = "DA_Framework/runs"
+experiment_name = "experiment_001"
+
+[[parameters]]
+name = "n"
+current = 1.56
+lower = 1.40
+upper = 1.72
+std = 0.08
+target_file = "Loam_200cm.soi"
+target_fields = ["n"]
+
+[[parameters]]
+name = "thetaS"
+current = 0.430
+lower = 0.387
+upper = 0.473
+std = 0.02
+target_file = "Loam_200cm.soi"
+target_fields = ["ths", "th", "thk"]
+
+[[parameters]]
+name = "LM_min"
+current = 125.0
+lower = 112.5
+upper = 130.0
+std = 5.0
+target_file = "PI34M91.var"
+target_fields = ["LM_min"]
+
+[[parameters]]
+name = "Rmax_LTAR"
+current = 0.53
+lower = 0.477
+upper = 0.58
+std = 0.025
+target_file = "PI34M91.var"
+target_fields = ["Rmax_LTAR"]
+
+[[parameters]]
+name = "StayGreen"
+current = 4.5
+lower = 4.05
+upper = 4.95
+std = 0.225
+target_file = "PI34M91.var"
+target_fields = ["StayGreen"]

@@ -21,6 +21,8 @@ C variables to hold mulch C and N totals
         common /N_BAL/ModNum,CFlux,CFluxPrevious,C_RespirationOM,
      !    C_RespirationRoot
 
+      If (MassBalanceFileOut.eq.'NONE') Return
+
       If (lInput.eq.1) then
         open(91,file=MassBalanceFileOut,status='unknown',recl=520)
         write(91,8) 'Date_time,','Date,','Min_N,','Humus_N,',

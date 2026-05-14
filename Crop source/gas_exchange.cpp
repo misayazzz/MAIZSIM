@@ -428,36 +428,64 @@ class CGasExchange
 
 		int iter;
 		double fprime, Ci1, Ci2, Ci_low, Ci_hi, Ci_m;
-		double temp;
+		double f1, f2, f_low, f_hi, fm;
+		bool secantConverged;
 		Ci1 = CO2i;
 		Ci2 = CO2i + 1.0;
 		Ci_m = (Ci1+Ci2)/2.0;
 		iter_Ci = 0;
 		iter = 0;
 		isCiConverged = true;
+		secantConverged = false;
 
-		do 
+		f1 = EvalCi(Ci1);
+		if (abs(f1) <= errTolerance)
 		{
-			iter++;
-			//Secant search method
-			if (abs(Ci1-Ci2) <= errTolerance) {break;}
-			if (iter >= maxiter) 
+			Ci_m = Ci1;
+			fm = f1;
+			secantConverged = true;
+		}
+		else
+		{
+			f2 = EvalCi(Ci2);
+			if ((abs(f2) <= errTolerance) || (abs(Ci1-Ci2) <= errTolerance))
 			{
-				isCiConverged = false;
-				break;
+				Ci_m = Ci2;
+				fm = f2;
+				secantConverged = true;
 			}
-			fprime = (EvalCi(Ci2)-EvalCi(Ci1))/(Ci2-Ci1);  // f'(Ci)
-			if (fprime != 0.0) 
+
+			while ((!secantConverged) && (iter < maxiter))
 			{
-				Ci_m = (std::max)(errTolerance, Ci1-EvalCi(Ci1)/fprime); // use (std::max) because somewhere max is defined as a macro
+				iter++;
+				// Secant search method, reusing f(Ci) values because EvalCi updates photosynthesis state.
+				fprime = (f2-f1)/(Ci2-Ci1);  // f'(Ci)
+				if (fprime != 0.0)
+				{
+					Ci_m = (std::max)(errTolerance, Ci1-f1/fprime); // use (std::max) because somewhere max is defined as a macro
+				}
+				else
+					Ci_m = Ci1;
+
+				if (Ci_m == Ci1)
+					fm = f1;
+				else if (Ci_m == Ci2)
+					fm = f2;
+				else
+					fm = EvalCi(Ci_m);
+
+				if ((abs(fm) <= errTolerance) || (abs(Ci_m-Ci2) <= errTolerance))
+				{
+					secantConverged = true;
+					break;
+				}
+
+				Ci1 = Ci2;
+				f1 = f2;
+				Ci2 = Ci_m;
+				f2 = fm;
 			}
-			else
-				Ci_m = Ci1;
-			Ci1 = Ci2;
-			Ci2 = Ci_m;
-			temp=EvalCi(Ci_m);
-			double temp2=maxiter;
-		} while ((abs(EvalCi(Ci_m)) >= errTolerance) || (iter < maxiter));
+		}
 
 
 
@@ -465,23 +493,51 @@ class CGasExchange
 		// C4 photosynthesis fails to converge at low soil water potentials using secant search, 6/8/05 SK
 		// Bisectional type search is slower but more secure
 		//Bisectional search
-		if (iter > maxiter)
+		if (!secantConverged)
 		{
 			Ci_low = 0.0;
 			Ci_hi = 2.0*CO2;
 			isCiConverged = false;
+			f_low = EvalCi(Ci_low);
+			f_hi = EvalCi(Ci_hi);
 
-			while (abs(Ci_hi-Ci_low) <= errTolerance || iter > (maxiter*2))
+			if (abs(f_low) <= errTolerance)
 			{
-				Ci_m = (Ci_low + Ci_hi)/2;
-				if (abs(EvalCi(Ci_low)*EvalCi(Ci_m)) <= eqlTolerance) break;
-				else if (EvalCi(Ci_low)*EvalCi(Ci_m) < 0.0) {Ci_hi = (std::max)(Ci_m, errTolerance);}
-				else if (EvalCi(Ci_m)*EvalCi(Ci_hi) < 0.0)  {Ci_low =(std::max)(Ci_m, errTolerance);}
-				else {isCiConverged = false; break;}
+				Ci_m = Ci_low;
+				fm = f_low;
+				isCiConverged = true;
+			}
+			else if (abs(f_hi) <= errTolerance)
+			{
+				Ci_m = Ci_hi;
+				fm = f_hi;
+				isCiConverged = true;
+			}
+			else if (f_low*f_hi < 0.0)
+			{
+				while ((abs(Ci_hi-Ci_low) > errTolerance) && (iter < (maxiter*2)))
+				{
+					iter++;
+					Ci_m = (Ci_low + Ci_hi)/2;
+					fm = EvalCi(Ci_m);
+					if (abs(fm) <= errTolerance)
+					{
+						isCiConverged = true;
+						break;
+					}
+					else if (f_low*fm < 0.0) {Ci_hi = (std::max)(Ci_m, errTolerance); f_hi = fm;}
+					else if (fm*f_hi < 0.0)  {Ci_low =(std::max)(Ci_m, errTolerance); f_low = fm;}
+					else {isCiConverged = false; break;}
+				}
+
+				if (abs(Ci_hi-Ci_low) <= errTolerance)
+					isCiConverged = true;
 			}
 
 		}
 
+		// Cached residuals may leave object state at another Ci; sync state before returning Ci_m.
+		EvalCi(Ci_m);
 		CO2i = Ci_m;
 		Ci_Ca = CO2i/CO2;
 		iter_Ci = iter_Ci + iter;

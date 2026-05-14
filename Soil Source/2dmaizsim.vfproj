@@ -17,7 +17,7 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release|Win32" UseCompiler="ifortCompiler" DeleteExtensionsOnClean="*.obj;*.mod;*.pdb;*.asm;*.map;*.dyn;*.dpi;*.tmp;*.log;*.ilk;*.exe;$(TargetPath)">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="true" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="true" ArrayShapeCheck="true" UninitializedVariablesCheck="true"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="false" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="false" ArrayShapeCheck="false" UninitializedVariablesCheck="false"/>
 			<Tool Name="VFLinkerTool" AdditionalOptions="/MACHINE:I386" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" ProgramDatabaseFile="$(OUTDIR)/2dsoil.pdb" SubSystem="subSystemConsole" AdditionalDependencies=" &quot;$(SolutionDir)Crop Source\Release\maizsim.lib&quot;"/>
 			<Tool Name="VFResourceCompilerTool" PreprocessorDefinitions="NDEBUG" Culture="rcEnglishUS" ResourceOutputFileName="$(INTDIR)/$(InputName).res"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TypeLibraryName="$(OUTDIR)/2dsoil.tlb"/>
@@ -39,7 +39,7 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release|x64" UseCompiler="ifxCompiler" DeleteExtensionsOnClean="*.obj;*.mod;*.pdb;*.asm;*.map;*.dyn;*.dpi;*.tmp;*.log;*.ilk;*.exe;$(TargetPath)">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="true" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="true" ArrayShapeCheck="true" UninitializedVariablesCheck="true"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="false" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="false" ArrayShapeCheck="false" UninitializedVariablesCheck="false"/>
 			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" ProgramDatabaseFile="$(OUTDIR)/2dsoil.pdb" SubSystem="subSystemConsole" AdditionalDependencies=" &quot;$(SolutionDir)Crop Source\$(Platform)\$(Configuration)\maizsim.lib&quot;"/>
 			<Tool Name="VFResourceCompilerTool" PreprocessorDefinitions="NDEBUG" Culture="rcEnglishUS" ResourceOutputFileName="$(INTDIR)/$(InputName).res"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64" TypeLibraryName="$(OUTDIR)/2dsoil.tlb"/>
@@ -50,7 +50,7 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release_classim|Win32" UseCompiler="ifortCompiler" DeleteExtensionsOnClean="*.obj;*.mod;*.pdb;*.asm;*.map;*.dyn;*.dpi;*.tmp;*.log;*.ilk;*.exe;$(TargetPath)">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="true" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="true" ArrayShapeCheck="true" UninitializedVariablesCheck="true"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="false" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="false" ArrayShapeCheck="false" UninitializedVariablesCheck="false"/>
 			<Tool Name="VFLinkerTool" AdditionalOptions="/MACHINE:I386" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" ProgramDatabaseFile="$(OUTDIR)/2dsoil.pdb" SubSystem="subSystemConsole" AdditionalDependencies=" &quot;$(SolutionDir)Crop Source\Release\maizsim.lib&quot;"/>
 			<Tool Name="VFResourceCompilerTool" PreprocessorDefinitions="NDEBUG" Culture="rcEnglishUS" ResourceOutputFileName="$(INTDIR)/$(InputName).res"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TypeLibraryName="$(OUTDIR)/2dsoil.tlb"/>
@@ -61,7 +61,7 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release_classim|x64" UseCompiler="ifxCompiler" DeleteExtensionsOnClean="*.obj;*.mod;*.pdb;*.asm;*.map;*.dyn;*.dpi;*.tmp;*.log;*.ilk;*.exe;$(TargetPath)">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="true" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="true" ArrayShapeCheck="true" UninitializedVariablesCheck="true"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" ReentrantCode="reentrancyThreaded" WarnShape="true" LocalSavedScalarsZero="true" InitArrays="true" RoundFloatingPointResults="true" FloatingPointStackCheck="false" CallingConvention="callConventionCVF" ModulePath="$(INTDIR)/" ObjectFile="$(INTDIR)/" AssemblerListingLocation="$(INTDIR)/" BoundsCheck="false" ArrayShapeCheck="false" UninitializedVariablesCheck="false"/>
 			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" ProgramDatabaseFile="$(OUTDIR)/2dsoil.pdb" SubSystem="subSystemConsole" AdditionalDependencies=" &quot;$(SolutionDir)Crop Source\$(PlatformName)\$(ConfigurationName)\maizsim.lib&quot;"/>
 			<Tool Name="VFResourceCompilerTool" PreprocessorDefinitions="NDEBUG" Culture="rcEnglishUS" ResourceOutputFileName="$(INTDIR)/$(InputName).res"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64" TypeLibraryName="$(OUTDIR)/2dsoil.tlb"/>

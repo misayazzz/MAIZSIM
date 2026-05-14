@@ -24,6 +24,8 @@ C summary output variables
      &     SeasonActualSoilEvap,SeasonActualInfil,
      &     SumArrayTh, MaxY, Cumulative_OM_N_sink
       Character*10 date, Stime
+      Logical OutG04, OutG05, OutG06, OutG07
+      Logical OutRunoff, OutMulch
 cccz output for runoff module
       double precision SurInput_Flux,Surface_Flux,Bottom_Flux,
      &     Runoff_Flux,Runoff_Terminal_Flux,Flux_drain,
@@ -63,6 +65,12 @@ cccz output for runoff module
 
         
       t=Time
+      OutG04=ElemGraphics.ne.'NONE'
+      OutG05=SurfaceGraphics.ne.'NONE'
+      OutG06=FluxGraphics.ne.'NONE'
+      OutG07=OrganicMatterGraphics.ne.'NONE'
+      OutRunoff=MassBalanceRunoffFileOut.ne.'NONE'
+      OutMulch=MassBalanceMulchFileOut.ne.'NONE'
       
       If(lInput.eq.1) then
 C
@@ -128,21 +136,34 @@ C    For gas flux calculation
 C declare files for output
         
 	  Open(81,file=NodeGraphics)                      !G03
-	  open(82,file=ElemGraphics)                      !G04
-	  Open(83,file=SurfaceGraphics, recl=450)         !G05
-        Open(84,file=FluxGraphics)                      !G06
-        Open(85,file=OrganicMatterGraphics,recl=300)    !G07
-       open(99,file=MassBalanceRunoffFileOut, recl=250)
+	  if (OutG04) then
+          open(82,file=ElemGraphics)                    !G04
+        endif
+	  if (OutG05) then
+          Open(83,file=SurfaceGraphics,recl=450)        !G05
+        endif
+        if (OutG06) then
+          Open(84,file=FluxGraphics)                    !G06
+        endif
+        if (OutG07) then
+          Open(85,file=OrganicMatterGraphics,recl=300)  !G07
+        endif
+       if (OutRunoff) then
+          open(99,file=MassBalanceRunoffFileOut,recl=250)
+       endif
  
 c NodeGrpahics       
       Write(81,5) "Date_time,", "Date,", "X,", "Y,", "hNew,","thNew,",
      &  "Vx,", "Vy,", "Q,", "NO3N,", "NH4N,","Temp,","Area,", 
      &  "CO2Conc," , "O2Conc,", "N2OConc"
 c Element Graphics 
+      if (OutG04) then
       Write(82,6) "Date_time,", "Date,", "X,", "Y,", "Node,", 
      &      "RMassM,","RMassY,", "RDenM,", "RDenY,",
      &      "WaterSink,", "NitSink,", "GasSink"
+      endif
 C G05 file  Surface Graphics       
+      if (OutG05) then
       Write(83,20) "Date_time,", "Date,", "PSoilEvap,", 
      &      "ASoilEVap,", "PET_PEN,","PE_T_int,","transp,",
      &      "CumRain,","infil,","FLuxAct,", "Drainage,",
@@ -150,27 +171,35 @@ C G05 file  Surface Graphics
      &      "cover,","PSIM,", "SeasPSoEv,","SeasASoEv," ,"SeasPTran,",
      &      "SeasATran,","SeasRain,",    
      &      "SeasInfil,","ThetaAvail,","CO2FLux,","O2FLux,","N2OFLux"
+      endif
 
 c Flux Graphics       
+      if (OutG06) then
        Write(84,20) "Date_time,", "Date,","Flux,","SoilEA,",
      &   "WATTSM,", "RNS,", "RNC,","WATPOT,","WATACT,",
      &    "WATRAT,", "UpwardLW,",
      &   "DifWat,","Cloud,","Shadow,","DIfInt,","Rowinc,", "PARInt,",
      &   "RADInt"
+      endif
 
 c Organic Matter Graphics
 
+      if (OutG07) then
        Write(85,21) "Date_time,", "Date,", "X,", "Y,", "Humus_N,",
      &               "Humus_C,", "Litter_N,", "Litter_C,",
      &            "Manure_N,", "Manure_C,", "Root_N,", "Root_C"
+      endif
 c Runoff Mass Balance     
 cccz initialize for surface runoff
+      if (OutRunoff) then
        write(99,'(8A20)') 'time,','Date,','Rainfall,','Inifiltration,',
      &    'Runoff@end,', 'WaterStorage,', 
      &    'LeftDischarge,','RightDischarge'
+      endif
        
 cccz -----------------------------------------------------------------------
 cccz initialize the mulch output file (analogy to the soil output g03)
+      if (OutMulch) then
        Open(2102,file=MassBalanceMulchFileOut)
        Write(2102,2103) "Date_time,","Date,","X,","Y,","hNew,",
      &  "thNew,","Temp"
@@ -182,6 +211,7 @@ cccz initialize the mulch output file (analogy to the soil output g03)
      &     mulchNodeCoord(n,2),MulchNodehNew(n),MulchNodeThNew(n),
      &     MulchNodeTmpr(n)
        enddo
+      endif
        
 
 
@@ -202,8 +232,10 @@ C Potential values:
 
 cccz We change the usage of VarBW and VarBW_Record
 cccz VarbW is the one adjusted with the runoff module, while VarBW_Record is the one from weather calculation
+        if (OutG07) then
         cRoot=0.0
         nRoot=0.0
+        endif
 cccz We change the usage of VarBW and Varbw_Air
 cccz VarbW is the one adjusted with the runoff module, while Varbw_Air is the one from weather calculation
         do i=1,NumBp
@@ -268,17 +300,21 @@ c           RO(n)=0.0   ! we will use this to store ponded water for next time p
 c            FluxAct=FluxAct+QAct(n)*step
       endif
 c Calculate the surface flux from gas mover   
+      if (OutG05) then
       Do jjj=1,NumG
           if (CodeG(n).eq.-4. or. CodeG(n).eq.1) then
              FluxGas(jjj)=FluxGas(jjj)+QGas(n,jjj)*step                   !ugCo2 summed over all boundary nodes   QGas[ugco2/day]*[day], FLuxGas[ugco2 over the surface], this has both positive (soil to atm) and negative fluxes (in to the soil)
           end if
       end do
+      endif
 	  enddo
 
 C*** FROM HourlyOut.for END
 
 C Gas surface flux
+      if (OutG05) then
           Surface_Gas_Flux=FluxGas
+      endif
 
 cccz
 cccz Surface runoff calculation
@@ -316,8 +352,8 @@ cccz calculation is done, just do an assignment
      !      g(1,3),ugGasCm3air_to_ppm,NumG, NodeArea)
         iitime=int(time)
         diff=abs(time-int(time))
-        If((NShoot.ne.0).and.(abs((time-int(time))).gt.(0.99))) 
-     !       then
+        If(OutG04.and.(NShoot.ne.0).and.
+     !     (abs((time-int(time))).gt.(0.99))) then
              Call ArrRootOut (Date,x,y,t, NumNP,RMassM,RMassY,
      !            RDenM, RDenY, Sink,
      !            cSink(1,1),gSink(1,1))
@@ -328,6 +364,7 @@ cccz calculation is done, just do an assignment
           ! calculate N and C in roots (ug/cm3 soil) for output
           ! note that roots are g/cm3 of soil
           ! no need to use BD
+        if (OutG07) then
          DO n=1, NumNP
             m=matnumN(n)
             cRoot(n)=RMassM(n)*cContentRootM
@@ -340,6 +377,7 @@ cccz calculation is done, just do an assignment
             
           Call ArrOrganicMatterOut(Date,x,y,NumNP,t,Ch,Nh,
      !       Cl,Nl, Cm, Nm, cRoot, nRoot)
+        endif
         tNext(ModNum) = time + Period
 C      
 * This code operates hourly to output data on the surface nodes
@@ -354,17 +392,21 @@ C
 cccz for runoff water storage calculation
 cccz Calculate the total amount of water stay on soil surface
 cccz because WATERSTORAGE is not a cumulative value, so we just do it once before the print.
+        if (OutRunoff) then
          WaterStorage_pre=WaterStorage
          WaterStorage=0.0D0
          do i=1,SurNodeIndex-1
            WaterStorage=WaterStorage+0.5D0
      &      *(slopeCoord(i+1,1)-slopeCoord(i,1))*(h_Pond(i+1)+h_Pond(i))
          enddo 
+        endif
 cccz
 cccz calculation is done, just do an assignment         
           Runoff_02=Runoff_Terminal_Flux
+        if (OutRunoff) then
           ActualInfil_02=SurInput_Flux-
      &      (WaterStorage-WaterStorage_pre)-Runoff_Terminal_Flux
+        endif
 
 
 * Anything calculated from VarBW should not be divided by 24 
@@ -435,6 +477,7 @@ C
 C        Nitrogen flux conversion from g per slab to kg/ha   
          nitrogenFlux= nitrogenFlux/gridWidth*10**5        !10^5= 10^4 m2/ha x 10^4 cm2/m2 / 10^3 g/kg
 C Calculate relative available water
+        if (OutG05) then
               ThetaRelative=RelativeWaterContent(X,Y, ThAvail,ThFull,
      &            rtwt, NumNP, KX, NumElD,NumEl, NMat, MatNumN)
      
@@ -450,22 +493,27 @@ C     Gas unit conversion to ugCo2/cm2
      &               SeasonActualTranspiration,  SeasonRainfall,  
      &              SeasonActualInfil, ThetaRelative,
      &              (Surface_Gas_Flux(jjj),jjj=1,NumG)
+        endif
         
         
+        if (OutG06) then
         Write(84,13) t,date,bottomflux,ActualSoilEvap, Wattsm(itime),
      &     RNS,RNC,WATPOT,WATACT, WATRAT,RNLU,
      &     Difwat(itime),Cloud,Shadow(itime),Difint(itime),
      &      RowInc(itime),Parint(itime), Radint(itime)
      &                  ! Unit ugCo2 per plant area              
+        endif
         
+        if (OutRunoff) then
         write(99,'(1F12.4,A12,F14.4,F14.4,F14.4,F14.4,F14.4,F14.4)')    
      &    time, date, SurInput_Flux, Surface_Flux, Runoff_Terminal_Flux,
      &    WaterStorage, Runoff_Left_Sum,Runoff_Right_Sum
+        endif
         
         
 cccz ---------------------- mulch ------------------------------------------
 cccz write mulch output, when the mulch module is running "BoolMulchApply=1" (analogy to the soil output g03)
-       if(BoolMulchApply.eq.1) then
+       if(BoolMulchApply.eq.1.and.OutMulch) then
         iday=int(time)
         call caldat(iday,mm,id,iyyy) 
         write (date,'(i2.2,A1,i2.2,A1,i4.4)') mm,'/',id,'/',iyyy  
