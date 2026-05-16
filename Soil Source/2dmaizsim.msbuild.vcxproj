@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{05500875-9B63-45CA-B7D6-FD6A5240ED1A}</ProjectGuid>
+    <Keyword>MakeFileProj</Keyword>
+    <RootNamespace>2dmaizsim</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>2dmaizsim</ProjectName>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)build\obj\msbuild\$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\obj\msbuild\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <PropertyGroup Label="UserMacros" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ArtifactDir>$(SolutionDir)build\maizsim\$(Platform)\$(Configuration)\</ArtifactDir>
+    <CppObjDir>$(SolutionDir)build\obj\cpp\$(Platform)\$(Configuration)\</CppObjDir>
+    <FortranObjDir>$(SolutionDir)build\obj\fortran\$(Platform)\$(Configuration)\</FortranObjDir>
+    <OutDir>$(SolutionDir)build\obj\msbuild\$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\obj\msbuild\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <CropDir>$(SolutionDir)Crop source</CropDir>
+    <SoilDir>$(SolutionDir)Soil Source</SoilDir>
+    <ArtifactFromCrop>..\build\maizsim\$(Platform)\$(Configuration)\</ArtifactFromCrop>
+    <ArtifactFromSoil>..\build\maizsim\$(Platform)\$(Configuration)\</ArtifactFromSoil>
+    <CppObjFromCrop>..\build\obj\cpp\$(Platform)\$(Configuration)\</CppObjFromCrop>
+    <FortranObjFromSoil>..\build\obj\fortran\$(Platform)\$(Configuration)\</FortranObjFromSoil>
+    <CppCompileResponse>$(CppObjDir)cl_$(Configuration)_$(Platform).rsp</CppCompileResponse>
+    <CppLinkResponse>$(CppObjDir)link_$(Configuration)_$(Platform).rsp</CppLinkResponse>
+    <FortranResponse>$(FortranObjDir)ifx_$(Configuration)_$(Platform).rsp</FortranResponse>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and '$(VSInstallDir)'!=''">$(VSInstallDir)</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('F:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat')">F:\Program Files\Microsoft Visual Studio\18\Community\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat')">C:\Program Files\Microsoft Visual Studio\18\Community\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('F:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat')">F:\Program Files\Microsoft Visual Studio\2022\Community\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat')">C:\Program Files\Microsoft Visual Studio\2022\Community\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('F:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat')">F:\Program Files\Microsoft Visual Studio\2022\Professional\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat')">C:\Program Files\Microsoft Visual Studio\2022\Professional\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('F:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat')">F:\Program Files\Microsoft Visual Studio\2022\BuildTools\</VsInstallPath>
+    <VsInstallPath Condition="'$(VsInstallPath)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat')">C:\Program Files\Microsoft Visual Studio\2022\BuildTools\</VsInstallPath>
+    <VsDevCmd>$(VsInstallPath)Common7\Tools\VsDevCmd.bat</VsDevCmd>
+    <OneApiRoot Condition="'$(OneApiRoot)'=='' and Exists('C:\Program Files (x86)\Intel\oneAPI\setvars.bat')">C:\Program Files (x86)\Intel\oneAPI</OneApiRoot>
+    <OneApiRoot Condition="'$(OneApiRoot)'=='' and Exists('C:\Program Files\Intel\oneAPI\setvars.bat')">C:\Program Files\Intel\oneAPI</OneApiRoot>
+    <OneApiRoot Condition="'$(OneApiRoot)'=='' and Exists('F:\Program Files (x86)\Intel\oneAPI\setvars.bat')">F:\Program Files (x86)\Intel\oneAPI</OneApiRoot>
+    <OneApiRoot Condition="'$(OneApiRoot)'=='' and Exists('F:\Program Files\Intel\oneAPI\setvars.bat')">F:\Program Files\Intel\oneAPI</OneApiRoot>
+    <SetVarsBat>$(OneApiRoot)\setvars.bat</SetVarsBat>
+    <PreNMakeBuildTarget>BuildMaizsimNative</PreNMakeBuildTarget>
+    <NMakeBuildCommandLine>echo Maizsim build handled by MSBuild targets.</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>echo Maizsim rebuild handled by MSBuild targets.</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>echo Maizsim clean handled by MSBuild targets.</NMakeCleanCommandLine>
+    <NMakeOutput>$(ArtifactDir)2dMAIZSIM.exe</NMakeOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <CppSource Include="controller.cpp" />
+    <CppSource Include="cpmdate.cpp" />
+    <CppSource Include="Crop.cpp" />
+    <CppSource Include="Development.cpp" />
+    <CppSource Include="ear.cpp" />
+    <CppSource Include="gas_exchange.cpp" />
+    <CppSource Include="Gas_Ex_Species_param.cpp" />
+    <CppSource Include="initinfo.cpp" />
+    <CppSource Include="leaf.cpp" />
+    <CppSource Include="nodalunit.cpp" />
+    <CppSource Include="organ.cpp" />
+    <CppSource Include="plant.cpp" />
+    <CppSource Include="radtrans.cpp" />
+    <CppSource Include="roots.cpp" />
+    <CppSource Include="solar.cpp" />
+    <CppSource Include="stdafx.cpp" />
+    <CppSource Include="stem.cpp" />
+    <CppSource Include="thermaltime.cpp" />
+    <CppSource Include="timer.cpp" />
+    <CppSource Include="weather.cpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FortranSource Include="2DMAIZSIM.FOR" />
+    <FortranSource Include="AutoIrrigate.for" />
+    <FortranSource Include="carbon_partitioning.FOR" />
+    <FortranSource Include="dateFunctions.for" />
+    <FortranSource Include="Drip.FOR" />
+    <FortranSource Include="ERRMES.FOR" />
+    <FortranSource Include="Ex14-5.for" />
+    <FortranSource Include="GASMOV.FOR" />
+    <FortranSource Include="GRID_BND.FOR" />
+    <FortranSource Include="HEATMOV.FOR" />
+    <FortranSource Include="hourwea.for" />
+    <FortranSource Include="Init.for" />
+    <FortranSource Include="Irrigation.for" />
+    <FortranSource Include="MASSBLW.FOR" />
+    <FortranSource Include="MNGMB.FOR" />
+    <FortranSource Include="Mulch_Decomp.for" />
+    <FortranSource Include="N_Massbl.for" />
+    <FortranSource Include="ORTHOFEM.FOR" />
+    <FortranSource Include="OUTPUT.FOR" />
+    <FortranSource Include="PondingByFlux.for" />
+    <FortranSource Include="PondingByHead.for" />
+    <FortranSource Include="root_diff_new.for" />
+    <FortranSource Include="root_grow_c.FOR" />
+    <FortranSource Include="SETMAT01.FOR" />
+    <FortranSource Include="SetMatMulch.for" />
+    <FortranSource Include="SETSUR02.FOR" />
+    <FortranSource Include="SETTDB.FOR" />
+    <FortranSource Include="soilnden.for" />
+    <FortranSource Include="solmov.for" />
+    <FortranSource Include="solupt_Y1.for" />
+    <FortranSource Include="SurfaceMulchProcess.for" />
+    <FortranSource Include="surfaceWaterBalanceAdjustment.for" />
+    <FortranSource Include="SYNCHRON.FOR" />
+    <FortranSource Include="Tillage.for" />
+    <FortranSource Include="wateruptake.FOR" />
+    <FortranSource Include="Watmov.for" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="2dmaizsim.vfproj" />
+    <None Include="2DMAIZSIM.FOR" />
+    <None Include="AutoIrrigate.for" />
+    <None Include="carbon_partitioning.FOR" />
+    <None Include="dateFunctions.for" />
+    <None Include="Drip.FOR" />
+    <None Include="ERRMES.FOR" />
+    <None Include="Ex14-5.for" />
+    <None Include="GASMOV.FOR" />
+    <None Include="GRID_BND.FOR" />
+    <None Include="HEATMOV.FOR" />
+    <None Include="hourwea.for" />
+    <None Include="Init.for" />
+    <None Include="Irrigation.for" />
+    <None Include="MASSBLW.FOR" />
+    <None Include="MNGMB.FOR" />
+    <None Include="Mulch_Decomp.for" />
+    <None Include="N_Massbl.for" />
+    <None Include="ORTHOFEM.FOR" />
+    <None Include="OUTPUT.FOR" />
+    <None Include="PondingByFlux.for" />
+    <None Include="PondingByHead.for" />
+    <None Include="root_diff_new.for" />
+    <None Include="root_grow_c.FOR" />
+    <None Include="SETMAT01.FOR" />
+    <None Include="SetMatMulch.for" />
+    <None Include="SETSUR02.FOR" />
+    <None Include="SETTDB.FOR" />
+    <None Include="soilnden.for" />
+    <None Include="solmov.for" />
+    <None Include="solupt_Y1.for" />
+    <None Include="SurfaceMulchProcess.for" />
+    <None Include="surfaceWaterBalanceAdjustment.for" />
+    <None Include="SYNCHRON.FOR" />
+    <None Include="Tillage.for" />
+    <None Include="wateruptake.FOR" />
+    <None Include="Watmov.for" />
+    <None Include="maizsim.rc" />
+    <None Include="resource.h" />
+    <None Include="nitvar.ins" />
+    <None Include="public.ins" />
+    <None Include="puplant.ins" />
+    <None Include="PuSurface.ins" />
+    <None Include="puweath.ins" />
+  </ItemGroup>
+
+  <Target Name="CleanMaizsimNative" BeforeTargets="CoreClean" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <RemoveDir Directories="$(ArtifactDir);$(CppObjDir);$(FortranObjDir);$(OutDir);$(IntDir)" />
+  </Target>
+
+  <Target Name="BuildMaizsimNative" DependsOnTargets="CleanMaizsimNative" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Error Condition="!Exists('$(VsDevCmd)')" Text="Visual Studio C++ tools were not found. Set VsInstallPath to a Visual Studio installation containing Common7\Tools\VsDevCmd.bat." />
+    <Error Condition="!Exists('$(SetVarsBat)')" Text="Intel oneAPI was not found. Set OneApiRoot to the directory containing setvars.bat." />
+    <Message Text="Visual Studio: $(VsInstallPath)" Importance="High" />
+    <Message Text="Intel oneAPI:   $(OneApiRoot)" Importance="High" />
+    <Message Text="Configuration:  $(Configuration)|$(Platform)" Importance="High" />
+    <Message Text="Output:         $(ArtifactDir)" Importance="High" />
+    <MakeDir Directories="$(ArtifactDir);$(CppObjDir);$(FortranObjDir);$(OutDir);$(IntDir)" />
+
+    <ItemGroup>
+      <CppCompileLine Include="/nologo" />
+      <CppCompileLine Include="/c" />
+      <CppCompileLine Include="/MT" />
+      <CppCompileLine Include="/O2" />
+      <CppCompileLine Include="/Zi" />
+      <CppCompileLine Include="/EHsc" />
+      <CppCompileLine Include="/W3" />
+      <CppCompileLine Include="/DWIN32" />
+      <CppCompileLine Include="/DNDEBUG" />
+      <CppCompileLine Include="/D_WINDOWS" />
+      <CppCompileLine Include="/D_USRDLL" />
+      <CppCompileLine Include="/DCROP_EXPORTS" />
+      <CppCompileLine Include="/D_INTERFACE" />
+      <CppCompileLine Include="/Fo$(CppObjFromCrop)" />
+      <CppCompileLine Include="/Fd$(CppObjFromCrop)Maizsim.pdb" />
+      <CppCompileLine Include="@(CppSource->'&quot;%(Identity)&quot;')" />
+      <CppLinkLine Include="/nologo" />
+      <CppLinkLine Include="/DLL" />
+      <CppLinkLine Include="/DEBUG" />
+      <CppLinkLine Include="/SUBSYSTEM:CONSOLE" />
+      <CppLinkLine Include="/OPT:REF" />
+      <CppLinkLine Include="/OPT:ICF" />
+      <CppLinkLine Include="/DYNAMICBASE:NO" />
+      <CppLinkLine Include="/OUT:&quot;$(ArtifactFromCrop)Maizsim.dll&quot;" />
+      <CppLinkLine Include="/IMPLIB:&quot;$(CppObjFromCrop)Maizsim.lib&quot;" />
+      <CppLinkLine Include="/PDB:&quot;$(CppObjFromCrop)Maizsim.pdb&quot;" />
+      <CppLinkLine Include="/MAP:&quot;$(CppObjFromCrop)Maizsim.map&quot;" />
+      <CppLinkLine Include="@(CppSource->'&quot;$(CppObjFromCrop)%(Filename).obj&quot;')" />
+      <CppLinkLine Include="&quot;$(CppObjFromCrop)Crop.res&quot;" />
+      <FortranLine Include="/nologo" />
+      <FortranLine Include="/Qzero" />
+      <FortranLine Include="/Qinit:arrays" />
+      <FortranLine Include="/warn:shape" />
+      <FortranLine Include="/iface:cvf" />
+      <FortranLine Include="/Qdiag-disable:6375" />
+      <FortranLine Include="/module:$(FortranObjFromSoil)" />
+      <FortranLine Include="/Fo$(FortranObjFromSoil)" />
+      <FortranLine Include="@(FortranSource->'&quot;%(Identity)&quot;')" />
+      <FortranLine Include="&quot;$(FortranObjFromSoil)maizsim.res&quot;" />
+      <FortranLine Include="&quot;$(CppObjFromCrop)Maizsim.lib&quot;" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(CppCompileResponse)" Lines="@(CppCompileLine)" Overwrite="true" Encoding="ASCII" />
+    <WriteLinesToFile File="$(CppLinkResponse)" Lines="@(CppLinkLine)" Overwrite="true" Encoding="ASCII" />
+    <WriteLinesToFile File="$(FortranResponse)" Lines="@(FortranLine)" Overwrite="true" Encoding="ASCII" />
+
+    <Message Text="Building Maizsim.dll with cl/link..." Importance="High" />
+    <Exec Command="chcp 65001 &gt;nul &amp;&amp; call &quot;$(VsDevCmd)&quot; -arch=x64 -host_arch=x64 &gt;nul &amp;&amp; call &quot;$(SetVarsBat)&quot; intel64 &gt;nul &amp;&amp; cd /d &quot;$(CropDir)&quot; &amp;&amp; rc /nologo /fo &quot;$(CppObjFromCrop)Crop.res&quot; &quot;Crop.rc&quot;" UseUtf8Encoding="Always" StdOutEncoding="UTF-8" StdErrEncoding="UTF-8" />
+    <Exec Command="chcp 65001 &gt;nul &amp;&amp; call &quot;$(VsDevCmd)&quot; -arch=x64 -host_arch=x64 &gt;nul &amp;&amp; call &quot;$(SetVarsBat)&quot; intel64 &gt;nul &amp;&amp; cd /d &quot;$(CropDir)&quot; &amp;&amp; cl @&quot;$(CppObjFromCrop)cl_$(Configuration)_$(Platform).rsp&quot;" UseUtf8Encoding="Always" StdOutEncoding="UTF-8" StdErrEncoding="UTF-8" />
+    <Exec Command="chcp 65001 &gt;nul &amp;&amp; call &quot;$(VsDevCmd)&quot; -arch=x64 -host_arch=x64 &gt;nul &amp;&amp; call &quot;$(SetVarsBat)&quot; intel64 &gt;nul &amp;&amp; cd /d &quot;$(CropDir)&quot; &amp;&amp; link @&quot;$(CppObjFromCrop)link_$(Configuration)_$(Platform).rsp&quot;" UseUtf8Encoding="Always" StdOutEncoding="UTF-8" StdErrEncoding="UTF-8" />
+
+    <Error Condition="!Exists('$(ArtifactDir)Maizsim.dll') Or !Exists('$(CppObjDir)Maizsim.lib')" Text="C++ build did not produce Maizsim.dll in $(ArtifactDir) and Maizsim.lib in $(CppObjDir)." />
+
+    <Message Text="Building 2dMAIZSIM.exe with ifx..." Importance="High" />
+    <Exec Command="chcp 65001 &gt;nul &amp;&amp; call &quot;$(VsDevCmd)&quot; -arch=x64 -host_arch=x64 &gt;nul &amp;&amp; call &quot;$(SetVarsBat)&quot; intel64 &gt;nul &amp;&amp; cd /d &quot;$(SoilDir)&quot; &amp;&amp; rc /nologo /fo &quot;$(FortranObjFromSoil)maizsim.res&quot; &quot;maizsim.rc&quot;" UseUtf8Encoding="Always" StdOutEncoding="UTF-8" StdErrEncoding="UTF-8" />
+    <Exec Command="chcp 65001 &gt;nul &amp;&amp; call &quot;$(VsDevCmd)&quot; -arch=x64 -host_arch=x64 &gt;nul &amp;&amp; call &quot;$(SetVarsBat)&quot; intel64 &gt;nul &amp;&amp; cd /d &quot;$(SoilDir)&quot; &amp;&amp; ifx @&quot;$(FortranObjFromSoil)ifx_$(Configuration)_$(Platform).rsp&quot; /link /OUT:&quot;$(ArtifactFromSoil)2dMAIZSIM.exe&quot; /PDB:&quot;$(FortranObjFromSoil)2dsoil.pdb&quot; /SUBSYSTEM:CONSOLE" UseUtf8Encoding="Always" StdOutEncoding="UTF-8" StdErrEncoding="UTF-8" />
+
+    <Error Condition="!Exists('$(ArtifactDir)2dMAIZSIM.exe')" Text="Fortran build did not produce 2dMAIZSIM.exe in $(ArtifactDir)." />
+    <Message Text="Build complete: $(ArtifactDir)2dMAIZSIM.exe" Importance="High" />
+    <Message Text="Build complete: $(ArtifactDir)Maizsim.dll" Importance="High" />
+  </Target>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

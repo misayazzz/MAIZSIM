@@ -1,6 +1,25 @@
 
 Maizsim has to be run from the command line. In the current Python/TOML workflow, `pixi run filecheat` creates a self-contained run folder. The Excel macro first writes a `run<ID>.dat` file, then Python renames it to `run.dat`, copies `2dMAIZSIM.exe`, `Maizsim.dll`, and `WaterBound.DAT` into the run folder, and rewrites the `WaterBound.DAT` reference inside `run.dat`.
 
+## Windows build with VS C++ and Intel ifx
+
+Build the solution through MSBuild. The solution uses a MSBuild-compatible makefile project for the Fortran executable instead of the legacy `.vfproj` file:
+
+```powershell
+MSBuild.exe .\maizsim07.sln /p:Configuration=Release /p:Platform=x64
+```
+
+The MSBuild project auto-detects Visual Studio C++ tools and Intel oneAPI from common `C:\` and `F:\` install locations, builds the C++ crop DLL with `cl/link`, then builds the Fortran soil executable with `ifx`.
+
+Default build outputs are kept outside the source folders:
+
+```text
+build\maizsim\x64\Release\2dMAIZSIM.exe
+build\maizsim\x64\Release\Maizsim.dll
+```
+
+Intermediate files, including the link-time `Maizsim.lib`, are written under `build\obj\...`.
+
 From a generated run folder, run the model as:
 
 ```powershell
