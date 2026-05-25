@@ -21,6 +21,7 @@
 - 对砂壤土，仍可使用普通`DripSpreadMode=1`标定宽度模式；Drip2短时对照中横向宽度和储水增量较接近HYDRUS，但垂向推进仍偏浅。
 - 二维对比图已经标出滴头中心和地表滴灌源区，并在HYDRUS/MAIZSIM增湿图上叠加同一`Delta theta`阈值对应的湿润锋轮廓。输出中同时给出全局湿润区指标和“与滴头连通的湿润体”指标，避免少数远端临界湿点把宽度误读成全域铺开。
 - 自动输出阈值敏感性CSV和PNG，用`Delta theta = 0.002/0.005/0.010/0.020/0.050`检查宽度、深度和IoU是否依赖单一阈值。
+- G05输出新增`DripSourceInput`和`DripSourceLoss`，用于核对`DripSpreadMode=1`源项分配层面的水量闭合。最新Drip1/Drip2重跑显示，当前源项分配层面`DripDemand = DripSourceInput + DripSourceLoss`，且`SourceLoss=0`；因此Drip1约`0.70 L`储水不足不是源区容量直接拒水造成的，而是当前工程标定和HYDRUS二维水动力过程仍有差异。
 
 当前可以谨慎说：MAIZSIM已经具备与官方HYDRUS SurfaceDrip二维场做同条件短时对照的工具链，并且Drip1/Drip2第一版对照结果在湿润面积、深度、交并比和轴对称储水增量上已进入可分析范围。
 
@@ -36,6 +37,7 @@
 
 - `Soil Source/Drip.FOR`
 - `Soil Source/PuSurface.ins`
+- `Soil Source/OUTPUT.FOR`
 - `Soil Source/Watmov.for`
 - `Soil Source/surfaceWaterBalanceAdjustment.for`
 
@@ -66,6 +68,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 5. 对每个地表边界段重构几何控制区间，计算与目标区间的交集。
 6. `DripCoverMeasure()`把几何覆盖长度换成边界积分权重。`KAT=1`用环带比例`(r2^2-r1^2)/(R2^2-R1^2)`，`KAT=2`用普通长度比例。
 7. 普通模式下，按覆盖权重更新滴灌诊断通量；直接模式下，把当前步水量按指定源区体积转成节点含水量增量，并同步`hNew`、`ThNew`和WaterMover旧状态数组。
+8. 新增`DripSourceInput`和`DripSourceLoss`，统计源项分配层面的入土水量和未分配水量。这个诊断适用于`DripSpreadMode=1`源区分配过程，不应误读为HYDRUS压力边界主动集迭代结果。
 
 这次最重要的代码修正是`DripMode=3`：
 
@@ -75,6 +78,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DripMode=3`活动时显式设置`DripBypassRunoff=1`和`DripBypassWaterMover=1`，避免直接形态分配又被地表径流扩展或WaterMover重复改写。
 - `DripMode=3`的直接分配现在按源区节点剩余孔隙容量迭代重分配，不再在某些浅层节点达到饱和上限时直接丢掉超额水。
 - `DripMode=3`的源区体积不再是简单几何体积，而是径向权重和深度权重加权后的有效源区体积。越靠近滴头、越靠近地表的节点权重越高；远端和较深节点仍可入水，但不会和滴头附近节点等量分配。
+- `DripMode=3`的源项水量诊断会写入G05：`DripSourceInput`表示成功分配给源区节点的水量，`DripSourceLoss`表示源区容量不足后仍未分配的水量。当前Drip1/Drip2短时算例中`DripSourceLoss=0`。
 
 ### Python工具链
 
@@ -96,6 +100,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 输出`theta_mae`、`theta_rmse`、`theta_corr`、`delta_theta_mae`、`delta_theta_rmse`、湿润面积、湿润宽度、湿润深度、交并比、峰值位置距离。
 - 额外输出`source_wet_*`指标，只统计与滴头源区连通的湿润体。
 - 若HYDRUS导出包含`axisym_volume_cm3`，额外输出轴对称储水增量：`hydrus_delta_storage_l`、`maizsim_delta_storage_l`、储水残差和相对施水量比例。
+- 解析MAIZSIM G05中的滴灌诊断，并把`g05_drip_demand_mm_sum`、`g05_drip_source_input_mm_sum`、`g05_drip_source_loss_mm_sum`和`g05_source_closure_residual_mm`写入HYDRUS对齐汇总表。
 - 额外输出阈值敏感性表和图，检查湿润体结论是否只由某一个`Delta theta`阈值造成。
 - 二维对比图中黑色等值线表示当前阈值下的湿润锋，红色标注表示滴头中心和地表源区。
 
@@ -134,35 +139,35 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 ```powershell
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_aligned_validation `
   --project-file tmp\codex_hydrus_official\drip\Drip1.h3d3 `
-  --workspace tmp\codex_hydrus_aligned_runs_Drip1 `
-  --output-dir tmp\codex_hydrus_aligned_outputs `
-  --prefix Drip1 `
+  --workspace tmp\codex_hydrus_source_diag_runs_Drip1 `
+  --output-dir tmp\codex_hydrus_source_diag_outputs `
+  --prefix Drip1SourceDiag `
   --timeout-seconds 240
 
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_aligned_validation `
   --project-file tmp\codex_hydrus_official\drip\Drip2.h3d3 `
-  --workspace tmp\codex_hydrus_aligned_runs_Drip2 `
-  --output-dir tmp\codex_hydrus_aligned_outputs `
-  --prefix Drip2 `
+  --workspace tmp\codex_hydrus_source_diag_runs_Drip2 `
+  --output-dir tmp\codex_hydrus_source_diag_outputs `
+  --prefix Drip2SourceDiag `
   --timeout-seconds 240
 ```
 
 输出图：
 
-- `tmp/codex_hydrus_aligned_outputs/Drip1_aligned_fields.png`
-- `tmp/codex_hydrus_aligned_outputs/Drip2_aligned_fields.png`
+- `tmp/codex_hydrus_source_diag_outputs/Drip1SourceDiag_aligned_fields.png`
+- `tmp/codex_hydrus_source_diag_outputs/Drip2SourceDiag_aligned_fields.png`
 
 输出表：
 
-- `tmp/codex_hydrus_aligned_outputs/Drip1_aligned_validation_summary.csv`
-- `tmp/codex_hydrus_aligned_outputs/Drip2_aligned_validation_summary.csv`
-- `tmp/codex_hydrus_aligned_outputs/Drip1_aligned_threshold_sensitivity.csv`
-- `tmp/codex_hydrus_aligned_outputs/Drip2_aligned_threshold_sensitivity.csv`
+- `tmp/codex_hydrus_source_diag_outputs/Drip1SourceDiag_aligned_validation_summary.csv`
+- `tmp/codex_hydrus_source_diag_outputs/Drip2SourceDiag_aligned_validation_summary.csv`
+- `tmp/codex_hydrus_source_diag_outputs/Drip1SourceDiag_aligned_threshold_sensitivity.csv`
+- `tmp/codex_hydrus_source_diag_outputs/Drip2SourceDiag_aligned_threshold_sensitivity.csv`
 
 阈值敏感性图：
 
-- `tmp/codex_hydrus_aligned_outputs/Drip1_aligned_threshold_sensitivity.png`
-- `tmp/codex_hydrus_aligned_outputs/Drip2_aligned_threshold_sensitivity.png`
+- `tmp/codex_hydrus_source_diag_outputs/Drip1SourceDiag_aligned_threshold_sensitivity.png`
+- `tmp/codex_hydrus_source_diag_outputs/Drip2SourceDiag_aligned_threshold_sensitivity.png`
 
 最新结果：
 
@@ -185,11 +190,21 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_al
 | `Drip1` | `4.000 L` | `3.983 L` | `3.278 L` | `-0.705 L` | `0.996` | `0.820` |
 | `Drip2` | `4.000 L` | `3.997 L` | `3.865 L` | `-0.132 L` | `0.999` | `0.966` |
 
+G05源项诊断：
+
+| 工程 | `DripDemand`累计 | `DripSourceInput`累计 | `DripSourceLoss`累计 | 源项闭合残差 |
+| --- | ---: | ---: | ---: | ---: |
+| `Drip1` | `2.494 mm` | `2.494 mm` | `0.000 mm` | `0.000 mm` |
+| `Drip2` | `3.188 mm` | `3.188 mm` | `0.000 mm` | `0.000 mm` |
+
+说明：这里的G05单位是模型平面平均水深`mm`，用于检查MAIZSIM源项分配层面的闭合；不能直接和上表的轴对称储水升数混用。
+
 对Drip1的解释：
 
 - 全局宽度`50 cm`不是主湿润体真的铺满全域，而是`Delta theta >= 0.005`阈值下有少数远端浅层临界点。连通湿润体宽度为`33.243 cm`，更能代表滴头形成的主体湿润范围。
 - Drip1的`source_wet_iou=0.880131`，深度误差约`0.78 cm`，说明主体湿润体在当前阈值下仍接近HYDRUS形态范围。
 - 容量受限重分配和径向/深度加权后，Drip1的MAIZSIM轴对称储水增量由早期`2.850 L`提高到`3.278 L`，但HYDRUS为`3.983 L`。这说明只看二维形态仍会过度乐观，当前直接形态分配还没有完全满足精细模型对水量闭合的要求。
+- 最新G05诊断显示Drip1源项分配层面没有`DripSourceLoss`，因此`0.70 L`储水不足不能再解释为“源区容量不够导致直接丢水”。更合理的解释是：当前`DripMode=3`把水按标定源区直接写入含水量，随后与HYDRUS压力受限边界、水力梯度和有限元瞬态迁移过程不同。
 - Drip1的单点峰值距离仍为`17.575 cm`。这主要因为HYDRUS壤土表层峰值区域较平坦，最大节点落在`x≈17.6 cm`，而MAIZSIM直接分配峰值在滴头轴线附近。这个指标应结合图和连通IoU一起看，不能单独判定失败或通过。
 - `DripMode=3`当前把`DripBypassWaterMover`作为事件步全局旁路开关。当前HYDRUS对齐算例是单一滴灌事件，因此这个旁路可控；若同一时间步混有其他非`DripMode=3`灌溉事件，仍需改成更局部的旁路或限制输入组合。
 
@@ -236,6 +251,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_al
 
 - 把`DripSpreadMode=1`改成纯地表边界通量，让WaterMover/压力求解自己消纳滴灌通量。Drip2短时算例在`240 s`超时，说明当前求解链不能直接承受这个SurfaceDrip式边界路线。
 - 把滴灌作为WaterMover源项注入，而不是直接更新`theta`。Drip2同样超时，说明仅把水移到WaterMover源项并不能自动得到稳定的HYDRUS式湿润体。
+- 另做过`DripMode=3`不旁路WaterMover的Drip1实验：储水量从`3.278 L`轻微改善到`3.348 L`，但二维形态明显变差，连通IoU从`0.880`降到`0.687`，湿润深度变为`25.586 cm`，超过HYDRUS的`18.476 cm`。因此没有采用这条路线。
 
 因此当前保留的是稳定、可验证的工程标定版本；若目标是精细二维湿润体，真正的下一步不是继续调一个经验宽度，而是实现可收敛的压力头受限边界迭代和自适应子步长。
 
@@ -302,13 +318,14 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 
 结果：
 
-- 93个测试通过。
+- 94个测试通过。
 
 官方HYDRUS同条件验证脚本：
 
 - Drip1成功运行，生成二维图和CSV。
 - Drip2成功运行，生成二维图和CSV。
 - 两个MAIZSIM run均完成到`39200.000000`，未出现ORTHOMIN失败、Fortran严重错误或脚本traceback。
+- 最新重跑同时生成G05源项闭合诊断：Drip1和Drip2的`g05_source_closure_residual_mm`均为`0.0`。
 
 ## 仍需后续处理
 
@@ -316,8 +333,8 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 
 短期：
 
-- 为`DripMode=3`增加更明确的逐节点源项诊断输出，包括源区节点、分配权重、源项体积、单步施水量和直接更新的`theta`。
-- 继续追踪Drip1直接形态分配后的完整水量去向：输入滴灌量、节点储水增量、边界出流、地表旁路和WaterMover旁路，解释剩余约`0.70 L`储水差。
+- 在已有G05源项闭合诊断基础上，继续增加逐节点源项诊断，包括源区节点、分配权重、源项体积、单步施水量和直接更新的`theta`。
+- 继续追踪Drip1直接形态分配后的完整水量去向：输入滴灌量、节点储水增量、边界出流、地表旁路和WaterMover旁路。当前已排除“源区容量直接丢水”这一解释，但还没有完成节点储水与边界通量的逐项闭合。
 - 对Drip1补充更多阈值图，例如`0.005`、`0.010`、`0.020`，避免单一阈值导致宽度解释不稳。
 - 补做源项深度灵敏度分析。当前Drip1用`0.75 * HYDRUS湿润深度`作为直接源项深度，结果明显优于直接等于最终湿润深度，但这是标定参数，不是普适规律。
 - 为Drip2补垂向推进改进，因为当前MAIZSIM深度偏浅约`4.0 cm`。
@@ -347,6 +364,7 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 - `KAT=1`轴对称下已把几何半径和边界积分权重分开处理。
 - Drip1主体湿润体连通IoU约`0.880`，Drip2 IoU约`0.863`。
 - Drip1轴对称储水增量低于HYDRUS约`0.70 L`，Drip2低约`0.13 L`。
+- G05源项分配诊断显示当前Drip1/Drip2短时算例在MAIZSIM源项层面闭合，且没有`DripSourceLoss`。
 - 当前结果显示滴灌确实改变二维水分场，并且图中已标出滴灌位置和地表源区。
 
 ## 参考资料

@@ -12,6 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from .drip_validation import read_g05_surface_water
 from .hydrus_2d_comparison import compare_theta_fields, read_hydrus_theta_csv
 from .hydrus_2d_comparison import read_maizsim_g03_theta, write_comparison_outputs
 from .hydrus_official_export import _decode_text
@@ -275,6 +276,10 @@ def run_hydrus_aligned_validation(
         drip_source_right_cm=manifest["drip_source_right_cm"],
     )
     _add_applied_volume_metrics(comparison.metrics, manifest)
+    g05_metrics = _g05_drip_diagnostics(
+        prepared.baseline_dir / "LOAM2D.G05",
+        prepared.drip_dir / "LOAM2D.G05",
+    )
     comparison_outputs = write_comparison_outputs(
         comparison,
         output_path,
@@ -293,7 +298,7 @@ def run_hydrus_aligned_validation(
         prefix=f"{prepared.prefix}_aligned",
         manifest=manifest,
     )
-    summary = pd.DataFrame([{**manifest, **comparison.metrics}])
+    summary = pd.DataFrame([{**manifest, **comparison.metrics, **g05_metrics}])
     summary_path = output_path / f"{prepared.prefix}_aligned_validation_summary.csv"
     summary.to_csv(summary_path, index=False)
     outputs = {
@@ -316,6 +321,33 @@ def _add_applied_volume_metrics(metrics, manifest):
     for key in ("hydrus_delta_storage_l", "maizsim_delta_storage_l"):
         if key in metrics:
             metrics[f"{key}_per_applied_l"] = float(metrics[key]) / applied_volume_l
+
+
+def _g05_drip_diagnostics(baseline_g05, drip_g05):
+    """Return run-summed G05 drip diagnostics as drip-minus-baseline values."""
+    baseline = read_g05_surface_water(baseline_g05)
+    drip = read_g05_surface_water(drip_g05)
+    columns = (
+        "drip_demand_mm",
+        "drip_pressure_loss_mm",
+        "drip_hydraulic_excess_mm",
+        "drip_source_input_mm",
+        "drip_source_loss_mm",
+    )
+    result = {}
+    for column in columns:
+        if column in baseline.columns and column in drip.columns:
+            result[f"g05_{column}_sum"] = float(
+                drip[column].sum() - baseline[column].sum()
+            )
+    source_input = result.get("g05_drip_source_input_mm_sum")
+    source_loss = result.get("g05_drip_source_loss_mm_sum")
+    demand = result.get("g05_drip_demand_mm_sum")
+    if source_input is not None and source_loss is not None and demand is not None:
+        result["g05_source_closure_residual_mm"] = float(
+            demand - source_input - source_loss
+        )
+    return result
 
 
 def write_threshold_sensitivity_outputs(

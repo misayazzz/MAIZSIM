@@ -77,6 +77,8 @@
         DripDemand_Flux=0.0D0
         DripPressureLoss_Flux=0.0D0
         DripHydraulicExcess_Flux=0.0D0
+        DripSourceInput_Flux=0.0D0
+        DripSourceLoss_Flux=0.0D0
         DripWetNodes_Sum=0.0D0
         DripWetNodes_Max=0.0D0
         DripWetWidth_Sum=0.0D0
@@ -645,12 +647,16 @@ c remaining water after source saturation is reported as capacity loss.
                     Endif
                   EndDo
                   RemainingWater=RemainingWater-AppliedWater
+                  DripSourceInput_Flux=DripSourceInput_Flux+
+     !              dble(AppliedWater)
                   If(AppliedWater.gt.DripTol.and.
      !              RemainingWater.gt.DripTol) Goto 530
                 Endif
               Endif
               If(RemainingWater.gt.DripTol.and.
      !        Width(CenterBnd).gt.DripTol) then
+                DripSourceLoss_Flux=DripSourceLoss_Flux+
+     !          dble(RemainingWater)
                 DripPressureLoss_Rate(CenterBnd)=
      !          DripPressureLoss_Rate(CenterBnd)+
      !          RemainingWater/(Step*Width(CenterBnd))

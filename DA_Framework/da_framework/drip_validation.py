@@ -25,6 +25,8 @@ G05_DRIP_DIAGNOSTIC_COLUMNS = {
     "drip_demand_mm": "DripDemand",
     "drip_pressure_loss_mm": "DripPressureLoss",
     "drip_hydraulic_excess_mm": "DripHydraulicExcess",
+    "drip_source_input_mm": "DripSourceInput",
+    "drip_source_loss_mm": "DripSourceLoss",
     "drip_wet_nodes_mean": "DripWetNodesMean",
     "drip_wet_nodes_max": "DripWetNodesMax",
     "drip_wet_width_mean_cm": "DripWetWidthMean",
