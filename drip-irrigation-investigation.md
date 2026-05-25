@@ -11,13 +11,13 @@
 如果目标是精细模拟滴灌湿润体形态，尤其要最终和HYDRUS二维`theta(x,z,t)`图对比，上一版不够，必须改。本轮先补上了“HYDRUS SurfaceDrip地表宽度曲线约束+MAIZSIM内部二维水分/根系响应诊断”的验证基础，并把滴灌扩展为两个模式：
 
 - `DripSpreadMode=0`：保留原来的入渗受限触发扩展模式，用`RO`信号判断是否需要向相邻地表节点扩展。
-- `DripSpreadMode=1`：新增HYDRUS SurfaceDrip宽度曲线标定模式，不再等待`RO`触发，而是按累计有效供水时间查HYDRUS SurfaceDrip公开算例的时间-湿润宽度曲线，主动确定当前地表湿润宽度，并在活动范围内按横向距离加权分配滴灌通量。
+- `DripSpreadMode=1`：新增HYDRUS SurfaceDrip宽度曲线标定模式，不再等待`RO`触发，而是按累计有效供水时间查HYDRUS SurfaceDrip公开算例的时间-湿润宽度曲线；随后把连续目标湿润区间与MAIZSIM地表边界控制区间求交，允许边缘边界段部分覆盖，并按“覆盖宽度×横向距离权重”分配滴灌通量。
 
 当前最重要的判断是：
 
 - 滴灌对二维土壤水分场有明确作用；二维`Delta theta = drip - baseline`图显示增湿峰值位于滴灌节点正下方。
 - 根系二维图已经叠加到水分增量图中，能判断增湿区和根区是否重叠。
-- 新精细模式可以让壤土、砂壤土在短时HYDRUS SurfaceDrip宽度对照算例中达到“当前网格可表达的HYDRUS目标宽度”。
+- 新精细模式可以让壤土、砂壤土在短时HYDRUS SurfaceDrip宽度对照算例中接近“当前有限地表范围和边界控制段可表达的HYDRUS目标宽度”，并避免粗网格下只能按完整边界段跳变。
 - 这仍不是完整HYDRUS有限元模型，也不是地下埋设滴头源项模型；它是MAIZSIM地表边界上的HYDRUS校准近似。
 - 当前还不能声称“已完成MAIZSIM二维湿润体形态与HYDRUS二维图的直接对比”，因为本轮没有HYDRUS二维含水量场`theta(x,z,t)`作为参考。
 
@@ -62,18 +62,21 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 1. 对每个事件和滴头保存`DripEffHours`、`DripLastTime`和`DripLastPressure`。
 2. 每次模型步进时先计算压力修正因子`PressureFactor`；再用上一时间段的`DripLastPressure`乘以真实经过时间，累加为`DripEffHours`。
 3. 调用`DripTargetWidth(MaxWetWidth, DripEffHours)`得到连续目标湿润宽度。
-4. 在当前地表边界离散节点中，寻找不超过目标宽度的最大对称活动范围。
-5. 对活动范围内节点按横向距离给权重，中心节点权重最高，边缘节点权重较低。
-6. 按权重分配`DripRate`、`DripDemand_Rate`和`DripPressureLoss_Rate`，保持水量守恒。
+4. 以滴头节点横坐标为中心构造连续目标区间`[x - TargetWetWidth / 2, x + TargetWetWidth / 2]`。
+5. 按相邻地表节点中点重构每个表面边界控制区间，计算目标区间与控制区间的覆盖宽度`CoverWidth`；边缘边界段可只覆盖一部分。
+6. 对覆盖区间内节点按横向距离给权重，中心节点权重最高，边缘节点权重较低。
+7. 用`NodeWeight * CoverWidth`归一化，并在写入边界通量密度时除以该边界段完整`Width(k)`，使`sum(DripRate(k) * Width(k)) = SourceFlux`严格守恒。
 
 此外：
 
 - Fortran端现在按字段数严格解析`.drp`事件行，只接受6、11、12或13字段；7到10字段、超过13字段、或13字段中出现非数字`DripSpreadMode`都会停止并报错。
 - `DripSpreadMode=1`会把HYDRUS曲线拐点`0.03`、`0.05`、`0.10`、`0.20`、`0.30`、`0.50`、`1.00`、`2.00 h`加入`tNext`同步，减少早期湿润宽度跳变。这个同步仍按事件真实经过时间触发；当`PressureFactor < 1`时，它是数值辅助，不等于按累计有效供水时间精确触发每个HYDRUS曲线拐点。
 
-这样做的含义是：湿润范围由累计有效供水时间查询HYDRUS SurfaceDrip宽度曲线驱动，实际可达到的宽度由MAIZSIM地表网格分辨率决定。
+这样做的含义是：湿润范围由累计有效供水时间查询HYDRUS SurfaceDrip宽度曲线驱动，实际可达到的宽度由有限地表范围和MAIZSIM地表边界控制段决定。它比“完整边界段求和”更接近连续HYDRUS目标，但仍不是把有限元边界真正切成子段；边缘部分覆盖在MAIZSIM中表现为该完整边界段整体通量密度按覆盖比例降低。
 
 2026-05-25补充：上一版使用`EffectiveHours = ElapsedHours * PressureFactor`，在压力因子随时间变化时可能把已经形成的目标宽度向回缩。本版改为累计有效供水时间后，压力不足只会降低后续扩展速率，不会把已累计的有效供水时间清零或缩小。
+
+2026-05-25补充：上一版`DripSpreadMode=1`仍用完整表面边界段表达目标宽度，粗网格下会出现`16.3 cm`目标只能表达为`6.05 cm`或`15.08 cm`的问题。本版改为部分覆盖边界控制段后，砂壤土`16.3 cm`目标在基础网格和宽网格都可表达为`16.3 cm`，窄网格因端点舍入表达为`16.29625 cm`；壤土仍会因为滴头靠近左边界、目标区间超出有限地表范围而被域边界裁剪。
 
 ### Python输入与验证链路
 
@@ -92,7 +95,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 写出13字段`.drp`。
 - 解析6字段、11字段、12字段和13字段`.drp`。
 - 在真实模型回归矩阵中默认写入`DripSpreadMode=1`，用于精细湿润体验证。
-- 用`drip_precision_validation.py`复现45算例矩阵、HYDRUS曲线节点宽度表、可输出短时模型宽度对照、二维`Delta theta`根系叠加图和二维形态指标图。
+- 用`drip_precision_validation.py`复现45算例矩阵、HYDRUS曲线节点宽度表、逐边界段部分覆盖明细、短时模型宽度对照、二维`Delta theta`根系叠加图和二维形态指标图。
 
 ## HYDRUS标定口径
 
@@ -177,27 +180,27 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_regr
 | 检查项 | 数值 | 状态 |
 | --- | --- | --- |
 | 算例数量 | `45` | pass |
-| `DripDemand - DripInput - DripPressureLoss`最大绝对残差 | `7.62e-15 mm` | pass |
+| `DripDemand - DripInput - DripPressureLoss`最大绝对残差 | `1.24e-14 mm` | pass |
 | 湿润宽度上限越界数 | `0` | pass |
-| `DripInput`总量 | `3116.079 mm` | pass |
+| `DripInput`总量 | `3116.078 mm` | pass |
 | `DripDemand`总量 | `3116.232 mm` | pass |
-| `DripPressureLoss`总量 | `0.153 mm` | pass |
-| `DripHydraulicExcess`总量 | `3.004 mm` | pass |
-| 非baseline `Runoff`总量 | `151.185 mm` | diagnostic |
+| `DripPressureLoss`总量 | `0.154 mm` | pass |
+| `DripHydraulicExcess`总量 | `2.969 mm` | pass |
+| 非baseline `Runoff`总量 | `153.798 mm` | diagnostic |
 
 按土壤汇总：
 
 | 土壤 | 最大实际湿润宽度 | 最大湿润节点数 | 配置上限 | 说明 |
 | --- | --- | --- | --- | --- |
-| `sandy_loam` | `16.29 cm` | `5` | `16.3 cm` | 部分网格/多节点场景可接近上限；宽网格单滴头有3个单节点算例，只能表达中心段宽度。 |
-| `loam` | `39.163 cm` | `10` | `39.7 cm` | 基本网格可达到全地表`38.1 cm`，宽网格多滴头场景可到`39.163 cm`。 |
-| `clay_loam` | `19.31 cm` | `5` | `20.0 cm` | fallback上限内扩展，伴随径流和水力超量。 |
+| `sandy_loam` | `16.300 cm` | `8` | `16.3 cm` | 部分覆盖后不再停在单一中心段；不同网格均可接近或达到HYDRUS砂壤土上限。 |
+| `loam` | `39.688 cm` | `10` | `39.7 cm` | 多滴头或宽网格场景可接近壤土上限；单滴头基础网格会因左边界裁剪停在约`32.085 cm`。 |
+| `clay_loam` | `20.000 cm` | `9` | `20.0 cm` | fallback上限内扩展，伴随径流和水力超量。 |
 
 关键解释：
 
 - 当前45矩阵证明了新精细模式不会破坏水量闭合，也不会超过配置湿润宽度上限。
 - 壤土最大宽度接近`39.7 cm`，这是因为HYDRUS SurfaceDrip公开图中壤土2 h饱和半径约`19.85 cm`，映射到地表全宽就是`39.7 cm`。它看起来横向很宽，但在当前采用的HYDRUS SurfaceDrip地表宽度目标下是预期行为，不等于二维`theta`场已经匹配HYDRUS。
-- 砂壤土宽度上限小得多，基础网格可表达为`15.08 cm`，宽网格某些单滴头算例只能表达为中心节点`6.05 cm`，这是网格分辨率限制。
+- 砂壤土宽度上限小得多；部分覆盖后，粗网格边缘段可以按覆盖比例施加通量，避免了旧实现中`16.3 cm`目标被完整边界段跳变压缩为`6.05 cm`或`15.08 cm`的问题。
 
 ### HYDRUS SurfaceDrip短时宽度对照
 
@@ -210,6 +213,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 输出：
 
 - `tmp/codex_precision_drip_validation/precision_hydrus_curve_width.csv`
+- `tmp/codex_precision_drip_validation/precision_surface_partial_coverage.csv`
 - `tmp/codex_precision_drip_validation/precision_hydrus_curve_model_width.csv`
 - `tmp/codex_precision_drip_validation/precision_hydrus_curve_width.png`
 - `tmp/codex_precision_drip_validation/precision_short_hydrus_width.csv`
@@ -218,27 +222,30 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 
 曲线节点覆盖：
 
-- `precision_hydrus_curve_width.csv`记录2种HYDRUS标定土壤、3种网格、8个HYDRUS曲线时间节点，共48条目标宽度和网格可表达宽度记录。
+- `precision_hydrus_curve_width.csv`记录2种HYDRUS标定土壤、3种网格、8个HYDRUS曲线时间节点，共48条连续目标宽度、域裁剪宽度、旧完整段宽度和新部分覆盖宽度记录。
+- `precision_surface_partial_coverage.csv`逐边界段记录`segment_left_cm`、`segment_right_cm`、`covered_width_cm`、`covered_fraction`、`node_weight`和`flux_fraction`，用于核对边缘段覆盖比例和通量比例。
 - `precision_hydrus_curve_model_width.csv`对模型稳定可输出的`0.5 h`、`1.0 h`、`2.0 h`做端到端运行，共18个短时模型算例。
-- 18个短时模型算例中，MAIZSIM实际最大宽度与网格可表达目标的最大误差为`0.0005 cm`。
-- 连续HYDRUS目标与网格可表达目标的最大差值为`13.31 cm`，状态记为`review`，说明这是网格离散能力限制，不是水量闭合错误。
+- 18个短时模型算例中，MAIZSIM实际最大宽度与部分覆盖目标的最大误差为`0.70325 cm`。这是连续宽度曲线与模型时间步/小时输出采样之间的误差，状态为`pass`，当前容差为`0.8 cm`。
+- 2 h短时算例中，MAIZSIM实际最大宽度与部分覆盖目标的最大误差为`0.302 cm`。
+- 逐边界段`flux_fraction`求和最大误差为`1.11e-16`，说明部分覆盖通量分配在验证表中严格归一。
+- 连续HYDRUS目标与部分覆盖目标的最大差值为`11.12875 cm`，状态记为`review`，主要来自滴头靠近有限地表左边界时，壤土`39.7 cm`目标区间被模型边界裁剪，不是水量闭合错误。
 
 2 h短时对照结果：
 
-| 土壤 | 网格 | HYDRUS目标宽度 | 网格可表达目标 | MAIZSIM实际最大宽度 |
-| --- | --- | --- | --- | --- |
-| `loam` | `narrow_x075` | `39.7 cm` | `28.575 cm` | `28.575 cm` |
-| `loam` | `base_x100` | `39.7 cm` | `38.100 cm` | `38.100 cm` |
-| `loam` | `wide_x125` | `39.7 cm` | `34.5625 cm` | `34.563 cm` |
-| `sandy_loam` | `narrow_x075` | `16.3 cm` | `11.310 cm` | `11.310 cm` |
-| `sandy_loam` | `base_x100` | `16.3 cm` | `15.080 cm` | `15.080 cm` |
-| `sandy_loam` | `wide_x125` | `16.3 cm` | `6.050 cm` | `6.050 cm` |
+| 土壤 | 网格 | HYDRUS目标宽度 | 域裁剪目标 | 部分覆盖目标 | MAIZSIM实际最大宽度 |
+| --- | --- | --- | --- | --- | --- |
+| `loam` | `narrow_x075` | `39.7 cm` | `28.57875 cm` | `28.57125 cm` | `28.524 cm` |
+| `loam` | `base_x100` | `39.7 cm` | `32.09500 cm` | `32.08500 cm` | `31.783 cm` |
+| `loam` | `wide_x125` | `39.7 cm` | `35.15625 cm` | `35.15000 cm` | `35.003 cm` |
+| `sandy_loam` | `narrow_x075` | `16.3 cm` | `16.30000 cm` | `16.29625 cm` | `16.296 cm` |
+| `sandy_loam` | `base_x100` | `16.3 cm` | `16.30000 cm` | `16.30000 cm` | `16.300 cm` |
+| `sandy_loam` | `wide_x125` | `16.3 cm` | `16.30000 cm` | `16.30000 cm` | `16.300 cm` |
 
 判断：
 
-- MAIZSIM实际宽度和“网格可表达目标”一致，最大误差`0.0005 cm`。
-- 不能要求MAIZSIM在粗网格上严格等于连续HYDRUS半径，因为地表边界宽度是离散段。
-- 宽网格砂壤土单节点现象不是水量失败，而是下一圈对称节点宽度会超过`16.3 cm`上限，所以只能停在中心节点。
+- MAIZSIM实际宽度和“部分覆盖目标”在`0.8 cm`容差内一致；偏差来自模型时间步和小时输出对连续宽度曲线的采样。
+- 不能要求MAIZSIM在有限地表范围内严格等于连续HYDRUS半径；壤土目标宽度大于滴头左侧可用地表范围时，会被域边界裁剪。
+- 部分覆盖后，砂壤土宽网格单滴头不再停在中心节点`6.05 cm`，而是通过边缘段覆盖比例达到`16.3 cm`。
 
 ### MAIZSIM内部二维水分和根系响应诊断
 
@@ -252,6 +259,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 
 - 红色倒三角：滴灌地表位置。
 - 红色虚线：滴灌节点横向坐标。
+- 红色水平线：本次代表算例实际施加的地表滴灌源区范围。
 - `drip node 7`：本次代表算例使用的滴灌节点。
 - 填色：`Delta theta = drip - baseline`。
 - 青色等值线：作物根系分布。
@@ -262,9 +270,9 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 
 | 土壤 | 峰值`Delta theta` | 峰值距滴头偏移 | 正增湿面积 | 正增湿最大深度 | 深宽比 | 根区加权`Delta theta` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sandy_loam` | `0.1329` | `0.0 cm` | `1546.47 cm2` | `55.0 cm` | `1.44` | `0.0091` |
-| `loam` | `0.1308` | `0.0 cm` | `2210.62 cm2` | `55.0 cm` | `1.44` | `0.0193` |
-| `clay_loam` | `0.1960` | `0.0 cm` | `735.69 cm2` | `35.0 cm` | `1.36` | `0.0102` |
+| `sandy_loam` | `0.1339` | `0.0 cm` | `1492.62 cm2` | `55.0 cm` | `1.44` | `0.0097` |
+| `loam` | `0.1428` | `0.0 cm` | `2182.74 cm2` | `55.0 cm` | `1.44` | `0.0186` |
+| `clay_loam` | `0.1910` | `0.0 cm` | `935.53 cm2` | `41.2 cm` | `1.60` | `0.0138` |
 
 判断：
 
@@ -277,16 +285,18 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 图像质量检查：
 
 - `precision_case_widths.png`、`precision_hydrus_curve_width.png`、`precision_short_hydrus_width.png`、`precision_delta_theta_root_overlay_0601.png`、`precision_spatial_shape_metrics.png`均已生成。
-- 五张PNG非空，像素标准差分别约为`0.135`、`0.131`、`0.185`、`0.133`、`0.208`。
-- 人工查看确认坐标轴、图例、滴灌位置标识和根系等值线可读。
+- 五张PNG非空，像素标准差分别约为`0.128`、`0.134`、`0.181`、`0.140`、`0.208`。
+- 人工查看确认坐标轴、图例、滴灌节点标识、地表源区水平线和根系等值线可读。
 - 图像质量检查只证明当前诊断图可读、非空，不证明HYDRUS二维形态匹配。
 
 关键检查项：
 
 | 检查项 | 数值 | 状态 |
 | --- | --- | --- |
-| HYDRUS曲线节点模型宽度最大误差 | `0.0005 cm` | pass |
-| 连续HYDRUS宽度未被网格表达的最大差值 | `13.31 cm` | review |
+| HYDRUS曲线节点模型宽度最大误差 | `0.70325 cm` | pass |
+| 2 h短时模型宽度最大误差 | `0.302 cm` | pass |
+| 逐边界段通量比例求和最大误差 | `1.11e-16` | pass |
+| 连续HYDRUS宽度未被部分覆盖表达的最大差值 | `11.12875 cm` | review |
 | 压力补偿活动期宽度回缩算例数 | `0` | pass |
 | 出现压力损失的压力补偿算例数 | `3` | diagnostic |
 | 正增湿二维记录数 | `3` | pass |
@@ -341,8 +351,8 @@ Invalid drip event fields
 - MAIZSIM已经支持HYDRUS SurfaceDrip风格的地表湿润宽度时间曲线近似。
 - 精细模式的目标湿润宽度现在由累计有效供水时间驱动，压力不足会减慢后续扩展，而不会让目标宽度随瞬时压力因子下降而回缩。
 - 45个真实模型算例水量闭合、宽度不越界。
-- 壤土和砂壤土短时算例能达到当前网格可表达的HYDRUS目标宽度。
-- 二维土壤水分图显示滴灌节点下方出现局部增湿。
+- 壤土和砂壤土短时算例能达到当前有限地表范围和部分边界覆盖可表达的HYDRUS目标宽度；壤土大目标会被模型左边界裁剪。
+- 二维土壤水分图显示滴灌节点下方出现局部增湿，并已在图中标出地表滴灌源区范围。
 - 根系二维图可以用于判断滴灌增湿区和根区的空间关系。
 
 若要把结论升级为“与HYDRUS二维湿润体形态对比通过”，还需要补充：
@@ -357,7 +367,7 @@ Invalid drip event fields
 
 - 把`tmp/codex_precision_drip_validation/`下的CSV和PNG作为当前审计工件保留。
 - 若要写论文或报告，明确区分“HYDRUS曲线校准的地表边界近似”和“完整HYDRUS二维流场复现”。
-- 为砂壤土宽网格单节点问题补一组更细地表网格，以证明这是离散宽度限制。
+- 为壤土大目标被地表边界裁剪的问题补一组更宽、滴头居中的短时网格，以区分域边界限制和真实湿润体宽度。
 - 若要让图更接近HYDRUS二维剖面，应增加同等初始含水量、同等流量、同等施水量、无作物或固定根系的短时对照算例。
 - 若压力补偿场景成为重点，应继续增加强压力不足、脉冲压力和长时低流量算例，并考虑输出累计有效供水时间作为诊断字段。
 

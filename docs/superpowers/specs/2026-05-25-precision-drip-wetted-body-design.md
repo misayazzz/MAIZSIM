@@ -39,11 +39,11 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 
 ## HYDRUS-style动态宽度
 
-在`DripSpreadMode=1`时，每个滴灌事件按事件已经进行的时间计算目标活动宽度。
+在`DripSpreadMode=1`时，每个滴灌事件按累计有效供水时间计算目标活动宽度。累计有效时间按上一时间段压力修正因子累加，因此压力不足会减慢后续扩展，但不会让已经形成的目标宽度回缩。
 
 基础规则：
 
-- 事件相对时间为`elapsed_h = (time - tAppl_start) * 24`。
+- 事件相对时间为`elapsed_h = DripEffHours`。
 - 事件总时长为`duration_h = (tAppl_stop - tAppl_start) * 24`。
 - 目标宽度随事件进程单调增加，最大不超过`DripWetWidthMax`。
 - 对已有HYDRUS数字化土壤目标，使用分段线性曲线：
@@ -60,9 +60,11 @@ progress = min(1, elapsed_h / reference_duration_h)
 
 网格离散规则：
 
-- 遍历滴头中心两侧相邻地表边界段，选择不超过`target_width`且最接近目标宽度的对称活动范围。
-- 实际输出宽度仍为活动边界段`Width(k)`之和。
-- 如果中心边界段已经大于目标宽度，实际宽度至少为中心边界段宽度。
+- 以滴头节点横坐标为中心构造连续目标区间。
+- 按相邻地表节点中点重构每个表面边界控制区间。
+- 目标区间与控制区间求交得到`CoverWidth`；边缘边界段允许部分覆盖。
+- 实际输出宽度为`CoverWidth`之和，而不是完整边界段`Width(k)`之和。
+- 如果HYDRUS目标区间超出模型有限地表范围，实际可表达宽度会被域边界裁剪。
 
 ## 通量分配
 
@@ -72,15 +74,15 @@ progress = min(1, elapsed_h / reference_duration_h)
 
 ```text
 distance = abs(x(node) - x(center_node))
-half_width = max(0.5 * TotalWidth, 0.5 * Width(center))
+half_width = max(0.5 * TargetWetWidth, 0.5 * Width(center))
 raw_weight = max(0, 1 - distance / half_width)
 ```
 
-然后按边界段面积归一化：
+然后按覆盖面积归一化，并把结果换回完整边界段上的通量密度：
 
 ```text
-weighted_area = sum(raw_weight(k) * Width(k))
-DripRate(k) += SourceFlux * raw_weight(k) / weighted_area
+weighted_area = sum(raw_weight(k) * CoverWidth(k))
+DripRate(k) += SourceFlux * raw_weight(k) * CoverWidth(k) / weighted_area / Width(k)
 ```
 
 这样每个时间步总输入仍严格守恒：
@@ -105,8 +107,9 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 2. `.drp`读取逻辑支持第13字段，旧格式默认`0`。
 3. 在活动滴灌循环中新增目标宽度计算。
 4. `DripSpreadMode=1`时用目标宽度确定`WetRadius`，而不是等待`RO`触发。
-5. `DripSpreadMode=1`时使用距离权重分配`DripRate`、`DripDemand_Rate`和`DripPressureLoss_Rate`。
-6. 保持`DripInput_Rate`、`DripHydraulicExcess`和G05水量闭合逻辑不破坏。
+5. `DripSpreadMode=1`时使用目标区间与边界控制区间的部分覆盖宽度确定活动范围。
+6. `DripSpreadMode=1`时使用`CoverWidth × 距离权重`分配`DripRate`、`DripDemand_Rate`和`DripPressureLoss_Rate`。
+7. 保持`DripInput_Rate`、`DripHydraulicExcess`和G05水量闭合逻辑不破坏。
 
 ## Python改动范围
 
@@ -122,8 +125,9 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 1. 将HYDRUS数字化时间序列固化为可调用函数。
 2. 回归场景增加`DripSpreadMode=1`的精细算例。
 3. 增加短时2 h HYDRUS对照算例，和长季节作物算例分开。
-4. 生成二维`theta`、`delta theta`、根系叠加和湿润宽度时间序列图。
-5. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、活动湿润区位于滴头附近。
+4. 生成逐边界段部分覆盖明细CSV，用于核对`covered_fraction`、`node_weight`和`flux_fraction`。
+5. 生成二维`theta`、`delta theta`、根系叠加和湿润宽度时间序列图。
+6. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
 
 ## 验证矩阵
 
@@ -141,7 +145,7 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 3. 真实模型短时HYDRUS对照：
    - 砂壤土、壤土。
    - 单滴头，2 h，4 L等效输入。
-   - 对比实际`DripWetWidthMax`与HYDRUS目标宽度的离散误差。
+   - 对比实际`DripWetWidthMax`与HYDRUS目标宽度的域裁剪值、旧完整段表达值和新部分覆盖表达值。
    - 输出`theta`和`delta theta`二维图。
 
 4. 长季节作物算例：
@@ -150,6 +154,7 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 
 5. 图像审查：
    - 滴头位置用红色倒三角和虚线标出。
+   - 地表滴灌源区范围用红色水平线标出。
    - 图中必须能看到增湿区以滴头为中心或近中心展开。
    - 不应出现整幅图均匀增湿或远离滴头的主增湿峰。
    - 根系图应和水分图分开展示，并提供叠加图判断根区重叠。
@@ -174,4 +179,3 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 6. 根系二维图和叠加图能支持滴灌湿润区与根区关系判断。
 7. 文档更新为最新结论，并明确当前仍是HYDRUS-style地表边界近似，不是完整地下滴头源项模型。
 8. 最终结论引用外部资料，并说明本次改动与文献机制的一致点和差异点。
-
