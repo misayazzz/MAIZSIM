@@ -93,14 +93,17 @@ def read_comparison_manifest(path):
     return manifest
 
 
-def read_maizsim_g03_theta(path, date=None):
+def read_maizsim_g03_theta(path, date=None, date_time=None):
     """Read a MAIZSIM G03 theta field and convert y to depth from surface."""
     output_path = Path(path)
     frame = _read_csv(output_path)
-    if date is not None:
+    if date_time is not None:
+        frame = _nearest_date_time_frame(frame, date_time, output_path)
+    elif date is not None:
         frame = _nearest_date_frame(frame, date, output_path)
     elif "Date" in frame.columns and frame["Date"].nunique() > 1:
         raise ValueError(f"Multiple G03 dates in {output_path}; pass a date.")
+    _validate_single_maizsim_time(frame, output_path)
 
     x_col = _require_column(frame, ("x", "x_cm"), output_path)
     y_col = _require_column(frame, ("y", "y_cm"), output_path)
@@ -282,14 +285,22 @@ def main(arguments=None):
         else None
     )
     hydrus = read_hydrus_theta_csv(args.hydrus_csv)
-    maizsim = read_maizsim_g03_theta(args.maizsim_g03, args.date)
+    maizsim = read_maizsim_g03_theta(
+        args.maizsim_g03,
+        args.date,
+        args.maizsim_date_time,
+    )
     hydrus_baseline = (
         read_hydrus_theta_csv(args.hydrus_baseline_csv)
         if args.hydrus_baseline_csv
         else None
     )
     maizsim_baseline = (
-        read_maizsim_g03_theta(args.maizsim_baseline_g03, args.date)
+        read_maizsim_g03_theta(
+            args.maizsim_baseline_g03,
+            args.date,
+            args.maizsim_date_time,
+        )
         if args.maizsim_baseline_g03
         else None
     )
@@ -536,6 +547,25 @@ def _nearest_date_frame(frame, target_date, path):
     return frame[frame[date_col] == nearest].copy()
 
 
+def _nearest_date_time_frame(frame, target_date_time, path):
+    date_time_col = _require_column(
+        frame,
+        ("date_time", "datetime", "time", "time_h"),
+        path,
+    )
+    values = _numeric(frame[date_time_col], date_time_col, path)
+    nearest = values.iloc[(values - float(target_date_time)).abs().idxmin()]
+    return frame[values == nearest].copy()
+
+
+def _validate_single_maizsim_time(frame, path):
+    date_time_col = _optional_column(frame, ("date_time", "datetime", "time", "time_h"))
+    if date_time_col is not None and frame[date_time_col].nunique() > 1:
+        raise ValueError(
+            f"Multiple G03 Date_time values in {path}; pass --maizsim-date-time."
+        )
+
+
 def _weights(points):
     return points["area_cm2"].to_numpy(dtype=float)
 
@@ -579,6 +609,14 @@ def _parse_args(arguments):
     parser.add_argument("--maizsim-g03", required=True)
     parser.add_argument("--hydrus-csv", required=True)
     parser.add_argument("--date", help="Date to select from MAIZSIM G03 output.")
+    parser.add_argument(
+        "--maizsim-date-time",
+        type=float,
+        help=(
+            "Numeric MAIZSIM Date_time value to select from G03. "
+            "Use this for hourly output where one Date has multiple frames."
+        ),
+    )
     parser.add_argument("--maizsim-baseline-g03")
     parser.add_argument("--hydrus-baseline-csv")
     parser.add_argument("--output-dir", required=True)

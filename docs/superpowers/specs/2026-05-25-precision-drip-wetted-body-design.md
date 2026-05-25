@@ -133,6 +133,8 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 6. 增加HYDRUS二维`theta` CSV导入和MAIZSIM `G03`插值对比工具，用于外部HYDRUS数值场到位后的直接对比。
 7. 增加同条件manifest入口，用于记录HYDRUS工程、MAIZSIM run、土壤水力参数、初始条件、滴头流量、总水量、输出时刻、边界条件和baseline定义。
 8. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
+9. 增加官方HYDRUS工程输出导出入口：从`.h3d3/.hyd5`或已解出的HYDRUS流读取`DIMENSIO.IN`、`SELECTOR.IN`、`MESHTRIA.000`和`th.out`，生成HYDRUS二维`theta` CSV、网格CSV、形态指标和三联图。
+10. MAIZSIM `G03`读取必须支持`Date_time`精确选帧；同一天有多个小时输出时，禁止只按`Date`混合多个时刻。
 
 ## 验证矩阵
 
@@ -154,6 +156,7 @@ sum(DripRate(k) * Width(k)) = SourceFlux
    - 输出`theta`和`delta theta`二维图。
    - 当外部HYDRUS二维CSV可用时，输出`theta`场MAE/RMSE、湿润区交并比、湿润宽度/深度和带滴灌标注的三联图。
    - 若HYDRUS CSV缺少单元面积，湿润面积指标只能解释为采样点权重近似；正式报告应优先提供`area_cm2`。
+   - 官方HYDRUS Drip1/Drip2为`Kat=1`轴对称垂向流；若直接用它们作为参考，MAIZSIM侧必须构造同为轴对称或明确换算后的专用算例，不能拿当前`KAT=2`作物天气回归算例直接宣称通过。
 
 4. 长季节作物算例：
    - 3种土壤、3种网格、至少5类场景。

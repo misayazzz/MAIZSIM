@@ -64,6 +64,45 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         np.testing.assert_allclose(frame["theta"].to_numpy(), [0.10, 0.20])
         np.testing.assert_allclose(frame["depth_cm"].to_numpy(), [0.0, 10.0])
 
+    def test_read_maizsim_g03_theta_selects_nearest_date_time(self):
+        with tempfile.TemporaryDirectory(prefix="codex_maizsim_g03_time_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.G03"
+            path.write_text(
+                "\n".join(
+                    [
+                        "Date_time,Date,X,Y,thNew,Area",
+                        "10,2024-06-01,0,100,0.10,1",
+                        "10,2024-06-01,10,90,0.20,1",
+                        "12,2024-06-01,0,100,0.30,1",
+                        "12,2024-06-01,10,90,0.40,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            frame = read_maizsim_g03_theta(path, date_time=11.8)
+
+            np.testing.assert_allclose(frame["theta"].to_numpy(), [0.30, 0.40])
+
+    def test_read_maizsim_g03_theta_rejects_ambiguous_hourly_date(self):
+        with tempfile.TemporaryDirectory(prefix="codex_maizsim_g03_ambiguous_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.G03"
+            path.write_text(
+                "\n".join(
+                    [
+                        "Date_time,Date,X,Y,thNew,Area",
+                        "10,2024-06-01,0,100,0.10,1",
+                        "12,2024-06-01,0,100,0.30,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "Multiple G03 Date_time"):
+                read_maizsim_g03_theta(path, date="2024-06-01")
+
     def test_compare_theta_fields_reports_field_and_wet_shape_metrics(self):
         hydrus = _field(
             theta=[0.20, 0.20, 0.30, 0.20],

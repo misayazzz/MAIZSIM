@@ -19,7 +19,8 @@
 - 根系二维图已经叠加到水分增量图中，能判断增湿区和根区是否重叠。
 - 新精细模式可以让壤土、砂壤土在短时HYDRUS SurfaceDrip宽度对照算例中接近“当前有限地表范围和边界控制段可表达的HYDRUS目标宽度”，并避免粗网格下只能按完整边界段跳变。
 - 这仍不是完整HYDRUS有限元模型，也不是地下埋设滴头源项模型；它是MAIZSIM地表边界上的HYDRUS校准近似。
-- 当前还不能声称“已完成MAIZSIM二维湿润体形态与HYDRUS二维图的直接对比”，因为本轮没有HYDRUS二维含水量场`theta(x,z,t)`作为参考。
+- 已新增官方HYDRUS Drip1/Drip2工程输出解析入口，可以从`.h3d3`中的`MESHTRIA.000`和`th.out`直接导出HYDRUS二维`theta(x,z,t)`、网格CSV、形态指标和PNG图。
+- 当前仍不能声称“已完成MAIZSIM二维湿润体形态与HYDRUS二维图的直接对比”。原因已经从“没有HYDRUS二维场”变为“已有官方HYDRUS二维场，但尚未构造同几何、同土壤、同初始条件、同流量、同边界的MAIZSIM专用算例”。官方Drip1/Drip2是`Kat=1`轴对称算例，而当前MAIZSIM回归矩阵主要是`KAT=2`平面剖面作物天气算例，不能直接硬比。
 
 ## 为什么必须这样改
 
@@ -83,8 +84,10 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 核心文件：
 
 - `DA_Framework/da_framework/hydrus_drip_calibration.py`
+- `DA_Framework/da_framework/hydrus_official_export.py`
 - `DA_Framework/da_framework/drip_validation.py`
 - `DA_Framework/da_framework/drip_precision_validation.py`
+- `DA_Framework/da_framework/hydrus_2d_comparison.py`
 - `DA_Framework/da_framework/drip_regression.py`
 - `示例输入/ExcelInterface-master/tools/maizsim_inputs/drip.py`
 
@@ -96,6 +99,8 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 解析6字段、11字段、12字段和13字段`.drp`。
 - 在真实模型回归矩阵中默认写入`DripSpreadMode=1`，用于精细湿润体验证。
 - 用`drip_precision_validation.py`复现45算例矩阵、HYDRUS曲线节点宽度表、逐边界段部分覆盖明细、短时模型宽度对照、二维`Delta theta`根系叠加图和二维形态指标图。
+- 用`hydrus_official_export.py`从官方HYDRUS OLE工程文件或已解出的HYDRUS流文件导出二维`theta` CSV、网格节点/单元CSV、HYDRUS三联图和形态指标。
+- `hydrus_2d_comparison.py`现在支持用`--maizsim-date-time`选择MAIZSIM小时输出帧；如果同一天存在多个`Date_time`而只传`--date`，工具会报错，避免把多个时刻混成一张二维场。
 
 ## HYDRUS标定口径
 
@@ -128,7 +133,7 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 
 结果：
 
-- 70个测试通过。
+- 84个测试通过。
 
 命令：
 
@@ -306,9 +311,54 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 | 正增湿面积非空记录数 | `3` | pass |
 | 根区加权`Delta theta`为正记录数 | `3` | pass |
 
+### 官方HYDRUS二维场导出
+
+2026-05-26补充：已经确认PC-Progress公开HYDRUS示例工程`Drip1.h3d3`和`Drip2.h3d3`内含可解析的二维含水量输出：
+
+- `Drip1`：壤土，`Kat=1`轴对称垂向流，`theta_r=0.078`，`theta_s=0.43`，`alpha=0.036 cm^-1`，`n=1.56`，`Ks=1.04 cm/h`，`t=0..2 h`共21帧。
+- `Drip2`：砂壤土，`Kat=1`轴对称垂向流，`theta_r=0.065`，`theta_s=0.41`，`alpha=0.075 cm^-1`，`n=1.89`，`Ks=4.42083 cm/h`，`t=0..2 h`共41帧。
+- 两个工程共用`1532`个节点、`2927`个三角单元、`50 cm x 100 cm`剖面网格。
+- `th.out`是小端`float32`连续二进制，每帧为`time_h + theta[1..NumNPD]`。
+- `MESHTRIA.000`提供节点坐标和三角单元；导出工具把HYDRUS的`z_cm`转换为`depth_cm = surface_z - z_cm`。
+
+导出命令示例：
+
+```powershell
+pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_official_export `
+  --project-file tmp\codex_hydrus_official\drip\Drip1.h3d3 `
+  --output-dir tmp\codex_hydrus_official_exports `
+  --prefix Drip1 `
+  --output-time-h 2 `
+  --wet-delta-threshold 0.005
+```
+
+输出内容：
+
+- `Drip1_theta_baseline.csv`和`Drip1_theta_output.csv`：HYDRUS节点级`theta`场，包含`node`、`time_h`、`x_cm`、`z_cm`、`depth_cm`、`theta`、`area_cm2`。
+- `Drip1_mesh_nodes.csv`和`Drip1_mesh_elements.csv`：HYDRUS网格节点和三角单元。
+- `Drip1_summary.csv`：HYDRUS自身湿润体形态指标。
+- `Drip1_hydrus_fields.png`：初始`theta`、输出`theta`和`Delta theta`三联图，图中标出滴头位置。
+- `Drip1_hydrus_manifest.json`：土壤参数、几何类型、输出时间和形态指标。
+
+2 h官方HYDRUS场的当前导出指标：
+
+| 工程 | 土壤 | 初始`theta` | 输出最大`theta` | `Delta theta`最大值 | 湿润宽度 | 湿润深度 | 峰值位置 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Drip1` | 壤土 | `0.242421` | `0.430000` | `0.187579` | `28.055 cm` | `18.476 cm` | `x=0, depth=0` |
+| `Drip2` | 砂壤土 | `0.122075` | `0.410000` | `0.287925` | `21.904 cm` | `23.026 cm` | `x=0, depth=0` |
+
+这些指标使用`Delta theta >= 0.005`作为湿润区阈值，是从官方HYDRUS二维`theta`场计算出来的，不是从手工数字化曲线反推。它们和前文`16.3 cm`、`39.7 cm`曲线口径不完全等价；后者来自公开图中地表湿润半径/宽度的第一版人工数字化，前者来自官方工程节点场和指定阈值。因此后续标定不能再简单把“曲线宽度达标”当作“二维形态匹配”，必须用同一阈值和同一几何口径比较HYDRUS和MAIZSIM的`Delta theta`场。
+
+当前不能直接把这些HYDRUS图与已有MAIZSIM回归图做结论性对比，原因如下：
+
+- 官方HYDRUS Drip1/Drip2是`Kat=1`轴对称算例；当前45回归矩阵主要使用`KAT=2`平面剖面。
+- 当前短时MAIZSIM算例仍带WYE天气、蒸发和作物时间设置；HYDRUS Drip1/Drip2是无降雨、无作物、无根系吸水的理想2 h算例。
+- 现有MAIZSIM砂壤土参数和HYDRUS Drip2不完全一致，例如`theta_r`当前为`0.045`，官方HYDRUS Drip2为`0.065`。
+- 水源单位还需要统一：HYDRUS是`2 L/h`、总`4 L`的SurfaceDrip工程；MAIZSIM`.drp`中的`wAppl`是边界通量深度，需要按几何和边界面积换算。
+
 ### HYDRUS二维场直接对比入口
 
-2026-05-26补充：已新增正式模块`DA_Framework/da_framework/hydrus_2d_comparison.py`，用于接入外部HYDRUS二维含水量场。这个模块不是用MAIZSIM结果伪造HYDRUS参考，而是要求用户提供HYDRUS导出的二维CSV。
+2026-05-26补充：已新增正式模块`DA_Framework/da_framework/hydrus_2d_comparison.py`，用于接入HYDRUS二维含水量场。这个模块不是用MAIZSIM结果伪造HYDRUS参考，而是要求提供HYDRUS导出的二维CSV；该CSV现在可以由`hydrus_official_export.py`从官方Drip1/Drip2工程生成。
 
 HYDRUS参考CSV的最小字段：
 
@@ -333,7 +383,7 @@ HYDRUS参考CSV的最小字段：
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_2d_comparison `
   --maizsim-g03 path\to\MAIZSIM\LOAM2D.G03 `
   --hydrus-csv path\to\hydrus_theta.csv `
-  --date 2007-05-01 `
+  --maizsim-date-time 39203.083333 `
   --maizsim-baseline-g03 path\to\baseline\LOAM2D.G03 `
   --hydrus-baseline-csv path\to\hydrus_baseline_theta.csv `
   --comparison-manifest path\to\same_condition_manifest.json `
@@ -343,7 +393,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_2d
   --output-dir tmp\codex_hydrus_2d_field_comparison
 ```
 
-其中`--drip-x-cm`标出滴头中心，`--drip-source-left-cm`和`--drip-source-right-cm`标出地表滴灌源区；三者是绘图标注参数，不参与误差计算。
+其中`--maizsim-date-time`用于选择MAIZSIM小时输出中的具体`Date_time`帧；如果只用`--date`而同一天有多个小时帧，工具会报错。`--drip-x-cm`标出滴头中心，`--drip-source-left-cm`和`--drip-source-right-cm`标出地表滴灌源区；三者是绘图标注参数，不参与误差计算。
 
 输出内容：
 
@@ -356,7 +406,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_2d
 
 - 工具链已经具备HYDRUS二维数值场接入口和形态指标计算。
 - 单元测试使用合成场验证了CSV解析、同条件manifest字段检查、MAIZSIM `G03`深度转换、插值、`theta`误差、湿润区交并比和带滴灌标注的图像输出。
-- 仍缺同条件HYDRUS二维`theta(x,z,t)`数值文件，因此本项目当前还不能声称“HYDRUS二维形态对比通过”。有了HYDRUS导出CSV后，应使用上述模块生成正式对比表和三联图，再更新本节结论。
+- 已具备官方HYDRUS二维`theta(x,z,t)`导出能力，但仍缺同条件MAIZSIM专用算例，因此本项目当前还不能声称“HYDRUS二维形态对比通过”。下一步应先构造Drip1-like/Drip2-like零天气、无作物、同土壤、同初始压力头、同施水量的MAIZSIM算例，再使用上述模块生成正式对比表和三联图。
 
 ### 负向解析验证
 
@@ -411,7 +461,7 @@ Invalid drip event fields
 
 若要把结论升级为“与HYDRUS二维湿润体形态对比通过”，还需要补充：
 
-- HYDRUS同条件二维`theta(x,z,t)`输出。
+- MAIZSIM Drip1-like/Drip2-like同条件专用算例，使用官方HYDRUS相同土壤参数、初始压力头、几何类型、施水量和输出时刻。
 - 同一初始含水量、同一土壤水力参数、同一流量、同一施水量、同一几何边界。
 - 用`hydrus_2d_comparison.py`生成地表湿润宽度、最大湿润深度、湿润面积、峰值位置、阈值湿润区交并比，以及`theta`场MAE/RMSE。
 
@@ -420,9 +470,10 @@ Invalid drip event fields
 短期建议：
 
 - 把`tmp/codex_precision_drip_validation/`下的CSV和PNG作为当前审计工件保留。
+- 把`tmp/codex_hydrus_official_exports/`下的官方HYDRUS Drip1/Drip2导出CSV和PNG作为下一轮同条件对比的参考基准。
 - 若要写论文或报告，明确区分“HYDRUS曲线校准的地表边界近似”和“完整HYDRUS二维流场复现”。
 - 为壤土大目标被地表边界裁剪的问题补一组更宽、滴头居中的短时网格，以区分域边界限制和真实湿润体宽度。
-- 若要让图更接近HYDRUS二维剖面，应增加同等初始含水量、同等流量、同等施水量、无作物或固定根系的短时对照算例。
+- 若要让图更接近HYDRUS二维剖面，应增加同等初始含水量、同等流量、同等施水量、无作物或固定根系的短时对照算例；对官方Drip1/Drip2还必须处理`Kat=1`轴对称几何和MAIZSIM边界通量单位换算。
 - 若压力补偿场景成为重点，应继续增加强压力不足、脉冲压力和长时低流量算例，并考虑输出累计有效供水时间作为诊断字段。
 
 长期建议：
