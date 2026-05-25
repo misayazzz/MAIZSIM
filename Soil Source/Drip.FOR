@@ -32,14 +32,16 @@
      !     CoverWidth,CoverMeasure,TotalMeasure,DripCoverMeasure,
      !     SourceDepth,SourceVolume,NodeDepth,WaterDepth,
      !     ThetaCur,ThetaTry,ThetaRel,VgM,AlphaVG,NVG,
-     !     ThetaR,ThetaS
+     !     ThetaR,ThetaS,RemainingWater,AppliedWater,
+     !     CapacityDepth,AddDepth,MaxTheta
       Real Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
       Real DripThOld(NumNPD),DripHTemp(NumNPD),DripHOld(NumNPD)
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
      !        LeftPos,RightPos,NeedExpand,CanShrink,MaxRadius,
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
      !        CandidateRight,ActiveNodes,TestNode,ios,
-     !        DesiredRadius,FieldCount,DripFieldCount,m,MatId
+     !        DesiredRadius,FieldCount,DripFieldCount,m,MatId,
+     !        DirectIter
       Character*256 EventLine
 
       Character*10 Start_Date(Max_times),Stop_Date(Max_times)
@@ -270,8 +272,9 @@
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
           If(DripSpreadMode(jj).eq.1) DripBypassRunoff=1
-          If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3)
-     !      DripBypassWaterMover=1
+          If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
+            DripBypassWaterMover=1
+          Endif
           Do in=1,Num_nodes(jj)
             CenterPos=SourceSurfPos(jj,in)
             CenterBnd=SourceBnd(jj,in)
@@ -519,17 +522,15 @@
                 SourceDepth=amin1(25.0,amax1(8.0,
      !            0.5*TargetWetWidth))
               Endif
-              SourceVolume=0.0
-              Do m=1,NumNP
-                NodeDepth=abs(y(SourceNode)-y(m))
-                If(x(m).ge.TargetLeft-DripTol.and.
-     !            x(m).le.TargetRight+DripTol.and.
-     !            NodeDepth.le.SourceDepth+DripTol) then
-                  SourceVolume=SourceVolume+nodeArea(m)
-                Endif
-              EndDo
-              If(SourceVolume.gt.DripTol) then
-                WaterDepth=SourceFlux*Step/SourceVolume
+c Redistribute direct drip water over unsaturated source nodes; only the
+c remaining water after source saturation is reported as capacity loss.
+              RemainingWater=SourceFlux*Step
+              DirectIter=0
+530           Continue
+              If(RemainingWater.gt.DripTol.and.
+     !        DirectIter.lt.NumNP) then
+                DirectIter=DirectIter+1
+                SourceVolume=0.0
                 Do m=1,NumNP
                   NodeDepth=abs(y(SourceNode)-y(m))
                   If(x(m).ge.TargetLeft-DripTol.and.
@@ -550,27 +551,70 @@
                       Else
                         ThetaCur=ThetaS
                       Endif
-                      ThetaTry=amin1(ThetaS-1.0E-5,
-     !                  ThetaCur+WaterDepth)
-                      ThetaTry=amax1(ThetaR+1.0E-5,ThetaTry)
-                      ThetaRel=(ThetaTry-ThetaR)/(ThetaS-ThetaR)
-                      ThetaRel=amax1(1.0E-5,amin1(0.99999,
-     !                  ThetaRel))
-                      hNew(m)=-((ThetaRel**(-1.0/VgM)-1.0)**
-     !                  (1.0/NVG))/AlphaVG
-                      ThNew(m)=ThetaTry
-                      DripHOld(m)=hNew(m)
-                      DripHTemp(m)=hNew(m)
-                      DripThOld(m)=ThetaTry
+                      MaxTheta=ThetaS-1.0E-5
+                      If(MaxTheta.gt.ThetaCur+DripTol) then
+                        SourceVolume=SourceVolume+nodeArea(m)
+                      Endif
                     Endif
-                    DripSource_Rate(m)=DripSource_Rate(m)+
-     !                SourceFlux/SourceVolume
                   Endif
                 EndDo
-              ElseIf(nodeArea(SourceNode).gt.DripTol) then
-                DripSource_Rate(SourceNode)=
-     !            DripSource_Rate(SourceNode)+
-     !            SourceFlux/nodeArea(SourceNode)
+                If(SourceVolume.gt.DripTol) then
+                  WaterDepth=RemainingWater/SourceVolume
+                  AppliedWater=0.0
+                  Do m=1,NumNP
+                    NodeDepth=abs(y(SourceNode)-y(m))
+                    If(x(m).ge.TargetLeft-DripTol.and.
+     !                x(m).le.TargetRight+DripTol.and.
+     !                NodeDepth.le.SourceDepth+DripTol) then
+                      MatId=MatNumN(m)
+                      ThetaR=Par(1,MatId)
+                      ThetaS=Par(2,MatId)
+                      AlphaVG=Par(5,MatId)
+                      NVG=Par(6,MatId)
+                      If(ThetaS.gt.ThetaR+DripTol.and.
+     !                  AlphaVG.gt.DripTol.and.NVG.gt.1.0) then
+                        VgM=1.0-1.0/NVG
+                        If(hNew(m).lt.0.0) then
+                          ThetaRel=(1.0+(AlphaVG*abs(hNew(m)))**
+     !                      NVG)**(-VgM)
+                          ThetaCur=ThetaR+(ThetaS-ThetaR)*ThetaRel
+                        Else
+                          ThetaCur=ThetaS
+                        Endif
+                        MaxTheta=ThetaS-1.0E-5
+                        CapacityDepth=amax1(0.0,MaxTheta-ThetaCur)
+                        AddDepth=amin1(WaterDepth,CapacityDepth)
+                        If(AddDepth.gt.DripTol) then
+                          ThetaTry=ThetaCur+AddDepth
+                          ThetaTry=amax1(ThetaR+1.0E-5,
+     !                    amin1(MaxTheta,ThetaTry))
+                          ThetaRel=(ThetaTry-ThetaR)/(ThetaS-ThetaR)
+                          ThetaRel=amax1(1.0E-5,amin1(0.99999,
+     !                    ThetaRel))
+                          hNew(m)=-((ThetaRel**(-1.0/VgM)-1.0)**
+     !                    (1.0/NVG))/AlphaVG
+                          ThNew(m)=ThetaTry
+                          DripHOld(m)=hNew(m)
+                          DripHTemp(m)=hNew(m)
+                          DripThOld(m)=ThetaTry
+                          DripSource_Rate(m)=DripSource_Rate(m)+
+     !                    AddDepth/Step
+                          AppliedWater=AppliedWater+
+     !                    AddDepth*nodeArea(m)
+                        Endif
+                      Endif
+                    Endif
+                  EndDo
+                  RemainingWater=RemainingWater-AppliedWater
+                  If(AppliedWater.gt.DripTol.and.
+     !              RemainingWater.gt.DripTol) Goto 530
+                Endif
+              Endif
+              If(RemainingWater.gt.DripTol.and.
+     !        Width(CenterBnd).gt.DripTol) then
+                DripPressureLoss_Rate(CenterBnd)=
+     !          DripPressureLoss_Rate(CenterBnd)+
+     !          RemainingWater/(Step*Width(CenterBnd))
               Endif
             Endif
             If(DripSpreadMode(jj).eq.1) then
