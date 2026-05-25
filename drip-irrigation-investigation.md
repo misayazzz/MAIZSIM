@@ -304,6 +304,43 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 | 正增湿面积非空记录数 | `3` | pass |
 | 根区加权`Delta theta`为正记录数 | `3` | pass |
 
+### HYDRUS二维场直接对比入口
+
+2026-05-26补充：已新增正式模块`DA_Framework/da_framework/hydrus_2d_comparison.py`，用于接入外部HYDRUS二维含水量场。这个模块不是用MAIZSIM结果伪造HYDRUS参考，而是要求用户提供HYDRUS导出的二维CSV。
+
+HYDRUS参考CSV的最小字段：
+
+| 字段 | 含义 | 可接受列名示例 |
+| --- | --- | --- |
+| `x_cm` | 横向坐标，单位`cm` | `x_cm`、`x`、`X` |
+| `depth_cm` | 距地表深度，单位`cm` | `depth_cm`、`depth`、`z_cm` |
+| `theta` | 体积含水量 | `theta`、`theta_hydrus`、`th`、`swc` |
+| `area_cm2` | 点或单元面积权重，可选 | `area_cm2`、`area`、`weight` |
+
+直接对比命令示例：
+
+```powershell
+pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_2d_comparison `
+  --maizsim-g03 path\to\MAIZSIM\LOAM2D.G03 `
+  --hydrus-csv path\to\hydrus_theta.csv `
+  --date 2007-05-01 `
+  --maizsim-baseline-g03 path\to\baseline\LOAM2D.G03 `
+  --hydrus-baseline-csv path\to\hydrus_baseline_theta.csv `
+  --output-dir tmp\codex_hydrus_2d_field_comparison
+```
+
+输出内容：
+
+- `hydrus_2d_comparison_summary.csv`：`theta_mae`、`theta_rmse`、`theta_bias`、`theta_corr`、`delta_theta_rmse`、湿润区面积、湿润区交并比、湿润宽度、湿润深度和峰值距离。
+- `hydrus_2d_comparison_points.csv`：HYDRUS点位、插值后的MAIZSIM值、残差和可选的`Delta theta`残差。
+- `hydrus_2d_comparison_fields.png`：HYDRUS、MAIZSIM和差值三联图。
+
+当前状态：
+
+- 工具链已经具备HYDRUS二维数值场接入口和形态指标计算。
+- 单元测试使用合成场验证了CSV解析、MAIZSIM `G03`深度转换、插值、`theta`误差、湿润区交并比和图像输出。
+- 仍缺同条件HYDRUS二维`theta(x,z,t)`数值文件，因此本项目当前还不能声称“HYDRUS二维形态对比通过”。有了HYDRUS导出CSV后，应使用上述模块生成正式对比表和三联图，再更新本节结论。
+
 ### 负向解析验证
 
 为检查Fortran端不会再静默吞掉畸形可选字段，临时把13字段`.drp`事件行最后的`DripSpreadMode`改成非数字值。模型启动后明确输出：
@@ -359,7 +396,7 @@ Invalid drip event fields
 
 - HYDRUS同条件二维`theta(x,z,t)`输出。
 - 同一初始含水量、同一土壤水力参数、同一流量、同一施水量、同一几何边界。
-- 对比指标至少包括地表湿润宽度、最大湿润深度、湿润面积、峰值位置、形态长宽比、阈值湿润区重叠度，以及`theta`场的MAE或RMSE。
+- 用`hydrus_2d_comparison.py`生成地表湿润宽度、最大湿润深度、湿润面积、峰值位置、阈值湿润区交并比，以及`theta`场MAE/RMSE。
 
 ## 后续建议
 

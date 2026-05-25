@@ -116,6 +116,7 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 主要文件：
 
 - `DA_Framework/da_framework/hydrus_drip_calibration.py`
+- `DA_Framework/da_framework/hydrus_2d_comparison.py`
 - `DA_Framework/da_framework/drip_regression.py`
 - `DA_Framework/tests/test_drip_regression.py`
 - 新增或升级验证脚本，放在`tmp/codex_...`或稳定模块中，文件名包含`codex_`。
@@ -127,7 +128,8 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 3. 增加短时2 h HYDRUS对照算例，和长季节作物算例分开。
 4. 生成逐边界段部分覆盖明细CSV，用于核对`covered_fraction`、`node_weight`和`flux_fraction`。
 5. 生成二维`theta`、`delta theta`、根系叠加和湿润宽度时间序列图。
-6. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
+6. 增加HYDRUS二维`theta` CSV导入和MAIZSIM `G03`插值对比工具，用于外部HYDRUS数值场到位后的直接对比。
+7. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
 
 ## 验证矩阵
 
@@ -147,6 +149,7 @@ sum(DripRate(k) * Width(k)) = SourceFlux
    - 单滴头，2 h，4 L等效输入。
    - 对比实际`DripWetWidthMax`与HYDRUS目标宽度的域裁剪值、旧完整段表达值和新部分覆盖表达值。
    - 输出`theta`和`delta theta`二维图。
+   - 当外部HYDRUS二维CSV可用时，输出`theta`场MAE/RMSE、湿润区交并比、湿润宽度/深度和三联图。
 
 4. 长季节作物算例：
    - 3种土壤、3种网格、至少5类场景。
