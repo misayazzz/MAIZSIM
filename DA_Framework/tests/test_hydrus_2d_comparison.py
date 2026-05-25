@@ -61,6 +61,26 @@ class Hydrus2DComparisonTests(unittest.TestCase):
 
         np.testing.assert_allclose(frame["depth_cm"].to_numpy(), [0.0, 100.0])
 
+    def test_read_hydrus_theta_csv_preserves_axisymmetric_volume(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_volume_") as tmp_dir:
+            path = Path(tmp_dir) / "hydrus.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        "x_cm,depth_cm,theta,area_cm2,axisym_volume_cm3",
+                        "0,0,0.20,2,10",
+                        "10,0,0.21,2,20",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            frame = read_hydrus_theta_csv(path)
+
+        self.assertIn("axisym_volume_cm3", frame.columns)
+        np.testing.assert_allclose(frame["axisym_volume_cm3"].to_numpy(), [10.0, 20.0])
+
     def test_read_maizsim_g03_theta_selects_nearest_date_and_converts_depth(self):
         with tempfile.TemporaryDirectory(prefix="codex_maizsim_g03_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.G03"
@@ -172,6 +192,30 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         )
         self.assertAlmostEqual(comparison.metrics["source_wet_iou"], 1.0)
 
+    def test_compare_theta_fields_reports_axisymmetric_storage_metrics(self):
+        hydrus = _field(
+            theta=[0.20, 0.20, 0.30, 0.20],
+            volume=[10.0, 20.0, 30.0, 40.0],
+        )
+        maizsim = _field(theta=[0.20, 0.20, 0.28, 0.22])
+        baseline = _field(theta=[0.20, 0.20, 0.20, 0.20])
+
+        comparison = compare_theta_fields(
+            maizsim,
+            hydrus,
+            maizsim_baseline=baseline,
+            hydrus_baseline=baseline,
+            wet_delta_threshold=0.05,
+        )
+
+        self.assertAlmostEqual(comparison.metrics["hydrus_delta_storage_cm3"], 3.0)
+        self.assertAlmostEqual(comparison.metrics["maizsim_delta_storage_cm3"], 3.2)
+        self.assertAlmostEqual(comparison.metrics["delta_storage_residual_cm3"], 0.2)
+        self.assertAlmostEqual(
+            comparison.metrics["delta_theta_volume_rmse"],
+            float(np.sqrt(0.00028)),
+        )
+
     def test_read_comparison_manifest_requires_same_condition_keys(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
             path = Path(tmp_dir) / "manifest.json"
@@ -227,10 +271,10 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             self.assertAlmostEqual(float(summary.loc[0, "wet_iou"]), 1.0)
 
 
-def _field(theta, area=None):
+def _field(theta, area=None, volume=None):
     if area is None:
         area = [1.0, 1.0, 1.0, 1.0]
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "x_cm": [0.0, 10.0, 0.0, 10.0],
             "depth_cm": [0.0, 0.0, 10.0, 10.0],
@@ -238,6 +282,9 @@ def _field(theta, area=None):
             "area_cm2": area,
         }
     )
+    if volume is not None:
+        frame["axisym_volume_cm3"] = volume
+    return frame
 
 
 def _component_field(theta):

@@ -9,6 +9,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from .hydrus_2d_comparison import compare_theta_fields, read_hydrus_theta_csv
@@ -28,6 +29,7 @@ INITIAL_DATE = "04/27/2007"
 FINAL_DATE = "04/28/2007"
 EVENT_START_HOUR = 22.0
 EVENT_STOP_HOUR = 0.0
+SENSITIVITY_THRESHOLDS = (0.002, 0.005, 0.01, 0.02, 0.05)
 
 
 @dataclass(frozen=True)
@@ -252,19 +254,27 @@ def run_hydrus_aligned_validation(
         )
     manifest = dict(prepared.manifest)
     manifest["maizsim_date_time"] = target_date_time
+    maizsim_field = read_maizsim_g03_theta(
+        prepared.drip_dir / "LOAM2D.G03",
+        date_time=target_date_time,
+    )
+    hydrus_field = read_hydrus_theta_csv(hydrus_outputs["output_csv"])
+    maizsim_baseline = read_maizsim_g03_theta(
+        prepared.baseline_dir / "LOAM2D.G03",
+        date_time=target_date_time,
+    )
+    hydrus_baseline = read_hydrus_theta_csv(hydrus_outputs["baseline_csv"])
     comparison = compare_theta_fields(
-        read_maizsim_g03_theta(prepared.drip_dir / "LOAM2D.G03", date_time=target_date_time),
-        read_hydrus_theta_csv(hydrus_outputs["output_csv"]),
-        maizsim_baseline=read_maizsim_g03_theta(
-            prepared.baseline_dir / "LOAM2D.G03",
-            date_time=target_date_time,
-        ),
-        hydrus_baseline=read_hydrus_theta_csv(hydrus_outputs["baseline_csv"]),
+        maizsim_field,
+        hydrus_field,
+        maizsim_baseline=maizsim_baseline,
+        hydrus_baseline=hydrus_baseline,
         wet_delta_threshold=wet_delta_threshold,
         drip_x_cm=manifest["drip_x_cm"],
         drip_source_left_cm=manifest["drip_source_left_cm"],
         drip_source_right_cm=manifest["drip_source_right_cm"],
     )
+    _add_applied_volume_metrics(comparison.metrics, manifest)
     comparison_outputs = write_comparison_outputs(
         comparison,
         output_path,
@@ -274,6 +284,15 @@ def run_hydrus_aligned_validation(
         drip_source_right_cm=manifest["drip_source_right_cm"],
         comparison_manifest=manifest,
     )
+    threshold_outputs = write_threshold_sensitivity_outputs(
+        maizsim_field,
+        hydrus_field,
+        maizsim_baseline,
+        hydrus_baseline,
+        output_path,
+        prefix=f"{prepared.prefix}_aligned",
+        manifest=manifest,
+    )
     summary = pd.DataFrame([{**manifest, **comparison.metrics}])
     summary_path = output_path / f"{prepared.prefix}_aligned_validation_summary.csv"
     summary.to_csv(summary_path, index=False)
@@ -282,11 +301,174 @@ def run_hydrus_aligned_validation(
         "drip_run_dir": str(prepared.drip_dir),
         "hydrus_outputs": hydrus_outputs,
         "comparison_outputs": comparison_outputs,
+        "threshold_sensitivity_outputs": threshold_outputs,
         "summary_csv": str(summary_path),
     }
     index_path = output_path / f"{prepared.prefix}_aligned_validation_outputs.json"
     index_path.write_text(json.dumps(outputs, indent=2), encoding="utf-8")
     return outputs
+
+
+def _add_applied_volume_metrics(metrics, manifest):
+    applied_volume_l = float(manifest.get("applied_volume_l", 0.0))
+    if applied_volume_l <= 0.0:
+        return
+    for key in ("hydrus_delta_storage_l", "maizsim_delta_storage_l"):
+        if key in metrics:
+            metrics[f"{key}_per_applied_l"] = float(metrics[key]) / applied_volume_l
+
+
+def write_threshold_sensitivity_outputs(
+    maizsim_field,
+    hydrus_field,
+    maizsim_baseline,
+    hydrus_baseline,
+    output_dir,
+    *,
+    prefix,
+    manifest,
+    thresholds=SENSITIVITY_THRESHOLDS,
+):
+    """Write threshold sensitivity metrics and a compact QA figure."""
+    output_path = Path(output_dir)
+    rows = []
+    for threshold in thresholds:
+        comparison = compare_theta_fields(
+            maizsim_field,
+            hydrus_field,
+            maizsim_baseline=maizsim_baseline,
+            hydrus_baseline=hydrus_baseline,
+            wet_delta_threshold=threshold,
+            drip_x_cm=manifest["drip_x_cm"],
+            drip_source_left_cm=manifest["drip_source_left_cm"],
+            drip_source_right_cm=manifest["drip_source_right_cm"],
+        )
+        _add_applied_volume_metrics(comparison.metrics, manifest)
+        metrics = comparison.metrics
+        rows.append(
+            {
+                "wet_delta_threshold": threshold,
+                "delta_theta_rmse": metrics.get("delta_theta_rmse"),
+                "delta_theta_volume_rmse": metrics.get("delta_theta_volume_rmse"),
+                "hydrus_delta_storage_l": metrics.get("hydrus_delta_storage_l"),
+                "maizsim_delta_storage_l": metrics.get("maizsim_delta_storage_l"),
+                "delta_storage_residual_l": metrics.get("delta_storage_residual_l"),
+                "hydrus_delta_storage_l_per_applied_l": metrics.get(
+                    "hydrus_delta_storage_l_per_applied_l"
+                ),
+                "maizsim_delta_storage_l_per_applied_l": metrics.get(
+                    "maizsim_delta_storage_l_per_applied_l"
+                ),
+                "wet_iou": metrics.get("wet_iou"),
+                "source_wet_iou": metrics.get("source_wet_iou"),
+                "hydrus_wet_width_cm": metrics.get("hydrus_wet_width_cm"),
+                "maizsim_wet_width_cm": metrics.get("maizsim_wet_width_cm"),
+                "hydrus_source_wet_width_cm": metrics.get(
+                    "hydrus_source_wet_width_cm"
+                ),
+                "maizsim_source_wet_width_cm": metrics.get(
+                    "maizsim_source_wet_width_cm"
+                ),
+                "hydrus_wet_depth_cm": metrics.get("hydrus_wet_depth_cm"),
+                "maizsim_wet_depth_cm": metrics.get("maizsim_wet_depth_cm"),
+                "hydrus_source_wet_depth_cm": metrics.get(
+                    "hydrus_source_wet_depth_cm"
+                ),
+                "maizsim_source_wet_depth_cm": metrics.get(
+                    "maizsim_source_wet_depth_cm"
+                ),
+            }
+        )
+
+    frame = pd.DataFrame(rows)
+    csv_path = output_path / f"{prefix}_threshold_sensitivity.csv"
+    figure_path = output_path / f"{prefix}_threshold_sensitivity.png"
+    frame.to_csv(csv_path, index=False)
+    _plot_threshold_sensitivity(frame, figure_path)
+    return {
+        "summary_csv": str(csv_path),
+        "figure": str(figure_path),
+    }
+
+
+def _plot_threshold_sensitivity(frame, path):
+    x_values = frame["wet_delta_threshold"]
+    has_storage = frame[
+        [
+            "hydrus_delta_storage_l_per_applied_l",
+            "maizsim_delta_storage_l_per_applied_l",
+        ]
+    ].notna().any().any()
+    column_count = 4 if has_storage else 3
+    fig, axes = plt.subplots(
+        1,
+        column_count,
+        figsize=(9.2 if has_storage else 7.2, 2.2),
+        constrained_layout=True,
+    )
+
+    axes[0].plot(x_values, frame["wet_iou"], marker="o", label="all wet area")
+    axes[0].plot(
+        x_values,
+        frame["source_wet_iou"],
+        marker="s",
+        label="source-connected",
+    )
+    axes[0].set_ylabel("IoU")
+    axes[0].set_ylim(0.0, 1.02)
+    axes[0].legend(fontsize=6)
+
+    axes[1].plot(
+        x_values,
+        frame["hydrus_source_wet_width_cm"],
+        marker="o",
+        label="HYDRUS",
+    )
+    axes[1].plot(
+        x_values,
+        frame["maizsim_source_wet_width_cm"],
+        marker="s",
+        label="MAIZSIM",
+    )
+    axes[1].set_ylabel("Connected width (cm)")
+    axes[1].legend(fontsize=6)
+
+    axes[2].plot(
+        x_values,
+        frame["hydrus_source_wet_depth_cm"],
+        marker="o",
+        label="HYDRUS",
+    )
+    axes[2].plot(
+        x_values,
+        frame["maizsim_source_wet_depth_cm"],
+        marker="s",
+        label="MAIZSIM",
+    )
+    axes[2].set_ylabel("Connected depth (cm)")
+    axes[2].legend(fontsize=6)
+
+    if has_storage:
+        axes[3].plot(
+            x_values,
+            frame["hydrus_delta_storage_l_per_applied_l"],
+            marker="o",
+            label="HYDRUS",
+        )
+        axes[3].plot(
+            x_values,
+            frame["maizsim_delta_storage_l_per_applied_l"],
+            marker="s",
+            label="MAIZSIM",
+        )
+        axes[3].set_ylabel("Stored / applied")
+        axes[3].legend(fontsize=6)
+
+    for ax in axes:
+        ax.set_xlabel("Delta theta threshold")
+        ax.grid(color="0.9", linewidth=0.5)
+    fig.savefig(path, dpi=600, bbox_inches="tight")
+    plt.close(fig)
 
 
 def write_maizsim_grid_from_hydrus(project, boundary, path):

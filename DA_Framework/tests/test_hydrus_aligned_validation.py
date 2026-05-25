@@ -12,6 +12,7 @@ except ImportError:
 from da_framework.hydrus_aligned_validation import (
     HydrusBoundary,
     read_hydrus_boundary_text,
+    write_threshold_sensitivity_outputs,
     write_maizsim_drip_file,
     write_maizsim_grid_from_hydrus,
 )
@@ -107,6 +108,36 @@ class HydrusAlignedValidationTests(unittest.TestCase):
 
         self.assertIn("123.45 1 3 0 1 0 18.5 28", text)
 
+    def test_write_threshold_sensitivity_outputs_writes_csv_and_png(self):
+        hydrus = _theta_field([0.20, 0.20, 0.30, 0.20])
+        maizsim = _theta_field([0.20, 0.20, 0.28, 0.22])
+        baseline = _theta_field([0.20, 0.20, 0.20, 0.20])
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_threshold_") as tmp_dir:
+            outputs = write_threshold_sensitivity_outputs(
+                maizsim,
+                hydrus,
+                baseline,
+                baseline,
+                tmp_dir,
+                prefix="case",
+                manifest={
+                    "drip_x_cm": 0.0,
+                    "drip_source_left_cm": -1.0,
+                    "drip_source_right_cm": 1.0,
+                },
+                thresholds=(0.05, 0.10),
+            )
+
+            summary = pd.read_csv(outputs["summary_csv"])
+            figure = Path(outputs["figure"])
+            figure_exists = figure.exists()
+            figure_size = figure.stat().st_size if figure_exists else 0
+
+        self.assertEqual(list(summary["wet_delta_threshold"]), [0.05, 0.10])
+        self.assertIn("source_wet_iou", summary.columns)
+        self.assertTrue(figure_exists)
+        self.assertGreater(figure_size, 0)
+
 
 def _project():
     nodes = pd.DataFrame(
@@ -134,6 +165,17 @@ def _project():
             theta=np.asarray([[0.2, 0.2, 0.2]]),
         ),
         selector_metadata={"kat": 1, "project_name": "mini"},
+    )
+
+
+def _theta_field(theta):
+    return pd.DataFrame(
+        {
+            "x_cm": [0.0, 10.0, 0.0, 10.0],
+            "depth_cm": [0.0, 0.0, 10.0, 10.0],
+            "theta": theta,
+            "area_cm2": [1.0, 1.0, 1.0, 1.0],
+        }
     )
 
 

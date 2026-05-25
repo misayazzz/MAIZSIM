@@ -76,6 +76,10 @@ def read_hydrus_theta_csv(path):
         output_path,
     )
     area_col = _optional_column(frame, ("area_cm2", "area", "cell_area", "weight"))
+    volume_col = _optional_column(
+        frame,
+        ("axisym_volume_cm3", "volume_cm3", "node_volume_cm3"),
+    )
 
     result = pd.DataFrame(
         {
@@ -88,6 +92,12 @@ def read_hydrus_theta_csv(path):
         result["area_cm2"] = 1.0
     else:
         result["area_cm2"] = _numeric(frame[area_col], area_col, output_path)
+    if volume_col is not None:
+        result["axisym_volume_cm3"] = _numeric(
+            frame[volume_col],
+            volume_col,
+            output_path,
+        )
     _validate_field(result, output_path)
     return result
 
@@ -208,21 +218,26 @@ def plot_comparison(
     """Plot HYDRUS, MAIZSIM, and residual fields on HYDRUS reference points."""
     points = comparison.points
     if "hydrus_delta_theta" in points.columns:
+        wet_delta_threshold = comparison.metrics.get("wet_delta_threshold")
         columns = (
             ("hydrus_delta_theta", "HYDRUS delta theta"),
             ("maizsim_delta_theta", "MAIZSIM delta theta"),
             ("delta_theta_residual", "MAIZSIM - HYDRUS"),
         )
-        limit = max(
-            abs(float(points["hydrus_delta_theta"].min())),
-            abs(float(points["hydrus_delta_theta"].max())),
-            abs(float(points["maizsim_delta_theta"].min())),
-            abs(float(points["maizsim_delta_theta"].max())),
+        wet_limit = max(
+            float(points["hydrus_delta_theta"].max()),
+            float(points["maizsim_delta_theta"].max()),
             0.001,
         )
-        cmaps = ("RdBu_r", "RdBu_r", "RdBu_r")
-        ranges = ((-limit, limit), (-limit, limit), (-limit, limit))
+        resid_limit = max(
+            abs(float(points["delta_theta_residual"].min())),
+            abs(float(points["delta_theta_residual"].max())),
+            0.001,
+        )
+        cmaps = ("YlGnBu", "YlGnBu", "RdBu_r")
+        ranges = ((0.0, wet_limit), (0.0, wet_limit), (-resid_limit, resid_limit))
     else:
+        wet_delta_threshold = None
         columns = (
             ("hydrus_theta", "HYDRUS theta"),
             ("maizsim_theta", "MAIZSIM theta"),
@@ -259,6 +274,8 @@ def plot_comparison(
             drip_source_left_cm=drip_source_left_cm,
             drip_source_right_cm=drip_source_right_cm,
         )
+        if wet_delta_threshold is not None and column != "delta_theta_residual":
+            _annotate_wet_front(ax, points, column, wet_delta_threshold)
         ax.set_title(title, fontsize=7, pad=2)
         ax.set_xlabel("x (cm)")
         fig.colorbar(contour, ax=ax, shrink=0.78, pad=0.015)
@@ -432,6 +449,28 @@ def _delta_metrics(
         "maizsim_wet_depth_cm": _max_or_zero(points.loc[maizsim_wet, "depth_cm"]),
         "peak_delta_distance_cm": _peak_distance(points),
     }
+    volume_weights = _volume_weights(points)
+    if volume_weights is not None:
+        hydrus_storage_cm3 = float(np.sum(hydrus_delta * volume_weights))
+        maizsim_storage_cm3 = float(np.sum(maizsim_delta * volume_weights))
+        metrics.update(
+            {
+                "hydrus_delta_storage_cm3": hydrus_storage_cm3,
+                "maizsim_delta_storage_cm3": maizsim_storage_cm3,
+                "delta_storage_residual_cm3": (
+                    maizsim_storage_cm3 - hydrus_storage_cm3
+                ),
+                "hydrus_delta_storage_l": hydrus_storage_cm3 / 1000.0,
+                "maizsim_delta_storage_l": maizsim_storage_cm3 / 1000.0,
+                "delta_storage_residual_l": (
+                    maizsim_storage_cm3 - hydrus_storage_cm3
+                )
+                / 1000.0,
+                "delta_theta_volume_rmse": float(
+                    np.sqrt(_weighted_mean(residual * residual, volume_weights))
+                ),
+            }
+        )
     if drip_x_cm is not None:
         hydrus_source_wet = _source_connected_wet_mask(
             points,
@@ -568,6 +607,25 @@ def _tri_contour(ax, points, column, *, cmap, vmin, vmax):
     return contour
 
 
+def _annotate_wet_front(ax, points, column, threshold):
+    values = points[column].to_numpy(dtype=float)
+    threshold = float(threshold)
+    if not np.nanmin(values) <= threshold <= np.nanmax(values):
+        return
+    triangulation = mtri.Triangulation(
+        points["x_cm"].to_numpy(dtype=float),
+        points["depth_cm"].to_numpy(dtype=float),
+    )
+    ax.tricontour(
+        triangulation,
+        values,
+        levels=[threshold],
+        colors="#1a1a1a",
+        linewidths=0.75,
+        linestyles="solid",
+    )
+
+
 def _annotate_drip_source(
     ax,
     points,
@@ -620,7 +678,10 @@ def _annotate_drip_source(
 
 
 def _standard_field(frame, name):
-    result = frame[["x_cm", "depth_cm", "theta", "area_cm2"]].copy()
+    columns = ["x_cm", "depth_cm", "theta", "area_cm2"]
+    if "axisym_volume_cm3" in frame.columns:
+        columns.append("axisym_volume_cm3")
+    result = frame[columns].copy()
     _validate_field(result, name)
     return result
 
@@ -651,6 +712,12 @@ def _validate_field(frame, source):
             raise ValueError(f"Non-finite {column} values in {source}.")
     if (frame["area_cm2"] <= 0.0).any():
         raise ValueError(f"area_cm2 must be positive in {source}.")
+    if "axisym_volume_cm3" in frame.columns:
+        volumes = frame["axisym_volume_cm3"].to_numpy(dtype=float)
+        if not np.isfinite(volumes).all():
+            raise ValueError(f"Non-finite axisym_volume_cm3 values in {source}.")
+        if (volumes <= 0.0).any():
+            raise ValueError(f"axisym_volume_cm3 must be positive in {source}.")
 
 
 def _read_csv(path):
@@ -716,6 +783,12 @@ def _validate_single_maizsim_time(frame, path):
 
 def _weights(points):
     return points["area_cm2"].to_numpy(dtype=float)
+
+
+def _volume_weights(points):
+    if "axisym_volume_cm3" not in points.columns:
+        return None
+    return points["axisym_volume_cm3"].to_numpy(dtype=float)
 
 
 def _weighted_mean(values, weights):
