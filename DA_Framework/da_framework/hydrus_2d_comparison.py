@@ -13,6 +13,23 @@ import numpy as np
 import pandas as pd
 
 
+plt.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+        "font.size": 7,
+        "axes.spines.right": False,
+        "axes.spines.top": False,
+        "axes.linewidth": 0.8,
+        "legend.frameon": False,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.minor.visible": False,
+        "ytick.minor.visible": False,
+    }
+)
+
+
 @dataclass
 class FieldComparison:
     """HYDRUS-vs-MAIZSIM comparison metrics and point-level values."""
@@ -214,10 +231,16 @@ def plot_comparison(
             (-resid_limit, resid_limit),
         )
 
-    fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.5), sharex=True, sharey=True)
-    last = None
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=(7.2, 2.45),
+        sharex=True,
+        sharey=True,
+        constrained_layout=True,
+    )
     for ax, (column, title), cmap, (vmin, vmax) in zip(axes, columns, cmaps, ranges):
-        last = _tri_contour(ax, points, column, cmap=cmap, vmin=vmin, vmax=vmax)
+        contour = _tri_contour(ax, points, column, cmap=cmap, vmin=vmin, vmax=vmax)
         _annotate_drip_source(
             ax,
             points,
@@ -225,10 +248,10 @@ def plot_comparison(
             drip_source_left_cm=drip_source_left_cm,
             drip_source_right_cm=drip_source_right_cm,
         )
-        ax.set_title(title)
+        ax.set_title(title, fontsize=7, pad=2)
         ax.set_xlabel("x (cm)")
+        fig.colorbar(contour, ax=ax, shrink=0.78, pad=0.015)
     axes[0].set_ylabel("Depth (cm)")
-    fig.colorbar(last, ax=axes.ravel().tolist(), shrink=0.78)
     fig.savefig(path, dpi=600, bbox_inches="tight")
     plt.close(fig)
 
