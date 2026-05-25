@@ -11,7 +11,7 @@
 如果目标是精细模拟滴灌湿润体形态，尤其要最终和HYDRUS二维`theta(x,z,t)`图对比，上一版不够，必须改。本轮先补上了“HYDRUS SurfaceDrip地表宽度曲线约束+MAIZSIM内部二维水分/根系响应诊断”的验证基础，并把滴灌扩展为两个模式：
 
 - `DripSpreadMode=0`：保留原来的入渗受限触发扩展模式，用`RO`信号判断是否需要向相邻地表节点扩展。
-- `DripSpreadMode=1`：新增HYDRUS SurfaceDrip宽度曲线标定模式，不再等待`RO`触发，而是按HYDRUS SurfaceDrip公开算例的时间-湿润宽度曲线主动确定当前地表湿润宽度，并在活动范围内按横向距离加权分配滴灌通量。
+- `DripSpreadMode=1`：新增HYDRUS SurfaceDrip宽度曲线标定模式，不再等待`RO`触发，而是按累计有效供水时间查HYDRUS SurfaceDrip公开算例的时间-湿润宽度曲线，主动确定当前地表湿润宽度，并在活动范围内按横向距离加权分配滴灌通量。
 
 当前最重要的判断是：
 
@@ -55,13 +55,13 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `wAppl`按`cm/hr`输入，Fortran内部换算为`cm/day`。
 - `DripWetWidthMax`单位为`cm`，表示单个滴头允许达到的最大地表湿润宽度。
 - `DripSpreadMode=0`表示原有入渗受限触发模式。
-- `DripSpreadMode=1`表示HYDRUS标定精细模式。
+- `DripSpreadMode=1`表示HYDRUS SurfaceDrip宽度曲线标定模式。
 
 `DripSpreadMode=1`的计算流程：
 
-1. 用`ElapsedHours = (time - tAppl_start) * 24`计算事件内已经灌水的小时数。
-2. 先计算压力修正因子`PressureFactor`；精细模式用`ElapsedHours * PressureFactor`作为有效铺展时间，避免压力补偿几乎不给水时湿润宽度仍按满流量扩展。
-3. 调用`DripTargetWidth(MaxWetWidth, EffectiveHours)`得到连续目标湿润宽度。
+1. 对每个事件和滴头保存`DripEffHours`、`DripLastTime`和`DripLastPressure`。
+2. 每次模型步进时先计算压力修正因子`PressureFactor`；再用上一时间段的`DripLastPressure`乘以真实经过时间，累加为`DripEffHours`。
+3. 调用`DripTargetWidth(MaxWetWidth, DripEffHours)`得到连续目标湿润宽度。
 4. 在当前地表边界离散节点中，寻找不超过目标宽度的最大对称活动范围。
 5. 对活动范围内节点按横向距离给权重，中心节点权重最高，边缘节点权重较低。
 6. 按权重分配`DripRate`、`DripDemand_Rate`和`DripPressureLoss_Rate`，保持水量守恒。
@@ -69,9 +69,11 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 此外：
 
 - Fortran端现在按字段数严格解析`.drp`事件行，只接受6、11、12或13字段；7到10字段、超过13字段、或13字段中出现非数字`DripSpreadMode`都会停止并报错。
-- `DripSpreadMode=1`会把HYDRUS曲线拐点`0.03`、`0.05`、`0.10`、`0.20`、`0.30`、`0.50`、`1.00`、`2.00 h`加入`tNext`同步，减少早期湿润宽度跳变。
+- `DripSpreadMode=1`会把HYDRUS曲线拐点`0.03`、`0.05`、`0.10`、`0.20`、`0.30`、`0.50`、`1.00`、`2.00 h`加入`tNext`同步，减少早期湿润宽度跳变。这个同步仍按事件真实经过时间触发；当`PressureFactor < 1`时，它是数值辅助，不等于按累计有效供水时间精确触发每个HYDRUS曲线拐点。
 
-这样做的含义是：湿润范围由HYDRUS曲线驱动，实际可达到的宽度由MAIZSIM地表网格分辨率决定。
+这样做的含义是：湿润范围由累计有效供水时间查询HYDRUS SurfaceDrip宽度曲线驱动，实际可达到的宽度由MAIZSIM地表网格分辨率决定。
+
+2026-05-25补充：上一版使用`EffectiveHours = ElapsedHours * PressureFactor`，在压力因子随时间变化时可能把已经形成的目标宽度向回缩。本版改为累计有效供水时间后，压力不足只会降低后续扩展速率，不会把已累计的有效供水时间清零或缩小。
 
 ### Python输入与验证链路
 
@@ -107,7 +109,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `sandy_loam`和`loam`是HYDRUS图数字化后的第一版标定。
 - `clay_loam`不是HYDRUS标定值，只是为了继续覆盖低导水率入渗受限场景的fallback。
 - 若`DripWetWidthMax`接近`16.3 cm`或`39.7 cm`，Fortran使用固化的HYDRUS时间-宽度表插值。
-- 其它宽度走保守fallback：`MaxWetWidth * sqrt(elapsed_hours / 2 h)`，再截断到`MaxWetWidth`。
+- 其它宽度走保守fallback：`MaxWetWidth * sqrt(累计有效供水小时数 / 2 h)`，再截断到`MaxWetWidth`。
 
 ## 已完成验证
 
@@ -180,8 +182,8 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_regr
 | `DripInput`总量 | `3116.079 mm` | pass |
 | `DripDemand`总量 | `3116.232 mm` | pass |
 | `DripPressureLoss`总量 | `0.153 mm` | pass |
-| `DripHydraulicExcess`总量 | `3.002 mm` | pass |
-| 非baseline `Runoff`总量 | `151.228 mm` | diagnostic |
+| `DripHydraulicExcess`总量 | `3.004 mm` | pass |
+| 非baseline `Runoff`总量 | `151.185 mm` | diagnostic |
 
 按土壤汇总：
 
@@ -212,6 +214,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 - `tmp/codex_precision_drip_validation/precision_hydrus_curve_width.png`
 - `tmp/codex_precision_drip_validation/precision_short_hydrus_width.csv`
 - `tmp/codex_precision_drip_validation/precision_short_hydrus_width.png`
+- `tmp/codex_precision_drip_validation/precision_pressure_width_diagnostics.csv`
 
 曲线节点覆盖：
 
@@ -259,7 +262,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 
 | 土壤 | 峰值`Delta theta` | 峰值距滴头偏移 | 正增湿面积 | 正增湿最大深度 | 深宽比 | 根区加权`Delta theta` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sandy_loam` | `0.1329` | `0.0 cm` | `1491.17 cm2` | `55.0 cm` | `1.44` | `0.0091` |
+| `sandy_loam` | `0.1329` | `0.0 cm` | `1546.47 cm2` | `55.0 cm` | `1.44` | `0.0091` |
 | `loam` | `0.1308` | `0.0 cm` | `2210.62 cm2` | `55.0 cm` | `1.44` | `0.0193` |
 | `clay_loam` | `0.1960` | `0.0 cm` | `735.69 cm2` | `35.0 cm` | `1.36` | `0.0102` |
 
@@ -274,7 +277,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 图像质量检查：
 
 - `precision_case_widths.png`、`precision_hydrus_curve_width.png`、`precision_short_hydrus_width.png`、`precision_delta_theta_root_overlay_0601.png`、`precision_spatial_shape_metrics.png`均已生成。
-- 五张PNG非空，像素标准差分别约为`0.135`、`0.131`、`0.185`、`0.133`、`0.207`。
+- 五张PNG非空，像素标准差分别约为`0.135`、`0.131`、`0.185`、`0.133`、`0.208`。
 - 人工查看确认坐标轴、图例、滴灌位置标识和根系等值线可读。
 - 图像质量检查只证明当前诊断图可读、非空，不证明HYDRUS二维形态匹配。
 
@@ -284,6 +287,8 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 | --- | --- | --- |
 | HYDRUS曲线节点模型宽度最大误差 | `0.0005 cm` | pass |
 | 连续HYDRUS宽度未被网格表达的最大差值 | `13.31 cm` | review |
+| 压力补偿活动期宽度回缩算例数 | `0` | pass |
+| 出现压力损失的压力补偿算例数 | `3` | diagnostic |
 | 正增湿二维记录数 | `3` | pass |
 | 峰值距滴头最大偏移 | `0.0 cm` | pass |
 | 正增湿面积非空记录数 | `3` | pass |
@@ -308,6 +313,16 @@ Invalid drip event fields
 
 所以，如果研究目标是“不要让横向湿润体超过现实滴灌观测”，下一步不能再靠经验缩小代码宽度，而应补充对应土壤、滴头流量、初始水分和施水量下的HYDRUS工程或实测湿润体数据，再重新标定`DripTargetWidth`曲线。
 
+## 文献合理性审查
+
+本次代码改动的合理性主要来自三类证据：
+
+- HYDRUS技术说明中的SurfaceDrip边界条件不是固定单节点通量，而是在单个滴头节点不能接纳指定通量时，将超额通量逐步分配到相邻边界节点，直到整个通量被接纳；其结果是瞬态湿润面积随灌水过程逐步扩大。
+- Lazarovitch等2023年的HYDRUS综述使用SurfaceDrip算例展示了`2 L/h`、总`4 L`条件下壤土和砂壤土的动态湿润半径差异：砂壤土较快达到稳定半径，壤土扩展时间更长。这支持按土壤水力性质区分湿润宽度曲线，而不是用一个固定经验宽度。
+- Kandelous和Simunek关于滴灌湿润体的比较研究显示，常用经验模型把湿润体水平宽度、垂向深度表示为累计施水量`Vw`、滴头流量`Q`和饱和导水率`Ks`等变量的函数；HYDRUS-2D验证研究也强调需要用含水量场和湿润体尺寸的RMSE来评价二维形态。
+
+由此看，本次把`ElapsedHours * 当前PressureFactor`改为累计有效供水时间是合理的：湿润体扩展应更接近累计进入土壤的水量过程，而不是由某一时刻的压力因子重新缩放整个历史灌水时间。不过，这仍只是MAIZSIM地表边界上的工程近似；要证明二维湿润体形态与HYDRUS一致，仍需同条件HYDRUS二维`theta(x,z,t)`场。
+
 ## 仍然不能声称的内容
 
 当前实现不能声称：
@@ -319,11 +334,12 @@ Invalid drip event fields
 - 已完成真实田间湿润锋或含水量剖面校准。
 - `clay_loam=20.0 cm`是HYDRUS公开图标定值。
 - 当前网格能表达任意连续湿润半径。
-- 当前`EffectiveHours = ElapsedHours * PressureFactor`是压力供水不足时的近似修正，不是逐步累计实供水量反演得到的HYDRUS湿润半径。
+- 当前累计有效供水时间仍是HYDRUS SurfaceDrip宽度曲线的工程近似，不是HYDRUS压力头场、入渗能力和边界条件的完整迭代求解。
 
 当前可以谨慎声称：
 
 - MAIZSIM已经支持HYDRUS SurfaceDrip风格的地表湿润宽度时间曲线近似。
+- 精细模式的目标湿润宽度现在由累计有效供水时间驱动，压力不足会减慢后续扩展，而不会让目标宽度随瞬时压力因子下降而回缩。
 - 45个真实模型算例水量闭合、宽度不越界。
 - 壤土和砂壤土短时算例能达到当前网格可表达的HYDRUS目标宽度。
 - 二维土壤水分图显示滴灌节点下方出现局部增湿。
@@ -343,7 +359,7 @@ Invalid drip event fields
 - 若要写论文或报告，明确区分“HYDRUS曲线校准的地表边界近似”和“完整HYDRUS二维流场复现”。
 - 为砂壤土宽网格单节点问题补一组更细地表网格，以证明这是离散宽度限制。
 - 若要让图更接近HYDRUS二维剖面，应增加同等初始含水量、同等流量、同等施水量、无作物或固定根系的短时对照算例。
-- 若压力补偿场景成为重点，应把湿润宽度从当前瞬时`PressureFactor`近似升级为按累计实供水量驱动。
+- 若压力补偿场景成为重点，应继续增加强压力不足、脉冲压力和长时低流量算例，并考虑输出累计有效供水时间作为诊断字段。
 
 长期建议：
 
@@ -356,3 +372,5 @@ Invalid drip event fields
 - HYDRUS特殊边界条件说明：<https://www.pc-progress.com/en/OnlineHelp/HYDRUS3/SpecialBoundaryConditions1.html>
 - Lazarovitch, N.等. 2023. Modeling of irrigation and related processes with HYDRUS. <https://www.pc-progress.com/Documents/Jirka/Lazarovitch_et_al_2023.pdf>
 - Kandelous, M. M.等. 2011. Comparison of numerical, analytical, and empirical models to estimate wetting patterns for surface and subsurface drip irrigation. <https://link.springer.com/article/10.1007/s00271-009-0205-9>
+- Kandelous, M. M.和Simunek, J. 2010. Numerical simulations of water movement in a subsurface drip irrigation system under field and laboratory conditions using HYDRUS-2D. <https://www.pc-progress.com/Documents/Jirka/Kandelous_Simunek_AWM_2010.pdf>
+- HYDRUS 2D/3D Technical Manual, Surface Drip Irrigation with Dynamic Evaluation of the Wetted Area. <https://www2.pc-progress.com/downloads/Pgm_Hydrus3D5/HYDRUS_Technical_Manual_2D3D_V5.pdf>

@@ -22,9 +22,11 @@
      !     SourceDemandFlux,DemandRate,LossRate,DripWetWidthMax,
      !     SurfaceWidth,MaxWetWidth,CandidateWidth,NodeExcess,
      !     ExcessFlux,PrevDripFlux,DripExcessFrac,
-     !     DripDefaultWetWidth,TargetWetWidth,ElapsedHours,
-     !     EffectiveHours,HalfWidth,WeightSum,NodeWeight,DistX,
-     !     CurveTime,DripTargetWidth,DripCurveHour
+     !     DripDefaultWetWidth,TargetWetWidth,EffectiveHours,
+     !     HalfWidth,WeightSum,NodeWeight,DistX,
+     !     CurveTime,DripTargetWidth,DripCurveHour,DeltaHours,
+     !     MaxEventHours,DripEffHours,DripLastTime,
+     !     DripLastPressure
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
      !        LeftPos,RightPos,NeedExpand,CanShrink,MaxRadius,
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
@@ -46,6 +48,9 @@
      !     DripHIn(Max_times),DripExp(Max_times),
      !     DripPcMin(Max_times),DripPcMax(Max_times),
      !     DripWetWidthMax(Max_times),DripSpreadMode(Max_times),
+     !     DripEffHours(Max_times,Max_nodes),
+     !     DripLastTime(Max_times,Max_nodes),
+     !     DripLastPressure(Max_times,Max_nodes),
      !     applied,ModNum
 
       DripTol=1.0E-5
@@ -105,6 +110,9 @@
             SourceSurfPos(i,j)=0
             WetRadius(i,j)=0
             ShrinkCount(i,j)=0
+            DripEffHours(i,j)=0.0
+            DripLastTime(i,j)=0.0
+            DripLastPressure(i,j)=0.0
           EndDo
         EndDo
         DripSurfCount=0
@@ -297,9 +305,24 @@
               Endif
               PressureFactor=amax1(0.0,amin1(1.0,PressureFactor))
             Endif
+            If(DripLastTime(jj,in).lt.tAppl_start(jj).or.
+     !        DripLastTime(jj,in).gt.time) then
+              DripEffHours(jj,in)=0.0
+              DripLastTime(jj,in)=tAppl_start(jj)
+              DripLastPressure(jj,in)=PressureFactor
+            Endif
+            If(time.gt.DripLastTime(jj,in)) then
+              DeltaHours=(time-DripLastTime(jj,in))*24.0
+              MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
+              DripEffHours(jj,in)=DripEffHours(jj,in)+
+     !          DeltaHours*DripLastPressure(jj,in)
+              DripEffHours(jj,in)=amax1(0.0,
+     !          amin1(DripEffHours(jj,in),MaxEventHours))
+              DripLastTime(jj,in)=time
+            Endif
+            DripLastPressure(jj,in)=PressureFactor
             If(DripSpreadMode(jj).eq.1) then
-              ElapsedHours=(time-tAppl_start(jj))*24.0
-              EffectiveHours=ElapsedHours*PressureFactor
+              EffectiveHours=DripEffHours(jj,in)
               TargetWetWidth=DripTargetWidth(MaxWetWidth,
      !          EffectiveHours)
               TargetWetWidth=amax1(TargetWetWidth,Width(CenterBnd))
@@ -436,6 +459,9 @@
           Do in=1,Num_nodes(jj)
             WetRadius(jj,in)=0
             ShrinkCount(jj,in)=0
+            DripEffHours(jj,in)=0.0
+            DripLastTime(jj,in)=0.0
+            DripLastPressure(jj,in)=0.0
           EndDo
         Endif
       EndDo

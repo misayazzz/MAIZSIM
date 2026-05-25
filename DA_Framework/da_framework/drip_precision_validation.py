@@ -79,12 +79,16 @@ def main():
     spatial = _build_spatial_diagnostics()
     spatial.to_csv(OUT_DIR / "precision_spatial_delta_root.csv", index=False)
 
+    pressure = _build_pressure_diagnostics()
+    pressure.to_csv(OUT_DIR / "precision_pressure_width_diagnostics.csv", index=False)
+
     checks = _build_checks(
         case_matrix,
         curve_targets,
         curve_matrix,
         short_matrix,
         spatial,
+        pressure,
     )
     checks.to_csv(OUT_DIR / "precision_validation_checks.csv", index=False)
 
@@ -101,6 +105,7 @@ def main():
             str(OUT_DIR / "precision_hydrus_curve_model_width.csv"),
             str(OUT_DIR / "precision_short_hydrus_width.csv"),
             str(OUT_DIR / "precision_spatial_delta_root.csv"),
+            str(OUT_DIR / "precision_pressure_width_diagnostics.csv"),
             str(OUT_DIR / "precision_validation_checks.csv"),
         ],
         "figures": [
@@ -391,7 +396,49 @@ def _build_spatial_diagnostics():
     return pd.DataFrame.from_records(rows)
 
 
-def _build_checks(case_matrix, curve_targets, curve_matrix, short_matrix, spatial):
+def _build_pressure_diagnostics():
+    rows = []
+    for case_dir in sorted(REGRESSION_ROOT.glob("*__long_pressure_single")):
+        if not case_dir.is_dir():
+            continue
+        soil, grid, scenario = _split_case(case_dir.name)
+        g05 = _read_g05(case_dir / "LOAM2D.G05")
+        active = g05[g05["DripDemand"] > 1.0e-9].copy()
+        width_diff = active["DripWetWidthMax"].diff().fillna(0.0)
+        decrease_count = int((width_diff < -1.0e-6).sum())
+        rows.append(
+            {
+                "case": case_dir.name,
+                "soil": soil,
+                "grid": grid,
+                "scenario": scenario,
+                "active_output_rows": int(len(active)),
+                "wet_width_start_cm": float(active["DripWetWidthMax"].iloc[0])
+                if not active.empty
+                else 0.0,
+                "wet_width_max_cm": float(active["DripWetWidthMax"].max())
+                if not active.empty
+                else 0.0,
+                "wet_width_decrease_count": decrease_count,
+                "pressure_factor_min": float(active["DripPressureFactorMin"].min())
+                if not active.empty
+                else 0.0,
+                "drip_pressure_loss_mm": float(active["DripPressureLoss"].sum())
+                if not active.empty
+                else 0.0,
+            }
+        )
+    return pd.DataFrame.from_records(rows)
+
+
+def _build_checks(
+    case_matrix,
+    curve_targets,
+    curve_matrix,
+    short_matrix,
+    spatial,
+    pressure,
+):
     active = case_matrix[case_matrix["scenario"] != "baseline"].copy()
     curve_error_abs_max = float(curve_matrix["width_error_vs_discrete_cm"].abs().max())
     curve_target_unexpressed_abs_max = float(
@@ -446,6 +493,20 @@ def _build_checks(case_matrix, curve_targets, curve_matrix, short_matrix, spatia
             "value": curve_target_unexpressed_abs_max,
             "status": "review",
             "detail": "Continuous HYDRUS target width not expressible by complete surface segments.",
+        },
+        {
+            "check": "pressure_width_decrease_cases",
+            "value": float((pressure["wet_width_decrease_count"] > 0).sum()),
+            "status": "pass"
+            if (pressure["wet_width_decrease_count"] == 0).all()
+            else "fail",
+            "detail": "Pressure-compensated runs should not shrink target wet width while active.",
+        },
+        {
+            "check": "pressure_loss_positive_cases",
+            "value": float((pressure["drip_pressure_loss_mm"] > 0.0).sum()),
+            "status": "diagnostic",
+            "detail": "Counts pressure runs where pressure correction reduced applied drip water.",
         },
         {
             "check": "spatial_positive_delta_records",
