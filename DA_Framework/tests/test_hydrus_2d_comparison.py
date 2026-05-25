@@ -42,6 +42,25 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         np.testing.assert_allclose(frame["theta"].to_numpy(), [0.20, 0.21, 0.24])
         np.testing.assert_allclose(frame["area_cm2"].to_numpy(), [2.0, 2.0, 3.0])
 
+    def test_read_hydrus_theta_csv_prefers_depth_over_z_when_both_exist(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_depth_") as tmp_dir:
+            path = Path(tmp_dir) / "hydrus.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        "node,time_h,x_cm,z_cm,depth_cm,theta,area_cm2",
+                        "1,2,0,100,0,0.40,1",
+                        "2,2,0,0,100,0.20,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            frame = read_hydrus_theta_csv(path)
+
+        np.testing.assert_allclose(frame["depth_cm"].to_numpy(), [0.0, 100.0])
+
     def test_read_maizsim_g03_theta_selects_nearest_date_and_converts_depth(self):
         with tempfile.TemporaryDirectory(prefix="codex_maizsim_g03_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.G03"

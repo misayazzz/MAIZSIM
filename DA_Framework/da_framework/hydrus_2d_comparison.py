@@ -524,9 +524,13 @@ def _require_column(frame, aliases, path):
 
 
 def _optional_column(frame, aliases):
-    normalized_aliases = {_normalize(alias) for alias in aliases}
-    for column in frame.columns:
-        if _normalize(column) in normalized_aliases:
+    normalized_columns = {
+        _normalize(column): column
+        for column in frame.columns
+    }
+    for alias in aliases:
+        column = normalized_columns.get(_normalize(alias))
+        if column is not None:
             return column
     return None
 
