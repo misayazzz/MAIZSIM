@@ -5,6 +5,7 @@ import argparse
 import sys
 
 from .config import read_config
+from .drip import write_drip_files
 from .errors import ConfigError
 from .excel_macro import prepare_and_run
 from .model_files import copy_model_files_to_run_dirs
@@ -48,15 +49,15 @@ def main(arguments=None):
         )
         water_bound_source = find_water_bound_source(config["paths"])
         print(f"WaterBound.DAT 来源文件: {water_bound_source}")
-        model_file_sources = find_model_file_sources()
-        model_file_names = ", ".join(source.name for source in model_file_sources)
-        print(f"模型运行文件来源: {model_file_names}")
         if args.dry_run:
             print(
                 f"dry-run 完成, 未复制宏工作簿, 未调用 Excel, 未重写天气文件, 未重命名 run 文件, "
                 f"未复制 WaterBound.DAT, 未复制模型运行文件, 未改写 run 文件."
             )
             return 0
+        model_file_sources = find_model_file_sources()
+        model_file_names = ", ".join(source.name for source in model_file_sources)
+        print(f"模型运行文件来源: {model_file_names}")
         prepare_and_run(config)
         print(f"宏调用完成. 自动化副本: {config['run']['automation_workbook']}")
         weather_results = rewrite_weather_files(config["paths"], validation["runs"])
@@ -70,6 +71,9 @@ def main(arguments=None):
         print(f"模型运行文件已复制. run 数={len(model_file_results)}, 文件数={len(model_file_sources)}.")
         grid_results = generate_soil_grids(config, validation["runs"])
         print(f"soil/grid 生成完成. run 数={len(grid_results)}.")
+        drip_results = write_drip_files(validation["runs"], grid_results)
+        drip_event_count = sum(result["event_count"] for result in drip_results)
+        print(f"drip 文件已由 Python 覆盖/生成. run 数={len(drip_results)}, 事件数={drip_event_count}.")
         return 0
     except ConfigError as exc:
         sys.stderr.write(f"错误: {exc}\n")

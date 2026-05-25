@@ -14,6 +14,7 @@
       
       Double precision A,B,C, B_1, A_1
       Double precision dt,dtOld,t,tOld,PI,DPI,F2
+      Double precision DripShare,DripExcess,DripPotential
       real ATG,HSP
 cccz move it to "PuSurface.ins" for public use 
 cccz  Double precision CriticalH, CriticalH_R
@@ -670,6 +671,14 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           hNew(i)=CriticalH+h_Pond(k)         ! cccz could be CriticalH_R, but we force it to 
           hOld(i)=hNew(i)
         endif
+        If(DripInput_Rate(k).gt.0.0.and.Q(i).gt.1.0E-5) then
+          DripPotential=dble(DripInput_Rate(k)*Width(k))
+          DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
+          DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
+          DripExcess=dmin1(DripExcess,DripPotential)
+          DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
+     !      DripExcess*Step
+        Endif
        Enddo         
 cccz turn this on for Ex_4 plastic mulching
 cccz #ifdef EX_4P

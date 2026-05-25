@@ -155,6 +155,7 @@ c dt
       Vx(:)=0.
       Vz(:)=0.
       Q(:)=0.
+      QAct(:)=0.
       Tmpr(:)=25.
       Conc(:,:)=0.
       g(:,:)=0.
@@ -175,7 +176,6 @@ c dt
 	gSink_rootM=0.
       gSink_N2O=0.
       SOMMassRatio(:)=1.0
-      
 
 * 
       NumMod=-1
@@ -250,5 +250,3 @@ c dt
 
        extract_path = path
        end function extract_path
-       
-        

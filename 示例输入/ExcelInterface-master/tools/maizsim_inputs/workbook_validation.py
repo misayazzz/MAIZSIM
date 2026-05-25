@@ -4,6 +4,7 @@ import re
 
 from openpyxl import load_workbook
 
+from .drip import validate_drip_records_for_run
 from .errors import ConfigError
 from .validation_rules import REQUIRED_SHEET_FIELDS
 
@@ -233,8 +234,8 @@ def validate_workbook(input_excel_file, selected_ids):
             require_climate_location(climate_records, climate_id, location, context)
 
             drip_records = drip_groups.get(selected_id, [])
-            if len(drip_records) > 1:
-                require_group_lookup(selected_id, drip_node_groups, f"{context}.ID", "DripNodes.ID")
+            drip_node_records = drip_node_groups.get(selected_id, [])
+            validate_drip_records_for_run(selected_id, drip_records, drip_node_records)
 
             weather_climate_id = get_record_value(weather_record, ["ClimateID"], f"Weather.WeatherID={weather_id}")
             if weather_climate_id and weather_climate_id != climate_id:
@@ -259,6 +260,8 @@ def validate_workbook(input_excel_file, selected_ids):
                     "daily_wind": climate_record[normalize_key("DailyWind")],
                     "rel_humid": climate_record[normalize_key("RelHumid")],
                     "daily_co2": climate_record[normalize_key("DailyCO2")],
+                    "drip_records": drip_records,
+                    "drip_node_records": drip_node_records,
                 }
             )
 

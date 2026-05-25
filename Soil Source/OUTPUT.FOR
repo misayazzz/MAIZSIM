@@ -22,7 +22,12 @@ C summary output variables
       Real SeasonRainfall, SeasonPotenTranspiration,
      &     SeasonActualTranspiration, SeasonPotenSoilEvap,
      &     SeasonActualSoilEvap,SeasonActualInfil,
-     &     SumArrayTh, MaxY, Cumulative_OM_N_sink
+     &     SumArrayTh, MaxY, Cumulative_OM_N_sink,
+     &     DripInput, SeasonDripInput, DripDemand,
+     &     DripPressureLoss, DripHydraulicExcess,
+     &     DripWetNodesMean, DripWetNodesMax,
+     &     DripWetWidthMean, DripWetWidthMax,
+     &     DripPressureFactorMean, DripPressureFactorMin
       Character*10 date, Stime
       Logical OutG04, OutG05, OutG06, OutG07
       Logical OutRunoff, OutMulch
@@ -48,6 +53,7 @@ cccz output for runoff module
      &     pot_ET,pot_ET_EO,bottomFlux, timer,
      &     FluxAct,PotentialSoilEvaporation,
      &     CumRain,Cumulative_OM_N_sink,
+     &     DripInput, SeasonDripInput,
      &     SeasonRainfall, SeasonPotenTranspiration,
      &     SeasonActualTranspiration, SeasonPotenSoilEvap,
      &     SeasonActualSoilEvap,SeasonActualInfil,CumulativeFlux,
@@ -109,6 +115,34 @@ cccz
         PotentialSoilEvaporation=0.0
         CumRain=0.0
         SeasonRainfall =0.0
+        DripInput=0.0
+        SeasonDripInput=0.0
+        DripDemand=0.0
+        DripPressureLoss=0.0
+        DripHydraulicExcess=0.0
+        DripWetNodesMean=0.0
+        DripWetNodesMax=0.0
+        DripWetWidthMean=0.0
+        DripWetWidthMax=0.0
+        DripPressureFactorMean=0.0
+        DripPressureFactorMin=0.0
+        DripDemand_Flux=0.0D0
+        DripPressureLoss_Flux=0.0D0
+        DripHydraulicExcess_Flux=0.0D0
+        DripWetNodes_Sum=0.0D0
+        DripWetNodes_Max=0.0D0
+        DripWetWidth_Sum=0.0D0
+        DripWetWidth_Max=0.0D0
+        DripPressureFactor_Sum=0.0D0
+        DripPressureFactor_Min=1.0D30
+        DripDiag_Time=0.0D0
+        DripWetNodes_StepSum=0.0D0
+        DripWetNodes_StepMax=0.0D0
+        DripWetWidth_StepSum=0.0D0
+        DripWetWidth_StepMax=0.0D0
+        DripPressureFactor_StepSum=0.0D0
+        DripPressureFactor_StepMin=1.0D30
+        DripDiag_StepCount=0.0D0
         SeasonActualInfil=0.0
         SeasonPotenTranspiration=0.0
         SeasonActualTranspiration=0.0
@@ -140,7 +174,7 @@ C declare files for output
           open(82,file=ElemGraphics)                    !G04
         endif
 	  if (OutG05) then
-          Open(83,file=SurfaceGraphics,recl=450)        !G05
+          Open(83,file=SurfaceGraphics,recl=1200)       !G05
         endif
         if (OutG06) then
           Open(84,file=FluxGraphics)                    !G06
@@ -170,7 +204,12 @@ C G05 file  Surface Graphics
      &       "N_Leach,","Runoff,",
      &      "cover,","PSIM,", "SeasPSoEv,","SeasASoEv," ,"SeasPTran,",
      &      "SeasATran,","SeasRain,",    
-     &      "SeasInfil,","ThetaAvail,","CO2FLux,","O2FLux,","N2OFLux"
+     &      "SeasInfil,","ThetaAvail,","CO2FLux,","O2FLux,","N2OFLux,",
+     &      "DripInput,","SeasDrip,","DripDemand,",
+     &      "DripPressureLoss,","DripHydraulicExcess,",
+     &      "DripWetNodesMean,","DripWetNodesMax,",
+     &      "DripWetWidthMean,","DripWetWidthMax,",
+     &      "DripPressureFactorMean,","DripPressureFactorMin"
       endif
 
 c Flux Graphics       
@@ -248,11 +287,39 @@ cccz	           CumRain=CumRain+varBW(i,1)*width(i)*step
           endif
 cccz          if (codeW(n).eq.-4) Then
             CumRain=CumRain+Varbw_Air(i,1)*width(i)*step
+            DripDemand_Flux=DripDemand_Flux+
+     &        dble(DripDemand_Rate(i)*width(i))*Step
+            DripInput_Flux=DripInput_Flux+
+     &        dble(DripInput_Rate(i)*width(i))*Step
+            DripPressureLoss_Flux=DripPressureLoss_Flux+
+     &        dble(DripPressureLoss_Rate(i)*width(i))*Step
             SurInput_Flux=SurInput_Flux+Varbw_Mulch(i,1)*width(i)*step
             Cumulative_OM_N_sink=Cumulative_OM_N_sink+cSink_OM(i,1)
      &         *width(i)* step*thNew(i)*NO3mass_2_Nmass
 cccz         endif
 	  enddo
+        If(DripDiag_StepCount.gt.0.0D0) then
+          DripWetNodes_Sum=DripWetNodes_Sum+
+     &      DripWetNodes_StepSum/DripDiag_StepCount*Step
+          DripWetNodes_Max=dmax1(DripWetNodes_Max,
+     &      DripWetNodes_StepMax)
+          DripWetWidth_Sum=DripWetWidth_Sum+
+     &      DripWetWidth_StepSum/DripDiag_StepCount*Step
+          DripWetWidth_Max=dmax1(DripWetWidth_Max,
+     &      DripWetWidth_StepMax)
+          DripPressureFactor_Sum=DripPressureFactor_Sum+
+     &      DripPressureFactor_StepSum/DripDiag_StepCount*Step
+          DripPressureFactor_Min=dmin1(DripPressureFactor_Min,
+     &      DripPressureFactor_StepMin)
+          DripDiag_Time=DripDiag_Time+Step
+        Endif
+        DripWetNodes_StepSum=0.0D0
+        DripWetNodes_StepMax=0.0D0
+        DripWetWidth_StepSum=0.0D0
+        DripWetWidth_StepMax=0.0D0
+        DripPressureFactor_StepSum=0.0D0
+        DripPressureFactor_StepMin=1.0D30
+        DripDiag_StepCount=0.0D0
 	
 C Actual values
 
@@ -432,6 +499,27 @@ cccz the averaged process for runoff
               Runoff_03=Runoff_03/gridWidth*10.0  
 cccz
               CumRain=CumRain/gridWidth*10.0
+              DripDemand=DripDemand_Flux/gridWidth*10.0
+              DripInput=DripInput_Flux/gridWidth*10.0
+              DripPressureLoss=DripPressureLoss_Flux/gridWidth*10.0
+              DripHydraulicExcess=DripHydraulicExcess_Flux/
+     &          gridWidth*10.0
+              If(DripDiag_Time.gt.0.0D0) then
+                DripWetNodesMean=DripWetNodes_Sum/DripDiag_Time
+                DripWetNodesMax=DripWetNodes_Max
+                DripWetWidthMean=DripWetWidth_Sum/DripDiag_Time
+                DripWetWidthMax=DripWetWidth_Max
+                DripPressureFactorMean=DripPressureFactor_Sum/
+     &            DripDiag_Time
+                DripPressureFactorMin=DripPressureFactor_Min
+              Else
+                DripWetNodesMean=0.0
+                DripWetNodesMax=0.0
+                DripWetWidthMean=0.0
+                DripWetWidthMax=0.0
+                DripPressureFactorMean=0.0
+                DripPressureFactorMin=0.0
+              Endif
               Flux_drain=Flux_drain/gridWidth*10.0   !cccz unit [water:width(cm)*flux(cm/day)*timestep(day)]/gridWidth *10 mm/cm
               CumulativeFlux=CumulativeFlux+Flux_drain
 
@@ -466,6 +554,7 @@ C
 C    Accumulate seasonal amounts       
 C 
           SeasonRainfall =SeasonRainfall+CumRain
+          SeasonDripInput=SeasonDripInput+DripInput
           SeasonActualInfil=SeasonActualInfil+ActualInfil
           SeasonPotenTranspiration=SeasonPotenTranspiration+
      &       p_ET
@@ -492,7 +581,12 @@ C     Gas unit conversion to ugCo2/cm2
      &              SeasonActualSoilEvap, SeasonPotenTranspiration,
      &               SeasonActualTranspiration,  SeasonRainfall,  
      &              SeasonActualInfil, ThetaRelative,
-     &              (Surface_Gas_Flux(jjj),jjj=1,NumG)
+     &              (Surface_Gas_Flux(jjj),jjj=1,NumG),
+     &              DripInput, SeasonDripInput, DripDemand,
+     &              DripPressureLoss, DripHydraulicExcess,
+     &              DripWetNodesMean, DripWetNodesMax,
+     &              DripWetWidthMean, DripWetWidthMax,
+     &              DripPressureFactorMean, DripPressureFactorMin
         endif
         
         
@@ -540,6 +634,27 @@ cccz ---------------------- finish mulch printing --------------------------
 	  timer=0
 	  FluxAct=0.0
 	  CumRain=0.0
+        DripInput=0.0
+        DripInput_Flux=0.0D0
+        DripDemand=0.0
+        DripDemand_Flux=0.0D0
+        DripPressureLoss=0.0
+        DripPressureLoss_Flux=0.0D0
+        DripHydraulicExcess=0.0
+        DripHydraulicExcess_Flux=0.0D0
+        DripWetNodesMean=0.0
+        DripWetNodesMax=0.0
+        DripWetNodes_Sum=0.0D0
+        DripWetNodes_Max=0.0D0
+        DripWetWidthMean=0.0
+        DripWetWidthMax=0.0
+        DripWetWidth_Sum=0.0D0
+        DripWetWidth_Max=0.0D0
+        DripPressureFactorMean=0.0
+        DripPressureFactorMin=0.0
+        DripPressureFactor_Sum=0.0D0
+        DripPressureFactor_Min=1.0D30
+        DripDiag_Time=0.0D0
         nitrogenFLux=0.0
 	  PotentialSoilEvaporation=0.0
 
@@ -580,9 +695,9 @@ C format 5 is water, 6 is roots Vy is the last on on this lin
   6   Format (1x,A16,T20,A5,T36,A2,T46,A2,T56,A5,T65,A7,T78,A7, T90,A6,
      &        T102, A6, T112, A11, T124, A8, T136, A8)
  10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',                  !relative water content  
-     &        12(F16.3, ','),F16.3)  !format for flux data  [G03]
+     &        23(F16.3, ','),F16.3)  !format for flux data  [G03]
  13   Format (1x,F17.6,',',A15,',',15(F16.3, ','), F16.3)  ! format for second flux data [G06]
- 20   Format (1x,25A16)              !format for flux header [G05]
+ 20   Format (1x,36A24)              !format for flux header [G05]
  21   Format (1x,12A16)           ! format for Organic Matter header
 2103  Format (1x,A12,T20,A12,T49,A2,T64,A2,T75,A10,T95,A10,T109,A10)
 2104  Format (1x,F17.6,',',A15,',',4(F16.4,','),F16.4)     
