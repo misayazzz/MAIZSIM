@@ -9,7 +9,8 @@
       Include 'PuSurface.ins'
       Integer Max_times,Drip_times,Num_nodes,nAppl,applied,found,
      ! Max_nodes,SourceBnd,SourceSurfPos,WetRadius,DripSurfNode,
-     ! DripSurfBnd,DripSurfCount,DripMode,ShrinkCount
+     ! DripSurfBnd,DripSurfCount,DripMode,ShrinkCount,
+     ! DripSpreadMode
       Parameter (Max_times=75, Max_nodes=150)
       Parameter (PERIOD =1./24.)
       Real wAppl,tAppl_start,tAppl_stop,DripRate(NumBPD),
@@ -21,11 +22,14 @@
      !     SourceDemandFlux,DemandRate,LossRate,DripWetWidthMax,
      !     SurfaceWidth,MaxWetWidth,CandidateWidth,NodeExcess,
      !     ExcessFlux,PrevDripFlux,DripExcessFrac,
-     !     DripDefaultWetWidth
+     !     DripDefaultWetWidth,TargetWetWidth,ElapsedHours,
+     !     EffectiveHours,HalfWidth,WeightSum,NodeWeight,DistX,
+     !     CurveTime,DripTargetWidth,DripCurveHour
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
      !        LeftPos,RightPos,NeedExpand,CanShrink,MaxRadius,
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
-     !        CandidateRight,ActiveNodes,TestNode,ios
+     !        CandidateRight,ActiveNodes,TestNode,ios,
+     !        DesiredRadius,FieldCount,DripFieldCount
       Character*256 EventLine
 
       Character*10 Start_Date(Max_times),Stop_Date(Max_times)
@@ -41,7 +45,8 @@
      !     DripSurfBnd(NumBPD),DripSurfCount,DripMode(Max_times),
      !     DripHIn(Max_times),DripExp(Max_times),
      !     DripPcMin(Max_times),DripPcMax(Max_times),
-     !     DripWetWidthMax(Max_times),applied,ModNum
+     !     DripWetWidthMax(Max_times),DripSpreadMode(Max_times),
+     !     applied,ModNum
 
       DripTol=1.0E-5
       DripExcessFrac=0.05
@@ -94,6 +99,7 @@
           DripPcMin(i)=0.0
           DripPcMax(i)=0.0
           DripWetWidthMax(i)=0.0
+          DripSpreadMode(i)=0
           Do j=1,Max_nodes
             SourceBnd(i,j)=0
             SourceSurfPos(i,j)=0
@@ -130,32 +136,39 @@
         Read(40,*,Err=20)
         Do i=1,Drip_times
           Read(40,'(A)',Err=20) EventLine
-          Read(EventLine,*,Err=20) Start_Date(i), Start_hour(i),
-     !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i)
           DripMode(i)=0
           DripHIn(i)=0.0
           DripExp(i)=1.0
           DripPcMin(i)=0.0
           DripPcMax(i)=0.0
           DripWetWidthMax(i)=0.0
-          Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
+          DripSpreadMode(i)=0
+          FieldCount=DripFieldCount(EventLine)
+          If(FieldCount.eq.13) then
+            Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
+     !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i),
+     !       DripMode(i),DripHIn(i),DripExp(i),
+     !       DripPcMin(i),DripPcMax(i),DripWetWidthMax(i),
+     !       DripSpreadMode(i)
+          ElseIf(FieldCount.eq.12) then
+            Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
      !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i),
      !       DripMode(i),DripHIn(i),DripExp(i),
      !       DripPcMin(i),DripPcMax(i),DripWetWidthMax(i)
-          If(ios.ne.0) then
+          ElseIf(FieldCount.eq.11) then
             DripWetWidthMax(i)=0.0
             Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
      !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i),
      !       DripMode(i),DripHIn(i),DripExp(i),
      !       DripPcMin(i),DripPcMax(i)
-            If(ios.ne.0) then
-              DripMode(i)=0
-              DripHIn(i)=0.0
-              DripExp(i)=1.0
-              DripPcMin(i)=0.0
-              DripPcMax(i)=0.0
-              DripWetWidthMax(i)=0.0
-            Endif
+          ElseIf(FieldCount.eq.6) then
+            Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
+     !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i)
+          Else
+            Stop 'Invalid drip event field count'
+          Endif
+          If(ios.ne.0) then
+            Stop 'Invalid drip event fields'
           Endif
           If(Num_nodes(i).lt.1.or.Num_nodes(i).gt.Max_nodes) then
             Stop 'Invalid number of drip nodes'
@@ -172,6 +185,9 @@
           If(DripExp(i).le.0.0) DripExp(i)=1.0
           If(DripWetWidthMax(i).lt.0.0) then
             Stop 'Invalid drip wetted width limit'
+          Endif
+          If(DripSpreadMode(i).lt.0.or.DripSpreadMode(i).gt.1) then
+            Stop 'Invalid drip spread mode'
           Endif
           Read(40,*,Err=20)
           Read(40,*,Err=20) (nAppl(i,j),j=1,Num_nodes(i))
@@ -263,42 +279,6 @@
               LeftPos=max(1,CenterPos-ActiveRadius)
               RightPos=min(DripSurfCount,CenterPos+ActiveRadius)
             Endif
-            ExcessFlux=0.0
-            PrevDripFlux=0.0
-            Do k=LeftPos,RightPos
-              TestNode=DripSurfNode(k)
-              NodeExcess=amax1(RO(TestNode),0.0)
-              ExcessFlux=ExcessFlux+NodeExcess
-              PrevDripFlux=PrevDripFlux+
-     !          LastRate(DripSurfBnd(k))*Width(DripSurfBnd(k))
-            EndDo
-            If(PrevDripFlux.le.DripTol) then
-              PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
-            Endif
-            If(ExcessFlux.gt.amax1(DripTol,
-     !        DripExcessFrac*PrevDripFlux)) NeedExpand=1
-            If(NeedExpand.eq.1) CanShrink=0
-            If(NeedExpand.eq.1.and.WetRadius(jj,in).lt.MaxRadius) then
-              WetRadius(jj,in)=WetRadius(jj,in)+1
-              ShrinkCount(jj,in)=0
-            ElseIf(CanShrink.eq.1.and.WetRadius(jj,in).gt.0) then
-              ShrinkCount(jj,in)=ShrinkCount(jj,in)+1
-              If(ShrinkCount(jj,in).ge.2) then
-                WetRadius(jj,in)=WetRadius(jj,in)-1
-                ShrinkCount(jj,in)=0
-              Endif
-            Else
-              ShrinkCount(jj,in)=0
-            Endif
-            ActiveRadius=WetRadius(jj,in)
-            LeftPos=max(1,CenterPos-ActiveRadius)
-            RightPos=min(DripSurfCount,CenterPos+ActiveRadius)
-            ActiveNodes=RightPos-LeftPos+1
-            TotalWidth=0.0
-            Do k=LeftPos,RightPos
-              TotalWidth=TotalWidth+Width(DripSurfBnd(k))
-            EndDo
-            If(TotalWidth.le.0.0) Stop 'Invalid drip wetted width'
             PressureFactor=1.0
             If(DripMode(jj).gt.0) then
               HeadPressure=amax1(hNew(SourceNode),0.0)
@@ -317,19 +297,128 @@
               Endif
               PressureFactor=amax1(0.0,amin1(1.0,PressureFactor))
             Endif
+            If(DripSpreadMode(jj).eq.1) then
+              ElapsedHours=(time-tAppl_start(jj))*24.0
+              EffectiveHours=ElapsedHours*PressureFactor
+              TargetWetWidth=DripTargetWidth(MaxWetWidth,
+     !          EffectiveHours)
+              TargetWetWidth=amax1(TargetWetWidth,Width(CenterBnd))
+              TargetWetWidth=amin1(TargetWetWidth,MaxWetWidth)
+              DesiredRadius=0
+              Do CandidateRadius=1,MaxRadius
+                CandidateLeft=max(1,CenterPos-CandidateRadius)
+                CandidateRight=min(DripSurfCount,
+     !            CenterPos+CandidateRadius)
+                CandidateWidth=0.0
+                Do k=CandidateLeft,CandidateRight
+                  CandidateWidth=CandidateWidth+Width(DripSurfBnd(k))
+                EndDo
+                If(CandidateWidth.le.TargetWetWidth+DripTol) then
+                  DesiredRadius=CandidateRadius
+                Endif
+              EndDo
+              WetRadius(jj,in)=DesiredRadius
+              ShrinkCount(jj,in)=0
+            Else
+              ExcessFlux=0.0
+              PrevDripFlux=0.0
+              Do k=LeftPos,RightPos
+                TestNode=DripSurfNode(k)
+                NodeExcess=amax1(RO(TestNode),0.0)
+                ExcessFlux=ExcessFlux+NodeExcess
+                PrevDripFlux=PrevDripFlux+
+     !            LastRate(DripSurfBnd(k))*Width(DripSurfBnd(k))
+              EndDo
+              If(PrevDripFlux.le.DripTol) then
+                PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
+              Endif
+              If(ExcessFlux.gt.amax1(DripTol,
+     !          DripExcessFrac*PrevDripFlux)) NeedExpand=1
+              If(NeedExpand.eq.1) CanShrink=0
+              If(NeedExpand.eq.1.and.WetRadius(jj,in).lt.MaxRadius) then
+                WetRadius(jj,in)=WetRadius(jj,in)+1
+                ShrinkCount(jj,in)=0
+              ElseIf(CanShrink.eq.1.and.WetRadius(jj,in).gt.0) then
+                ShrinkCount(jj,in)=ShrinkCount(jj,in)+1
+                If(ShrinkCount(jj,in).ge.2) then
+                  WetRadius(jj,in)=WetRadius(jj,in)-1
+                  ShrinkCount(jj,in)=0
+                Endif
+              Else
+                ShrinkCount(jj,in)=0
+              Endif
+            Endif
+            ActiveRadius=WetRadius(jj,in)
+            LeftPos=max(1,CenterPos-ActiveRadius)
+            RightPos=min(DripSurfCount,CenterPos+ActiveRadius)
+            ActiveNodes=RightPos-LeftPos+1
+            TotalWidth=0.0
+            Do k=LeftPos,RightPos
+              TotalWidth=TotalWidth+Width(DripSurfBnd(k))
+            EndDo
+            If(TotalWidth.le.0.0) Stop 'Invalid drip wetted width'
             SourceRate=wAppl(jj)/PERIOD
             SourceDemandFlux=SourceRate*Width(CenterBnd)
             SourceFlux=SourceDemandFlux*PressureFactor
-            AddRate=SourceFlux/TotalWidth
-            DemandRate=SourceDemandFlux/TotalWidth
-            LossRate=(SourceDemandFlux-SourceFlux)/TotalWidth
-            Do k=LeftPos,RightPos
-              DripRate(DripSurfBnd(k))=DripRate(DripSurfBnd(k))+AddRate
-              DripDemand_Rate(DripSurfBnd(k))=
-     !          DripDemand_Rate(DripSurfBnd(k))+DemandRate
-              DripPressureLoss_Rate(DripSurfBnd(k))=
-     !          DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
-            EndDo
+            If(DripSpreadMode(jj).eq.1) then
+              HalfWidth=0.5*Width(CenterBnd)
+              Do k=LeftPos,RightPos
+                TestNode=DripSurfNode(k)
+                DistX=abs(x(TestNode)-x(SourceNode))+
+     !            0.5*Width(DripSurfBnd(k))
+                HalfWidth=amax1(HalfWidth,DistX)
+              EndDo
+              WeightSum=0.0
+              Do k=LeftPos,RightPos
+                TestNode=DripSurfNode(k)
+                DistX=abs(x(TestNode)-x(SourceNode))
+                NodeWeight=amax1(0.0,1.0-DistX/HalfWidth)
+                WeightSum=WeightSum+
+     !            NodeWeight*Width(DripSurfBnd(k))
+              EndDo
+              If(WeightSum.le.DripTol) then
+                WeightSum=TotalWidth
+                Do k=LeftPos,RightPos
+                  AddRate=SourceFlux/TotalWidth
+                  DemandRate=SourceDemandFlux/TotalWidth
+                  LossRate=(SourceDemandFlux-SourceFlux)/TotalWidth
+                  DripRate(DripSurfBnd(k))=
+     !              DripRate(DripSurfBnd(k))+AddRate
+                  DripDemand_Rate(DripSurfBnd(k))=
+     !              DripDemand_Rate(DripSurfBnd(k))+DemandRate
+                  DripPressureLoss_Rate(DripSurfBnd(k))=
+     !              DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                EndDo
+              Else
+                Do k=LeftPos,RightPos
+                  TestNode=DripSurfNode(k)
+                  DistX=abs(x(TestNode)-x(SourceNode))
+                  NodeWeight=amax1(0.0,1.0-DistX/HalfWidth)
+                  AddRate=SourceFlux*NodeWeight/WeightSum
+                  DemandRate=SourceDemandFlux*NodeWeight/WeightSum
+                  LossRate=(SourceDemandFlux-SourceFlux)*
+     !              NodeWeight/WeightSum
+                  DripRate(DripSurfBnd(k))=
+     !              DripRate(DripSurfBnd(k))+AddRate
+                  DripDemand_Rate(DripSurfBnd(k))=
+     !              DripDemand_Rate(DripSurfBnd(k))+DemandRate
+                  DripPressureLoss_Rate(DripSurfBnd(k))=
+     !              DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                EndDo
+              Endif
+            Else
+              AddRate=SourceFlux/TotalWidth
+              DemandRate=SourceDemandFlux/TotalWidth
+              LossRate=(SourceDemandFlux-SourceFlux)/TotalWidth
+              Do k=LeftPos,RightPos
+                DripRate(DripSurfBnd(k))=
+     !            DripRate(DripSurfBnd(k))+AddRate
+                DripDemand_Rate(DripSurfBnd(k))=
+     !            DripDemand_Rate(DripSurfBnd(k))+DemandRate
+                DripPressureLoss_Rate(DripSurfBnd(k))=
+     !            DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+              EndDo
+            Endif
             DripWetNodes_StepSum=DripWetNodes_StepSum+
      !        dble(ActiveNodes)
             DripWetNodes_StepMax=dmax1(DripWetNodes_StepMax,
@@ -396,8 +485,124 @@
         If(tAppl_stop(jj).gt.time+0.001*Step) then
           NextTime=amin1(NextTime,tAppl_stop(jj))
         Endif
+        If(DripSpreadMode(jj).eq.1) then
+          Do i=2,9
+            CurveTime=tAppl_start(jj)+DripCurveHour(i)/24.0
+            If(CurveTime.gt.time+0.001*Step.and.
+     !        CurveTime.lt.tAppl_stop(jj)) then
+              NextTime=amin1(NextTime,CurveTime)
+            Endif
+          EndDo
+        Endif
       EndDo
       tNext(ModNum)=NextTime
       Return
 20    Stop 'Drip data error'
+      End
+
+      Integer Function DripFieldCount(Line)
+      Character*(*) Line
+      Integer i,LineLen
+      Logical InField
+
+      DripFieldCount=0
+      InField=.False.
+      LineLen=Len(Line)
+      Do i=1,LineLen
+        If(Line(i:i).ne.' '.and.Line(i:i).ne.Char(9)) then
+          If(.not.InField) then
+            DripFieldCount=DripFieldCount+1
+            InField=.True.
+          Endif
+        Else
+          InField=.False.
+        Endif
+      EndDo
+      Return
+      End
+
+      Real Function DripCurveHour(Index)
+      Integer Index
+
+      DripCurveHour=0.0
+      If(Index.eq.2) DripCurveHour=0.03
+      If(Index.eq.3) DripCurveHour=0.05
+      If(Index.eq.4) DripCurveHour=0.10
+      If(Index.eq.5) DripCurveHour=0.20
+      If(Index.eq.6) DripCurveHour=0.30
+      If(Index.eq.7) DripCurveHour=0.50
+      If(Index.eq.8) DripCurveHour=1.00
+      If(Index.eq.9) DripCurveHour=2.00
+      Return
+      End
+
+      Real Function DripTargetWidth(MaxWetWidth,ElapsedHours)
+      Real MaxWetWidth,ElapsedHours,HydTime(9),HydWidth(9)
+      Real Progress
+      Integer i
+
+      DripTargetWidth=0.0
+      If(MaxWetWidth.le.0.0) Return
+      If(ElapsedHours.le.0.0) Return
+
+      If(abs(MaxWetWidth-16.3).le.0.5) then
+        HydTime(1)=0.0
+        HydWidth(1)=0.0
+        HydTime(2)=0.03
+        HydWidth(2)=8.26
+        HydTime(3)=0.05
+        HydWidth(3)=10.86
+        HydTime(4)=0.10
+        HydWidth(4)=13.46
+        HydTime(5)=0.20
+        HydWidth(5)=15.52
+        HydTime(6)=0.30
+        HydWidth(6)=16.30
+        HydTime(7)=0.50
+        HydWidth(7)=16.58
+        HydTime(8)=1.00
+        HydWidth(8)=16.30
+        HydTime(9)=2.00
+        HydWidth(9)=16.30
+      ElseIf(abs(MaxWetWidth-39.7).le.0.5) then
+        HydTime(1)=0.0
+        HydWidth(1)=0.0
+        HydTime(2)=0.03
+        HydWidth(2)=5.74
+        HydTime(3)=0.05
+        HydWidth(3)=12.34
+        HydTime(4)=0.10
+        HydWidth(4)=20.32
+        HydTime(5)=0.20
+        HydWidth(5)=25.24
+        HydTime(6)=0.30
+        HydWidth(6)=28.56
+        HydTime(7)=0.50
+        HydWidth(7)=32.16
+        HydTime(8)=1.00
+        HydWidth(8)=35.68
+        HydTime(9)=2.00
+        HydWidth(9)=39.70
+      Else
+        Progress=amin1(1.0,ElapsedHours/2.0)
+        DripTargetWidth=MaxWetWidth*sqrt(Progress)
+        Return
+      Endif
+
+      If(ElapsedHours.ge.HydTime(9)) then
+        DripTargetWidth=HydWidth(9)
+      Else
+        Do i=2,9
+          If(ElapsedHours.le.HydTime(i)) then
+            Progress=(ElapsedHours-HydTime(i-1))/
+     !        (HydTime(i)-HydTime(i-1))
+            DripTargetWidth=HydWidth(i-1)+
+     !        Progress*(HydWidth(i)-HydWidth(i-1))
+            GoTo 10
+          Endif
+        EndDo
+10      Continue
+      Endif
+      DripTargetWidth=amax1(0.0,amin1(MaxWetWidth,DripTargetWidth))
+      Return
       End

@@ -162,7 +162,7 @@ DEFAULT_SCENARIOS = (
         name="long_low_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.03 1 "
-            "0 0 1 0 0 {wet_width_max_cm:g}"
+            "0 0 1 0 0 {wet_width_max_cm:g} 1"
         ),
         node_line=" 7",
     ),
@@ -170,7 +170,7 @@ DEFAULT_SCENARIOS = (
         name="long_multi_node",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.02 3 "
-            "0 0 1 0 0 {wet_width_max_cm:g}"
+            "0 0 1 0 0 {wet_width_max_cm:g} 1"
         ),
         node_line=" 6 7 8",
     ),
@@ -178,7 +178,7 @@ DEFAULT_SCENARIOS = (
         name="long_high_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.08 1 "
-            "0 0 1 0 0 {wet_width_max_cm:g}"
+            "0 0 1 0 0 {wet_width_max_cm:g} 1"
         ),
         node_line=" 7",
     ),
@@ -186,7 +186,7 @@ DEFAULT_SCENARIOS = (
         name="long_pressure_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.08 1 "
-            "1 1.0 1.0 0.0 0.0 {wet_width_max_cm:g}"
+            "1 1.0 1.0 0.0 0.0 {wet_width_max_cm:g} 1"
         ),
         node_line=" 7",
         pressure_reference="long_high_single",

@@ -23,6 +23,7 @@ from da_framework.drip_regression import write_soil_file
 from da_framework.hydrus_drip_calibration import DRIP_WET_WIDTH_FALLBACK_CM
 from da_framework.hydrus_drip_calibration import HYDRUS_SURFACE_DRIP_TARGETS
 from da_framework.hydrus_drip_calibration import calibrated_drip_wet_width_max_cm
+from da_framework.hydrus_drip_calibration import hydrus_surface_drip_width_cm
 
 
 class DripRegressionTests(unittest.TestCase):
@@ -58,10 +59,32 @@ class DripRegressionTests(unittest.TestCase):
         loam_line = render_drip_event_line(scenario, DEFAULT_SOILS[0])
         clay_line = render_drip_event_line(scenario, DEFAULT_SOILS[2])
 
-        self.assertTrue(sandy_line.endswith("16.3"))
-        self.assertTrue(loam_line.endswith("39.7"))
-        self.assertTrue(clay_line.endswith("20"))
+        self.assertTrue(sandy_line.endswith("16.3 1"))
+        self.assertTrue(loam_line.endswith("39.7 1"))
+        self.assertTrue(clay_line.endswith("20 1"))
         self.assertNotIn("{wet_width_max_cm", sandy_line)
+
+    def test_hydrus_surface_drip_width_curve_interpolates(self):
+        self.assertAlmostEqual(
+            hydrus_surface_drip_width_cm("sandy_loam", 0.3),
+            16.3,
+        )
+        self.assertAlmostEqual(
+            hydrus_surface_drip_width_cm("loam", 0.05),
+            12.34,
+        )
+        self.assertGreater(
+            hydrus_surface_drip_width_cm("loam", 1.0),
+            hydrus_surface_drip_width_cm("loam", 0.3),
+        )
+        self.assertAlmostEqual(
+            hydrus_surface_drip_width_cm(
+                "clay_loam",
+                0.5,
+                wet_width_max_cm=20.0,
+            ),
+            10.0,
+        )
 
     def test_write_soil_file_replaces_material_row(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_soil_") as tmp_dir:

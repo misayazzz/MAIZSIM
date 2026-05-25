@@ -48,6 +48,7 @@ class DripEvent:
     pressure_pc_min_cm: float = 0.0
     pressure_pc_max_cm: float = 0.0
     wet_width_max_cm: float = 0.0
+    spread_mode: int = 0
 
     @property
     def duration_hours(self):
@@ -169,6 +170,7 @@ def parse_drip_file(path):
                 pressure_pc_min_cm=event["pressure_pc_min_cm"],
                 pressure_pc_max_cm=event["pressure_pc_max_cm"],
                 wet_width_max_cm=event["wet_width_max_cm"],
+                spread_mode=event["spread_mode"],
             )
         )
 
@@ -318,12 +320,13 @@ def build_public_comparison_report_skeleton(
 
 def _parse_event_line(line, event_index, path):
     tokens = _split_tokens(line)
-    if len(tokens) not in (6, 11, 12):
+    if len(tokens) not in (6, 11, 12, 13):
         raise ValueError(
-            f"Drip event {event_index + 1} in {path} must have 6, 11, or 12 fields: "
+            f"Drip event {event_index + 1} in {path} must have 6, 11, 12, or 13 fields: "
             "start_date, start_hour, stop_date, stop_hour, rate_cm_hr, "
             "node_count[, pressure_mode, pressure_head_cm, pressure_exponent, "
-            "pressure_pc_min_cm, pressure_pc_max_cm[, wet_width_max_cm]]"
+            "pressure_pc_min_cm, pressure_pc_max_cm[, wet_width_max_cm"
+            "[, spread_mode]]]"
         )
     start_date, start_hour, stop_date, stop_hour, rate, node_count = tokens[:6]
     pressure_mode = 0
@@ -332,7 +335,8 @@ def _parse_event_line(line, event_index, path):
     pressure_pc_min_cm = 0.0
     pressure_pc_max_cm = 0.0
     wet_width_max_cm = 0.0
-    if len(tokens) in (11, 12):
+    spread_mode = 0
+    if len(tokens) in (11, 12, 13):
         pressure_mode = _parse_int(tokens[6], "pressure_mode", event_index)
         pressure_head_cm = _parse_float(tokens[7], "pressure_head_cm", event_index)
         pressure_exponent = _parse_float(
@@ -350,12 +354,14 @@ def _parse_event_line(line, event_index, path):
             "pressure_pc_max_cm",
             event_index,
         )
-    if len(tokens) == 12:
+    if len(tokens) in (12, 13):
         wet_width_max_cm = _parse_float(
             tokens[11],
             "wet_width_max_cm",
             event_index,
         )
+    if len(tokens) == 13:
+        spread_mode = _parse_int(tokens[12], "spread_mode", event_index)
     start = _combine_date_hour(start_date, start_hour, event_index, "start")
     stop = _combine_date_hour(stop_date, stop_hour, event_index, "stop")
     if stop <= start:
@@ -394,6 +400,10 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
+    if spread_mode not in (0, 1):
+        raise ValueError(
+            f"Drip event {event_index + 1} spread_mode must be 0 or 1"
+        )
 
     return {
         "start": start,
@@ -406,6 +416,7 @@ def _parse_event_line(line, event_index, path):
         "pressure_pc_min_cm": pressure_pc_min_cm,
         "pressure_pc_max_cm": pressure_pc_max_cm,
         "wet_width_max_cm": wet_width_max_cm,
+        "spread_mode": spread_mode,
     }
 
 

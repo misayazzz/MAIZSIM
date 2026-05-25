@@ -34,6 +34,11 @@ WET_WIDTH_MAX_FIELDS = (
     "wetwidthmax",
     "wetwidthmaxcm",
 )
+SPREAD_MODE_FIELDS = (
+    "dripspreadmode",
+    "spreadmode",
+    "wettingmode",
+)
 
 
 def is_blank(value):
@@ -215,8 +220,11 @@ def normalize_drip_record(run_id, record, require_distance):
     pressure_pc_min = parse_optional_float(record, PRESSURE_PC_MIN_FIELDS, context, "DripPcMin", 0.0)
     pressure_pc_max = parse_optional_float(record, PRESSURE_PC_MAX_FIELDS, context, "DripPcMax", 0.0)
     wet_width_max = parse_optional_float(record, WET_WIDTH_MAX_FIELDS, context, "DripWetWidthMax", 0.0)
+    spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
     if pressure_mode not in (0, 1, 2):
         raise ConfigError(f"{context} 的 DripMode 必须是 0、1 或 2: {pressure_mode}")
+    if spread_mode not in (0, 1):
+        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0 或 1: {spread_mode}")
     if pressure_mode > 0 and pressure_head <= 0:
         raise ConfigError(f"{context} 的 DripHIn 在 DripMode>0 时必须大于 0.")
     if pressure_exp <= 0:
@@ -240,6 +248,7 @@ def normalize_drip_record(run_id, record, require_distance):
         "pressure_pc_min": pressure_pc_min,
         "pressure_pc_max": pressure_pc_max,
         "wet_width_max": wet_width_max,
+        "spread_mode": spread_mode,
     }
     if require_distance:
         event["distance"] = parse_float(get_cell(record, "distance", context, "Distance"), context, "Distance")
@@ -356,7 +365,8 @@ def write_drip_file(path, events):
         f" {len(events)} ",
         (
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes "
-            "DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax"
+            "DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax "
+            "DripSpreadMode"
         ),
     ]
     for event in events:
@@ -369,7 +379,11 @@ def write_drip_file(path, events):
             format_number(event["rate"]),
             str(len(nodes)),
         ]
-        if event.get("pressure_mode", 0) != 0 or event.get("wet_width_max", 0.0) > 0.0:
+        if (
+            event.get("pressure_mode", 0) != 0
+            or event.get("wet_width_max", 0.0) > 0.0
+            or event.get("spread_mode", 0) != 0
+        ):
             fields.extend(
                 [
                     str(event["pressure_mode"]),
@@ -379,8 +393,10 @@ def write_drip_file(path, events):
                     format_number(event["pressure_pc_max"]),
                 ]
             )
-            if event.get("wet_width_max", 0.0) > 0.0:
+            if event.get("wet_width_max", 0.0) > 0.0 or event.get("spread_mode", 0) != 0:
                 fields.append(format_number(event["wet_width_max"]))
+            if event.get("spread_mode", 0) != 0:
+                fields.append(str(event["spread_mode"]))
         lines.append(
             " ".join(fields)
         )
