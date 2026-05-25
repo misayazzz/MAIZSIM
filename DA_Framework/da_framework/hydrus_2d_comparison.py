@@ -149,6 +149,9 @@ def compare_theta_fields(
     maizsim_baseline=None,
     hydrus_baseline=None,
     wet_delta_threshold=0.005,
+    drip_x_cm=None,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
 ):
     """Compare MAIZSIM theta against HYDRUS theta on HYDRUS reference points."""
     hydrus_points = _standard_field(hydrus, "hydrus")
@@ -182,7 +185,15 @@ def compare_theta_fields(
 
     metrics = _field_metrics(points)
     if "delta_theta_residual" in points.columns:
-        metrics.update(_delta_metrics(points, wet_delta_threshold))
+        metrics.update(
+            _delta_metrics(
+                points,
+                wet_delta_threshold,
+                drip_x_cm=drip_x_cm,
+                drip_source_left_cm=drip_source_left_cm,
+                drip_source_right_cm=drip_source_right_cm,
+            )
+        )
     return FieldComparison(metrics=metrics, points=points)
 
 
@@ -332,13 +343,6 @@ def main(arguments=None):
             "Both HYDRUS and MAIZSIM baseline fields are required "
             "for delta comparison."
         )
-    comparison = compare_theta_fields(
-        maizsim,
-        hydrus,
-        maizsim_baseline=maizsim_baseline,
-        hydrus_baseline=hydrus_baseline,
-        wet_delta_threshold=args.wet_delta_threshold,
-    )
     drip_x_cm = _arg_or_manifest(args.drip_x_cm, manifest, "drip_x_cm")
     drip_source_left_cm = _arg_or_manifest(
         args.drip_source_left_cm,
@@ -351,6 +355,16 @@ def main(arguments=None):
         "drip_source_right_cm",
     )
     _validate_drip_annotation_args(drip_source_left_cm, drip_source_right_cm)
+    comparison = compare_theta_fields(
+        maizsim,
+        hydrus,
+        maizsim_baseline=maizsim_baseline,
+        hydrus_baseline=hydrus_baseline,
+        wet_delta_threshold=args.wet_delta_threshold,
+        drip_x_cm=drip_x_cm,
+        drip_source_left_cm=drip_source_left_cm,
+        drip_source_right_cm=drip_source_right_cm,
+    )
     outputs = write_comparison_outputs(
         comparison,
         args.output_dir,
@@ -383,7 +397,14 @@ def _field_metrics(points):
     }
 
 
-def _delta_metrics(points, threshold):
+def _delta_metrics(
+    points,
+    threshold,
+    *,
+    drip_x_cm=None,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
+):
     weights = _weights(points)
     residual = points["delta_theta_residual"].to_numpy(dtype=float)
     hydrus_delta = points["hydrus_delta_theta"].to_numpy(dtype=float)
@@ -393,7 +414,7 @@ def _delta_metrics(points, threshold):
     intersection = hydrus_wet & maizsim_wet
     union = hydrus_wet | maizsim_wet
     union_area = float(weights[union].sum())
-    return {
+    metrics = {
         "delta_theta_mae": _weighted_mean(np.abs(residual), weights),
         "delta_theta_rmse": float(np.sqrt(_weighted_mean(residual * residual, weights))),
         "delta_theta_bias": _weighted_mean(residual, weights),
@@ -411,6 +432,52 @@ def _delta_metrics(points, threshold):
         "maizsim_wet_depth_cm": _max_or_zero(points.loc[maizsim_wet, "depth_cm"]),
         "peak_delta_distance_cm": _peak_distance(points),
     }
+    if drip_x_cm is not None:
+        hydrus_source_wet = _source_connected_wet_mask(
+            points,
+            hydrus_wet,
+            drip_x_cm=drip_x_cm,
+            drip_source_left_cm=drip_source_left_cm,
+            drip_source_right_cm=drip_source_right_cm,
+        )
+        maizsim_source_wet = _source_connected_wet_mask(
+            points,
+            maizsim_wet,
+            drip_x_cm=drip_x_cm,
+            drip_source_left_cm=drip_source_left_cm,
+            drip_source_right_cm=drip_source_right_cm,
+        )
+        source_intersection = hydrus_source_wet & maizsim_source_wet
+        source_union = hydrus_source_wet | maizsim_source_wet
+        source_union_area = float(weights[source_union].sum())
+        metrics.update(
+            {
+                "hydrus_source_wet_area_cm2": float(weights[hydrus_source_wet].sum()),
+                "maizsim_source_wet_area_cm2": float(weights[maizsim_source_wet].sum()),
+                "source_wet_intersection_area_cm2": float(
+                    weights[source_intersection].sum()
+                ),
+                "source_wet_union_area_cm2": source_union_area,
+                "source_wet_iou": float(
+                    weights[source_intersection].sum() / source_union_area
+                )
+                if source_union_area > 0.0
+                else 0.0,
+                "hydrus_source_wet_width_cm": _span(
+                    points.loc[hydrus_source_wet, "x_cm"]
+                ),
+                "maizsim_source_wet_width_cm": _span(
+                    points.loc[maizsim_source_wet, "x_cm"]
+                ),
+                "hydrus_source_wet_depth_cm": _max_or_zero(
+                    points.loc[hydrus_source_wet, "depth_cm"]
+                ),
+                "maizsim_source_wet_depth_cm": _max_or_zero(
+                    points.loc[maizsim_source_wet, "depth_cm"]
+                ),
+            }
+        )
+    return metrics
 
 
 def _interpolate_to_points(source, target):
@@ -427,6 +494,60 @@ def _interpolate_to_points(source, target):
         target["depth_cm"].to_numpy(dtype=float),
     )
     return np.ma.filled(values, np.nan)
+
+
+def _source_connected_wet_mask(
+    points,
+    wet_mask,
+    *,
+    drip_x_cm,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
+):
+    wet = np.asarray(wet_mask, dtype=bool)
+    result = np.zeros(len(points), dtype=bool)
+    wet_indices = np.flatnonzero(wet)
+    if len(wet_indices) == 0:
+        return result
+
+    x_values = points["x_cm"].to_numpy(dtype=float)
+    depth_values = points["depth_cm"].to_numpy(dtype=float)
+    candidate_indices = wet_indices
+    if drip_source_left_cm is not None and drip_source_right_cm is not None:
+        left = float(drip_source_left_cm)
+        right = float(drip_source_right_cm)
+        in_source = wet & (x_values >= left) & (x_values <= right)
+        if in_source.any():
+            candidate_indices = np.flatnonzero(in_source)
+
+    seed_scores = (
+        np.abs(x_values[candidate_indices] - float(drip_x_cm))
+        + depth_values[candidate_indices]
+    )
+    seed = int(candidate_indices[int(np.argmin(seed_scores))])
+    adjacency = _triangulation_adjacency(points)
+    stack = [seed]
+    result[seed] = True
+    while stack:
+        current = stack.pop()
+        for neighbor in adjacency[current]:
+            if wet[neighbor] and not result[neighbor]:
+                result[neighbor] = True
+                stack.append(neighbor)
+    return result
+
+
+def _triangulation_adjacency(points):
+    triangulation = mtri.Triangulation(
+        points["x_cm"].to_numpy(dtype=float),
+        points["depth_cm"].to_numpy(dtype=float),
+    )
+    adjacency = [set() for _ in range(len(points))]
+    for left, middle, right in triangulation.triangles:
+        adjacency[left].update((middle, right))
+        adjacency[middle].update((left, right))
+        adjacency[right].update((left, middle))
+    return adjacency
 
 
 def _tri_contour(ax, points, column, *, cmap, vmin, vmax):

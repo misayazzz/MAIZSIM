@@ -1,0 +1,141 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+try:
+    from . import context  # noqa: F401
+except ImportError:
+    import context  # noqa: F401
+from da_framework.hydrus_aligned_validation import (
+    HydrusBoundary,
+    read_hydrus_boundary_text,
+    write_maizsim_drip_file,
+    write_maizsim_grid_from_hydrus,
+)
+from da_framework.hydrus_official_export import (
+    HydrusDimensions,
+    HydrusMesh,
+    HydrusOfficialProject,
+    HydrusThetaOutput,
+)
+
+
+class HydrusAlignedValidationTests(unittest.TestCase):
+    def test_read_hydrus_boundary_text_joins_mesh_and_roles(self):
+        mesh = _project().mesh
+        boundary = read_hydrus_boundary_text(
+            "\n".join(
+                [
+                    "Node Number Array",
+                    " 1 2 3",
+                    "Width Array",
+                    " 0.5 4.0 2.5",
+                    "Length of soil surface associated with transpiration",
+                ]
+            ),
+            mesh,
+        )
+
+        self.assertEqual(list(boundary.nodes["node"]), [1, 2, 3])
+        np.testing.assert_allclose(boundary.nodes["width"], [0.5, 4.0, 2.5])
+        self.assertEqual(
+            list(boundary.nodes["boundary_role"]),
+            ["surface", "bottom", "surface"],
+        )
+
+    def test_write_maizsim_grid_from_hydrus_preserves_axisym_widths(self):
+        project = _project()
+        boundary = HydrusBoundary(
+            nodes=pd.DataFrame(
+                {
+                    "node": [1, 2, 3],
+                    "width": [0.5, 4.0, 2.5],
+                    "x_cm": [0.0, 0.0, 10.0],
+                    "z_cm": [10.0, 0.0, 10.0],
+                    "depth_cm": [0.0, 10.0, 0.0],
+                    "boundary_role": ["surface", "bottom", "surface"],
+                }
+            )
+        )
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_aligned_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.grd"
+
+            write_maizsim_grid_from_hydrus(project, boundary, path)
+
+            text = path.read_text(encoding="utf-8")
+
+        self.assertIn("  1     3     1     3     10     1", text)
+        self.assertIn("    1   -4", text)
+        self.assertIn("    2   -2", text)
+        self.assertIn("NSeep\n 1\nNSP(1)\n 1", text)
+        self.assertIn("0.5", text)
+        self.assertIn("2.5", text)
+
+    def test_write_maizsim_drip_file_uses_precision_mode_and_source_node(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            write_maizsim_drip_file(path, source, 123.45, 21.9)
+
+            text = path.read_text(encoding="utf-8")
+
+        self.assertIn("DripSpreadMode", text)
+        self.assertIn("123.45", text)
+        self.assertIn(" 0 0 1 0 0 ", text)
+        self.assertIn("21.9 1", text)
+        self.assertTrue(text.rstrip().endswith("7"))
+
+    def test_write_maizsim_drip_file_can_request_direct_split(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            write_maizsim_drip_file(
+                path,
+                source,
+                123.45,
+                28.0,
+                drip_source_depth_cm=18.5,
+                drip_mode=3,
+            )
+
+            text = path.read_text(encoding="utf-8")
+
+        self.assertIn("123.45 1 3 0 1 0 18.5 28", text)
+
+
+def _project():
+    nodes = pd.DataFrame(
+        {
+            "node": [1, 2, 3],
+            "x_cm": [0.0, 0.0, 10.0],
+            "z_cm": [10.0, 0.0, 10.0],
+            "depth_cm": [0.0, 10.0, 0.0],
+            "area_cm2": [5.0, 5.0, 5.0],
+        }
+    )
+    elements = pd.DataFrame(
+        {
+            "element": [1],
+            "node1": [1],
+            "node2": [2],
+            "node3": [3],
+        }
+    )
+    return HydrusOfficialProject(
+        dimensions=HydrusDimensions(3, 1, 3, 1, 0),
+        mesh=HydrusMesh(nodes=nodes, elements=elements),
+        theta_output=HydrusThetaOutput(
+            times_h=np.asarray([0.0]),
+            theta=np.asarray([[0.2, 0.2, 0.2]]),
+        ),
+        selector_metadata={"kat": 1, "project_name": "mini"},
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

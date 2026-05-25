@@ -92,6 +92,7 @@ C   Routine calculations
 C       
 
 11    continue 
+      If(DripBypassWaterMover.eq.1) Return
       tOld = Time
       t=Time
       dt=Step

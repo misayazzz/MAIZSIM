@@ -149,6 +149,29 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(comparison.metrics["maizsim_wet_area_cm2"], 2.0)
         self.assertAlmostEqual(comparison.metrics["peak_delta_distance_cm"], 0.0)
 
+    def test_compare_theta_fields_reports_source_connected_wet_body(self):
+        hydrus = _component_field(theta=[0.30, 0.30, 0.20, 0.20, 0.30, 0.30])
+        maizsim = hydrus.copy()
+        baseline = _component_field(theta=[0.20] * 6)
+
+        comparison = compare_theta_fields(
+            maizsim,
+            hydrus,
+            maizsim_baseline=baseline,
+            hydrus_baseline=baseline,
+            wet_delta_threshold=0.05,
+            drip_x_cm=0.0,
+            drip_source_left_cm=0.0,
+            drip_source_right_cm=2.0,
+        )
+
+        self.assertAlmostEqual(comparison.metrics["maizsim_wet_width_cm"], 100.0)
+        self.assertAlmostEqual(
+            comparison.metrics["maizsim_source_wet_width_cm"],
+            0.0,
+        )
+        self.assertAlmostEqual(comparison.metrics["source_wet_iou"], 1.0)
+
     def test_read_comparison_manifest_requires_same_condition_keys(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
             path = Path(tmp_dir) / "manifest.json"
@@ -213,6 +236,17 @@ def _field(theta, area=None):
             "depth_cm": [0.0, 0.0, 10.0, 10.0],
             "theta": theta,
             "area_cm2": area,
+        }
+    )
+
+
+def _component_field(theta):
+    return pd.DataFrame(
+        {
+            "x_cm": [0.0, 0.0, 10.0, 10.0, 100.0, 100.0],
+            "depth_cm": [0.0, 10.0, 0.0, 10.0, 0.0, 10.0],
+            "theta": theta,
+            "area_cm2": [1.0] * 6,
         }
     )
 

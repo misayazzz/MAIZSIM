@@ -248,15 +248,10 @@ def read_hydrus_theta_output(path, node_count):
 
 def read_official_project(project_dir=None, project_file=None):
     """Read an official HYDRUS project from an extracted directory or OLE file."""
-    if (project_dir is None) == (project_file is None):
-        raise ValueError("Pass exactly one of project_dir or project_file.")
-    if project_dir is not None:
-        streams = _load_project_streams_from_dir(Path(project_dir))
-        project_name = Path(project_dir).name
-    else:
-        streams = _load_project_streams_from_file(Path(project_file))
-        project_name = Path(project_file).stem
-
+    streams, project_name = read_official_project_streams(
+        project_dir=project_dir,
+        project_file=project_file,
+    )
     dimensions = read_hydrus_dimensions_text(_decode_text(streams["DIMENSIO.IN"]))
     selector_metadata = {}
     if "SELECTOR.IN" in streams:
@@ -268,12 +263,30 @@ def read_official_project(project_dir=None, project_file=None):
         dimensions.node_count,
     )
     _validate_selector_times(theta_output, selector_metadata)
+    if int(selector_metadata.get("kat", -1)) == 1:
+        mesh.nodes["axisym_volume_cm3"] = _nodal_axisymmetric_volumes(
+            mesh.nodes,
+            mesh.elements,
+        )
     return HydrusOfficialProject(
         dimensions=dimensions,
         mesh=mesh,
         theta_output=theta_output,
         selector_metadata=selector_metadata,
     )
+
+
+def read_official_project_streams(project_dir=None, project_file=None):
+    """Read raw HYDRUS project streams and return ``(streams, project_name)``."""
+    if (project_dir is None) == (project_file is None):
+        raise ValueError("Pass exactly one of project_dir or project_file.")
+    if project_dir is not None:
+        streams = _load_project_streams_from_dir(Path(project_dir))
+        project_name = Path(project_dir).name
+    else:
+        streams = _load_project_streams_from_file(Path(project_file))
+        project_name = Path(project_file).stem
+    return streams, project_name
 
 
 def theta_frame_dataframe(mesh, theta_output, time_h=None):
@@ -284,10 +297,14 @@ def theta_frame_dataframe(mesh, theta_output, time_h=None):
         frame["z_cm"] = mesh.nodes["z_cm"]
     frame["time_h"] = float(theta_output.times_h[index])
     frame["theta"] = theta_output.theta[index]
+    if "axisym_volume_cm3" in mesh.nodes.columns:
+        frame["axisym_volume_cm3"] = mesh.nodes["axisym_volume_cm3"]
     columns = ["node", "time_h", "x_cm"]
     if "z_cm" in frame.columns:
         columns.append("z_cm")
     columns.extend(["depth_cm", "theta", "area_cm2"])
+    if "axisym_volume_cm3" in frame.columns:
+        columns.append("axisym_volume_cm3")
     return frame[columns]
 
 
@@ -587,6 +604,23 @@ def _nodal_areas(nodes, elements):
     if not np.all(areas > 0.0):
         raise ValueError("Computed non-positive nodal areas from HYDRUS mesh.")
     return areas
+
+
+def _nodal_axisymmetric_volumes(nodes, elements):
+    xy = nodes[["x_cm", "depth_cm"]].to_numpy(dtype=float)
+    conn = elements[["node1", "node2", "node3"]].to_numpy(dtype=int) - 1
+    volumes = np.zeros(len(nodes), dtype=float)
+    for tri in conn:
+        p0, p1, p2 = xy[tri]
+        edge1 = p1 - p0
+        edge2 = p2 - p0
+        area = 0.5 * abs(edge1[0] * edge2[1] - edge1[1] * edge2[0])
+        radius = float(np.mean(xy[tri, 0]))
+        volume = 2.0 * np.pi * radius * area
+        volumes[tri] += volume / 3.0
+    if not np.all(volumes >= 0.0):
+        raise ValueError("Computed negative axisymmetric nodal volumes.")
+    return volumes
 
 
 def _span(values):

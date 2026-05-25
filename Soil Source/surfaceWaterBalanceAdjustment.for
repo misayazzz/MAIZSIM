@@ -249,6 +249,7 @@ cccz ***************************************************************************
 
 C if we have ponded water for infiltration, runoff will not need to be calculated
         if ((PondingByFlux.eq.1).or.(PondingByHead.eq.1)) return
+        if (DripBypassRunoff.eq.1) return
       
 cccz sometime the program go backwards, then we should avoid multiple computation of runoff
 cccz the simplist way is to track the time and do nothing if the time moves backwards
@@ -391,7 +392,7 @@ cccz because it either lower than current point, or its left point.
             if(slopeCoord(k,2).ge.slopeCoord(k+1,2).or.
      &        BaseLeft.gt.slopeCoord(k+1,2)) then
             else
-cccz if "if condition" is true, k+1 “maybe” a local bounday for pools
+cccz if "if condition" is true, k+1 "maybe" a local bounday for pools
 cccz but the pool now is so large that it can already pass the k+1 and 
 cccz go left further
 cccz so k+1 is not the left boundary of the pool we want
