@@ -16,7 +16,8 @@ c Drip water and diagnostics since the last surface output print.
      !        DripPressureFactor_StepSum,
      !        DripPressureFactor_StepMin,DripDiag_StepCount
        Real DripInput_Rate(NumBPD),DripDemand_Rate(NumBPD),
-     !      DripPressureLoss_Rate(NumBPD),DripSource_Rate(NumNPD)
+     !      DripPressureLoss_Rate(NumBPD),
+     !      DripPressureLimit_Rate(NumBPD),DripSource_Rate(NumNPD)
        Integer DripBypassRunoff,DripBypassWaterMover
        Common /DripOutput/ DripInput_Flux,DripDemand_Flux,
      !        DripPressureLoss_Flux,DripHydraulicExcess_Flux,
@@ -30,7 +31,8 @@ c Drip water and diagnostics since the last surface output print.
      !        DripPressureFactor_StepSum,
      !        DripPressureFactor_StepMin,DripDiag_StepCount,
      !        DripInput_Rate,DripDemand_Rate,DripPressureLoss_Rate,
-     !        DripSource_Rate,DripBypassRunoff,DripBypassWaterMover
+     !        DripPressureLimit_Rate,DripSource_Rate,
+     !        DripBypassRunoff,DripBypassWaterMover
 
 
 cccz the following blocks are used for surface runoff

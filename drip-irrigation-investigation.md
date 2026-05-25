@@ -22,6 +22,7 @@
 - 二维对比图已经标出滴头中心和地表滴灌源区，并在HYDRUS/MAIZSIM增湿图上叠加同一`Delta theta`阈值对应的湿润锋轮廓。输出中同时给出全局湿润区指标和“与滴头连通的湿润体”指标，避免少数远端临界湿点把宽度误读成全域铺开。
 - 自动输出阈值敏感性CSV和PNG，用`Delta theta = 0.002/0.005/0.010/0.020/0.050`检查宽度、深度和IoU是否依赖单一阈值。
 - G05输出新增`DripSourceInput`和`DripSourceLoss`，用于核对`DripSpreadMode=1`源项分配层面的水量闭合。最新Drip1/Drip2重跑显示，当前源项分配层面`DripDemand = DripSourceInput + DripSourceLoss`，且`SourceLoss=0`；因此Drip1约`0.70 L`储水不足不是源区容量直接拒水造成的，而是当前工程标定和HYDRUS二维水动力过程仍有差异。
+- 新增`DripSpreadMode=2`作为压力头受限边界原型：滴灌水以地表通量进入`WaterMover`，并只对滴灌激活边界启用`hNew >= 0`时的`CodeW=4, h=0`湿端压力限制。低流量烟测可跑通，但官方`2 L/h` Drip2仍会超时，说明该模式只是第一步，还缺HYDRUS式同一步超额通量重分配和稳定子步控制。
 
 当前可以谨慎说：MAIZSIM已经具备与官方HYDRUS SurfaceDrip二维场做同条件短时对照的工具链，并且Drip1/Drip2第一版对照结果在湿润面积、深度、交并比和轴对称储水增量上已进入可分析范围。
 
@@ -55,6 +56,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `wAppl`：输入单位`cm/h`，Fortran内部换算为`cm/day`。
 - `DripSpreadMode=0`：旧的入渗受限触发扩展模式。
 - `DripSpreadMode=1`：HYDRUS SurfaceDrip宽度标定模式。
+- `DripSpreadMode=2`：压力头受限地表边界原型。该模式把滴灌写入`DripRate -> VarBW -> Q -> CodeW=-4`路径，由`WaterMover`求解；若滴灌激活节点在入渗通量下达到`hNew >= 0`，则切换为`CodeW=4, h=0`压力头边界。
 - `DripWetWidthMax`：地表最大湿润半径或宽度口径，取决于几何。`KAT=1`且滴头在轴线时按径向半径`[0,R]`解释。
 - `DripMode=1/2`：压力补偿模式，要求`DripHIn>0`。
 - `DripMode=3`：直接形态分配模式，不走压力补偿公式，允许`DripHIn=0`，`DripPcMax`作为直接源项深度。
@@ -79,6 +81,14 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DripMode=3`的直接分配现在按源区节点剩余孔隙容量迭代重分配，不再在某些浅层节点达到饱和上限时直接丢掉超额水。
 - `DripMode=3`的源区体积不再是简单几何体积，而是径向权重和深度权重加权后的有效源区体积。越靠近滴头、越靠近地表的节点权重越高；远端和较深节点仍可入水，但不会和滴头附近节点等量分配。
 - `DripMode=3`的源项水量诊断会写入G05：`DripSourceInput`表示成功分配给源区节点的水量，`DripSourceLoss`表示源区容量不足后仍未分配的水量。当前Drip1/Drip2短时算例中`DripSourceLoss=0`。
+
+压力边界原型的最新状态：
+
+- `DripSpreadMode=2`不设置`DripBypassWaterMover`，也不直接改`hNew/ThNew`。
+- 新增`DripPressureLimit_Rate`，只标记`DripSpreadMode=2`写入的滴灌边界。这样湿端压力限制不会影响普通降雨、普通地表灌溉或自动灌溉。
+- `WaterMover`在滴灌激活的`CodeW=-4`节点上，如果求解过程中`hNew >= 0`，会切换为`CodeW=4, h=0`；对已经切到`CodeW=4`且仍贴近`h=0`的节点加入小滞回，避免马上回跳到通量边界。
+- `QAct`实际边界通量统计已覆盖`CodeW=4`，否则压力边界节点会缺少实际入渗诊断。
+- 当前仍没有同一步内的HYDRUS主动集重分配：若单个滴头节点不能接纳指定通量，超额水不会在同一个求解步内自动分给相邻地表节点并重解。这就是官方`2 L/h`算例仍不稳定的主要原因。
 
 ### Python工具链
 
@@ -252,6 +262,7 @@ G05源项诊断：
 - 把`DripSpreadMode=1`改成纯地表边界通量，让WaterMover/压力求解自己消纳滴灌通量。Drip2短时算例在`240 s`超时，说明当前求解链不能直接承受这个SurfaceDrip式边界路线。
 - 把滴灌作为WaterMover源项注入，而不是直接更新`theta`。Drip2同样超时，说明仅把水移到WaterMover源项并不能自动得到稳定的HYDRUS式湿润体。
 - 另做过`DripMode=3`不旁路WaterMover的Drip1实验：储水量从`3.278 L`轻微改善到`3.348 L`，但二维形态明显变差，连通IoU从`0.880`降到`0.687`，湿润深度变为`25.586 cm`，超过HYDRUS的`18.476 cm`。因此没有采用这条路线。
+- 新增`DripSpreadMode=2`后，Drip2在低流量`0.0002 L/h`下能完成，用于证明新边界路径和验证工具链可运行；但`0.002 L/h`和官方`2 L/h`仍会在滴灌开始后明显缩步并超时。这说明当前瓶颈不是输入格式，而是缺少HYDRUS式超额通量重分配和更稳定的子步/主动集策略。
 
 因此当前保留的是稳定、可验证的工程标定版本；若目标是精细二维湿润体，真正的下一步不是继续调一个经验宽度，而是实现可收敛的压力头受限边界迭代和自适应子步长。
 
@@ -318,7 +329,7 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 
 结果：
 
-- 94个测试通过。
+- 95个测试通过。
 
 官方HYDRUS同条件验证脚本：
 
@@ -343,6 +354,7 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 中期：
 
 - 实现更接近HYDRUS的压力头受限边界迭代，而不是只用目标宽度或直接分配。这个迭代需要根据地表节点压力头、可接纳通量和局部水量守恒动态扩展或收缩源区。
+- 在`DripSpreadMode=2`基础上补同一步主动集：求解中心滴头节点实际入渗量，计算超额通量，分配到相邻地表节点，更新边界条件并重解，直到超额水被接纳、进入地表滞留/径流，或达到明确的稳定退出条件。
 - 增加自适应子步长，避免低渗透性土壤下通量过大导致数值不稳。
 - 用更多HYDRUS工程或论文数据覆盖砂土、壤砂土、粉壤土、黏壤土、黏土等质地。不要只按土壤名称标定，应按`theta_r`、`theta_s`、`alpha`、`n`、`Ks`和初始含水状态分组。
 - 若目标转为地下滴灌，应新增地下源项或内部边界，不能复用地表`DripSpreadMode=1`。
@@ -366,6 +378,7 @@ pixi run --manifest-path pixi.toml python -m unittest discover -s DA_Framework\t
 - Drip1轴对称储水增量低于HYDRUS约`0.70 L`，Drip2低约`0.13 L`。
 - G05源项分配诊断显示当前Drip1/Drip2短时算例在MAIZSIM源项层面闭合，且没有`DripSourceLoss`。
 - 当前结果显示滴灌确实改变二维水分场，并且图中已标出滴灌位置和地表源区。
+- 已新增`DripSpreadMode=2`压力边界原型，但只能声称“边界通量路径已接通并通过低流量烟测”，不能声称官方HYDRUS流量下已经稳定或形态通过。
 
 ## 参考资料
 

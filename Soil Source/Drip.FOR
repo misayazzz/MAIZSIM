@@ -112,6 +112,7 @@
           DripInput_Rate(i)=0.0
           DripDemand_Rate(i)=0.0
           DripPressureLoss_Rate(i)=0.0
+          DripPressureLimit_Rate(i)=0.0
           DripSurfNode(i)=0
           DripSurfBnd(i)=0
         EndDo
@@ -218,7 +219,7 @@
           If(DripWetWidthMax(i).lt.0.0) then
             Stop 'Invalid drip wetted width limit'
           Endif
-          If(DripSpreadMode(i).lt.0.or.DripSpreadMode(i).gt.1) then
+          If(DripSpreadMode(i).lt.0.or.DripSpreadMode(i).gt.2) then
             Stop 'Invalid drip spread mode'
           Endif
           Read(40,*,Err=20)
@@ -258,6 +259,7 @@
         DripInput_Rate(i)=0.0
         DripDemand_Rate(i)=0.0
         DripPressureLoss_Rate(i)=0.0
+        DripPressureLimit_Rate(i)=0.0
       EndDo
       Do i=1,NumNP
         DripSource_Rate(i)=0.0
@@ -852,6 +854,10 @@ c remaining water after source saturation is reported as capacity loss.
      !            DripDemand_Rate(DripSurfBnd(k))+DemandRate
                 DripPressureLoss_Rate(DripSurfBnd(k))=
      !            DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                If(DripSpreadMode(jj).eq.2) then
+                  DripPressureLimit_Rate(DripSurfBnd(k))=
+     !              DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
+                Endif
               EndDo
             Endif
             DripWetNodes_StepSum=DripWetNodes_StepSum+

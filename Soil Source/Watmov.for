@@ -352,6 +352,11 @@ c   Critical surface pressure on the soil-atmosphere surface
 c   valid for evaporation only
 c
          If (K.eq.4) then
+            If (DripPressureLimit_Rate(i).gt.0.0.and.Q(n).gt.0.0
+     &          .and.hNew(n).ge.-1.0E-4) then
+              hNew(n)=0.0
+              Goto 3131
+            Endif
             If (abs(Q(n)).gt.abs(-VarBW(i,3)*Width(i))
      &                          .or.Q(n)*(-VarBW(i,3)).le.0) then
               CodeW(n)=-4
@@ -369,10 +374,12 @@ c
               hNew(n)=hCritA
                Goto 3131
             Endif
-c            If (hNew(n).ge.hCritS) then
-c              CodeW(n)=4
-c              hNew(n)=hCritS
-c           Endif
+            If (DripPressureLimit_Rate(i).gt.0.0.and.Q(n).gt.0.0
+     &          .and.hNew(n).ge.0.0) then
+              CodeW(n)=4
+              hNew(n)=0.0
+              Goto 3131
+            Endif
          Endif
 3131     continue
 c
@@ -616,7 +623,8 @@ c  hNew will always be the same as hOld?
       
 cdt - calculate actual boundary fluxes to see what we have
       Do 1299 n=1,NumNP
-        If ((CodeW(n).eq.-4).or.(CodeW(n).eq.1)) then
+        If ((CodeW(n).eq.-4).or.(CodeW(n).eq.4).or.
+     !      (CodeW(n).eq.1)) then
         QN=B_1(n)+DS(n)+F(n)*(ThNew(n)-ThOld_1(n))/dt 
            do 1199 j=1,IADN(n)
               QN=QN+A_1(j,n)*hNew(IAD(j,n))
@@ -677,6 +685,9 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
           DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
           DripExcess=dmin1(DripExcess,DripPotential)
+          If(DripPressureLimit_Rate(k).gt.0.0) then
+            RO(i)=amax1(RO(i),sngl(DripExcess))
+          Endif
           DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
      !      DripExcess*Step
         Endif

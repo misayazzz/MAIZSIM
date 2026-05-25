@@ -245,12 +245,26 @@ class MaizsimDripInputTests(unittest.TestCase):
             self.assertIn("DripSpreadMode", lines[3])
             self.assertTrue(lines[4].endswith("16.3 1"))
 
-    def test_spread_mode_must_be_supported(self):
-        record = _drip_record()
-        record["dripspreadmode"] = 2
+    def test_pressure_limited_spread_mode_is_written(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_spread2_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            record = _drip_record(distance=10)
+            record["dripspreadmode"] = 2
 
-        with self.assertRaisesRegex(ConfigError, "DripSpreadMode"):
-            validate_drip_records_for_run("TEST", [record], [])
+            write_run_drip_file(
+                {
+                    "id": "TEST",
+                    "drip_records": [record],
+                    "drip_node_records": [],
+                },
+                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+            )
+
+            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(lines[4].endswith("0 0 1 0 0 0 2"))
 
 
 if __name__ == "__main__":

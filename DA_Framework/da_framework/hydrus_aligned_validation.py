@@ -89,6 +89,8 @@ def prepare_hydrus_aligned_runs(
     wet_delta_threshold=0.005,
     output_time_h=None,
     emitter_rate_l_h=None,
+    drip_mode_override=None,
+    drip_spread_mode=1,
 ):
     """Create baseline and drip MAIZSIM runs aligned to one official HYDRUS project."""
     repo = _resolve_repo_root(repo_root)
@@ -118,7 +120,8 @@ def prepare_hydrus_aligned_runs(
         wet_delta_threshold=wet_delta_threshold,
     )
     ks_cm_h = float(selector.get("soil_hydraulic_parameters", {}).get("ks_cm_h", 1.0))
-    use_direct_split = ks_cm_h < 2.0
+    drip_spread_mode = int(drip_spread_mode)
+    use_direct_split = ks_cm_h < 2.0 and drip_spread_mode == 1
     drip_radius_cm = (
         float(hydrus_metrics["wet_width_cm"])
         if use_direct_split
@@ -135,6 +138,8 @@ def prepare_hydrus_aligned_runs(
         else 0.0
     )
     drip_mode = 3 if use_direct_split else 0
+    if drip_mode_override is not None:
+        drip_mode = int(drip_mode_override)
     rate_l_h = (
         float(emitter_rate_l_h)
         if emitter_rate_l_h is not None
@@ -165,6 +170,7 @@ def prepare_hydrus_aligned_runs(
         drip_radius_cm,
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
+        drip_spread_mode=drip_spread_mode,
     )
     write_maizsim_drip_file(
         baseline_dir / "LOAM2D.drp",
@@ -173,6 +179,7 @@ def prepare_hydrus_aligned_runs(
         drip_radius_cm,
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
+        drip_spread_mode=drip_spread_mode,
     )
 
     manifest = {
@@ -200,6 +207,7 @@ def prepare_hydrus_aligned_runs(
         "drip_wet_radius_cm": drip_radius_cm,
         "drip_source_depth_cm": drip_source_depth_cm,
         "drip_mode": drip_mode,
+        "drip_spread_mode": drip_spread_mode,
         "hydrus_threshold_wet_width_cm": float(hydrus_metrics["wet_width_cm"]),
         "hydrus_threshold_wet_depth_cm": float(hydrus_metrics["wet_depth_cm"]),
         "wet_delta_threshold": float(wet_delta_threshold),
@@ -221,6 +229,9 @@ def run_hydrus_aligned_validation(
     repo_root=None,
     prefix=None,
     wet_delta_threshold=0.005,
+    emitter_rate_l_h=None,
+    drip_mode_override=None,
+    drip_spread_mode=1,
     timeout_seconds=180,
 ):
     """Prepare runs, execute MAIZSIM, and write HYDRUS/MAIZSIM 2D comparisons."""
@@ -231,6 +242,9 @@ def run_hydrus_aligned_validation(
         repo_root=repo_root,
         prefix=prefix,
         wet_delta_threshold=wet_delta_threshold,
+        emitter_rate_l_h=emitter_rate_l_h,
+        drip_mode_override=drip_mode_override,
+        drip_spread_mode=drip_spread_mode,
     )
     _run_model_checked(prepared.baseline_dir, timeout_seconds=timeout_seconds)
     _run_model_checked(prepared.drip_dir, timeout_seconds=timeout_seconds)
@@ -717,6 +731,7 @@ def write_maizsim_drip_file(
     *,
     drip_source_depth_cm=0.0,
     drip_mode=0,
+    drip_spread_mode=1,
 ):
     """Write one precision drip event or a zero-event baseline."""
     if w_appl_cm_h <= 0.0:
@@ -735,7 +750,8 @@ def write_maizsim_drip_file(
             (
                 f"'{INITIAL_DATE}' {EVENT_START_HOUR:g} '{FINAL_DATE}' {EVENT_STOP_HOUR:g} "
                 f"{w_appl_cm_h:.10g} 1 {int(drip_mode)} 0 1 0 "
-                f"{float(drip_source_depth_cm):.10g} {drip_radius_cm:.10g} 1"
+                f"{float(drip_source_depth_cm):.10g} {drip_radius_cm:.10g} "
+                f"{int(drip_spread_mode)}"
             ),
             "Drip application nodes",
             f" {int(source['node'])}",
@@ -874,7 +890,10 @@ def main(arguments=None):
         repo_root=args.repo_root,
         prefix=args.prefix,
         wet_delta_threshold=args.wet_delta_threshold,
+        emitter_rate_l_h=args.emitter_rate_l_h,
         timeout_seconds=args.timeout_seconds,
+        drip_mode_override=args.drip_mode,
+        drip_spread_mode=args.drip_spread_mode,
     )
     if arguments is None:
         print(json.dumps(outputs, indent=2))
@@ -893,6 +912,9 @@ def _parse_args(arguments):
     parser.add_argument("--repo-root")
     parser.add_argument("--prefix")
     parser.add_argument("--wet-delta-threshold", type=float, default=0.005)
+    parser.add_argument("--emitter-rate-l-h", type=float)
+    parser.add_argument("--drip-mode", type=int)
+    parser.add_argument("--drip-spread-mode", type=int, default=1)
     parser.add_argument("--timeout-seconds", type=float, default=180)
     return parser.parse_args(arguments)
 

@@ -221,12 +221,12 @@ def normalize_drip_record(run_id, record, require_distance):
     pressure_pc_max = parse_optional_float(record, PRESSURE_PC_MAX_FIELDS, context, "DripPcMax", 0.0)
     wet_width_max = parse_optional_float(record, WET_WIDTH_MAX_FIELDS, context, "DripWetWidthMax", 0.0)
     spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
-    if pressure_mode not in (0, 1, 2):
-        raise ConfigError(f"{context} 的 DripMode 必须是 0、1 或 2: {pressure_mode}")
-    if spread_mode not in (0, 1):
-        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0 或 1: {spread_mode}")
-    if pressure_mode > 0 and pressure_head <= 0:
-        raise ConfigError(f"{context} 的 DripHIn 在 DripMode>0 时必须大于 0.")
+    if pressure_mode not in (0, 1, 2, 3):
+        raise ConfigError(f"{context} 的 DripMode 必须是 0、1、2 或 3: {pressure_mode}")
+    if spread_mode not in (0, 1, 2):
+        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、1 或 2: {spread_mode}")
+    if pressure_mode in (1, 2) and pressure_head <= 0:
+        raise ConfigError(f"{context} 的 DripHIn 在 DripMode=1/2 时必须大于 0.")
     if pressure_exp <= 0:
         raise ConfigError(f"{context} 的 DripExp 必须大于 0: {pressure_exp}")
     if pressure_pc_min < 0 or pressure_pc_max < 0:

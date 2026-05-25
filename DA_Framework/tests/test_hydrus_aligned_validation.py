@@ -109,6 +109,23 @@ class HydrusAlignedValidationTests(unittest.TestCase):
 
         self.assertIn("123.45 1 3 0 1 0 18.5 28", text)
 
+    def test_write_maizsim_drip_file_can_request_pressure_spread_mode(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            write_maizsim_drip_file(
+                path,
+                source,
+                123.45,
+                0.0,
+                drip_spread_mode=2,
+            )
+
+            text = path.read_text(encoding="utf-8")
+
+        self.assertIn("123.45 1 0 0 1 0 0 0 2", text)
+
     def test_write_threshold_sensitivity_outputs_writes_csv_and_png(self):
         hydrus = _theta_field([0.20, 0.20, 0.30, 0.20])
         maizsim = _theta_field([0.20, 0.20, 0.28, 0.22])
