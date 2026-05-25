@@ -2,7 +2,7 @@
 
 记录日期：2026-05-24
 
-最新更新：2026-05-25
+最新更新：2026-05-26
 
 ## 当前结论
 
@@ -113,6 +113,8 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `clay_loam`不是HYDRUS标定值，只是为了继续覆盖低导水率入渗受限场景的fallback。
 - 若`DripWetWidthMax`接近`16.3 cm`或`39.7 cm`，Fortran使用固化的HYDRUS时间-宽度表插值。
 - 其它宽度走保守fallback：`MaxWetWidth * sqrt(累计有效供水小时数 / 2 h)`，再截断到`MaxWetWidth`。
+- 数字化曲线已落盘到`DA_Framework/reference/hydrus_surface_drip_digitized_targets.csv`；单元测试会检查该CSV与代码中的`HYDRUS_SURFACE_DRIP_WIDTH_CURVES_CM`一致，避免后续硬编码曲线和可复核源表漂移。
+- 注意：这份CSV是Figure 8曲线的第一版人工数字化记录，不是HYDRUS原始节点输出；如果要作为论文级标定，应补充原图截图、轴标定方法、取点工具和数字化误差估计。
 
 ## 已完成验证
 
@@ -222,13 +224,13 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 
 曲线节点覆盖：
 
-- `precision_hydrus_curve_width.csv`记录2种HYDRUS标定土壤、3种网格、8个HYDRUS曲线时间节点，共48条连续目标宽度、域裁剪宽度、旧完整段宽度和新部分覆盖宽度记录。
-- `precision_surface_partial_coverage.csv`逐边界段记录`segment_left_cm`、`segment_right_cm`、`covered_width_cm`、`covered_fraction`、`node_weight`和`flux_fraction`，用于核对边缘段覆盖比例和通量比例。
+- `precision_hydrus_curve_width.csv`记录2种HYDRUS标定土壤、3种网格、8个HYDRUS曲线时间节点，共48条连续HYDRUS宽度、Fortran实际目标宽度、域裁剪宽度、旧完整段宽度和新部分覆盖宽度记录。Fortran实际目标宽度会先钳到中心边界段宽度，再截断到`DripWetWidthMax`。
+- `precision_surface_partial_coverage.csv`逐边界段记录`segment_left_cm`、`segment_right_cm`、`covered_width_cm`、`covered_fraction`、`node_weight`和`flux_fraction`，用于核对边缘段覆盖比例和通量比例。这里的“部分覆盖”是有效源区面积权重；MAIZSIM并没有把边界几何真实切成子段，而是在完整边界段上按覆盖比例降低通量密度。
 - `precision_hydrus_curve_model_width.csv`对模型稳定可输出的`0.5 h`、`1.0 h`、`2.0 h`做端到端运行，共18个短时模型算例。
 - 18个短时模型算例中，MAIZSIM实际最大宽度与部分覆盖目标的最大误差为`0.70325 cm`。这是连续宽度曲线与模型时间步/小时输出采样之间的误差，状态为`pass`，当前容差为`0.8 cm`。
 - 2 h短时算例中，MAIZSIM实际最大宽度与部分覆盖目标的最大误差为`0.302 cm`。
 - 逐边界段`flux_fraction`求和最大误差为`1.11e-16`，说明部分覆盖通量分配在验证表中严格归一。
-- 连续HYDRUS目标与部分覆盖目标的最大差值为`11.12875 cm`，状态记为`review`，主要来自滴头靠近有限地表左边界时，壤土`39.7 cm`目标区间被模型边界裁剪，不是水量闭合错误。
+- Fortran实际目标与部分覆盖目标的最大差值为`11.12875 cm`，状态记为`review`，主要来自滴头靠近有限地表左边界时，壤土`39.7 cm`目标区间被模型边界裁剪，不是水量闭合错误。
 
 2 h短时对照结果：
 
@@ -296,7 +298,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 | HYDRUS曲线节点模型宽度最大误差 | `0.70325 cm` | pass |
 | 2 h短时模型宽度最大误差 | `0.302 cm` | pass |
 | 逐边界段通量比例求和最大误差 | `1.11e-16` | pass |
-| 连续HYDRUS宽度未被部分覆盖表达的最大差值 | `11.12875 cm` | review |
+| Fortran实际目标未被部分覆盖表达的最大差值 | `11.12875 cm` | review |
 | 压力补偿活动期宽度回缩算例数 | `0` | pass |
 | 出现压力损失的压力补偿算例数 | `3` | diagnostic |
 | 正增湿二维记录数 | `3` | pass |
@@ -317,6 +319,14 @@ HYDRUS参考CSV的最小字段：
 | `theta` | 体积含水量 | `theta`、`theta_hydrus`、`th`、`swc` |
 | `area_cm2` | 点或单元面积权重，可选 | `area_cm2`、`area`、`weight` |
 
+如果HYDRUS CSV不含`area_cm2`，工具会用`1.0`作为点权重；此时`wet_area`和`wet_iou`只能解释为采样点权重近似，不应写成真实面积。
+
+同条件manifest：
+
+- 可选但强烈建议提供`--comparison-manifest`。
+- 示例文件：`DA_Framework/examples/hydrus_2d_comparison_manifest.example.json`。
+- manifest用于记录HYDRUS工程、MAIZSIM run、土壤水力参数、初始条件、滴头流量、总水量、事件时长、输出时刻、域尺寸、滴头坐标、边界条件和baseline定义。工具会检查这些关键字段是否存在，但不会自动证明它们与两个模型文件完全一致。
+
 直接对比命令示例：
 
 ```powershell
@@ -326,19 +336,26 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_2d
   --date 2007-05-01 `
   --maizsim-baseline-g03 path\to\baseline\LOAM2D.G03 `
   --hydrus-baseline-csv path\to\hydrus_baseline_theta.csv `
+  --comparison-manifest path\to\same_condition_manifest.json `
+  --drip-x-cm 12.1 `
+  --drip-source-left-cm 4.1 `
+  --drip-source-right-cm 20.4 `
   --output-dir tmp\codex_hydrus_2d_field_comparison
 ```
+
+其中`--drip-x-cm`标出滴头中心，`--drip-source-left-cm`和`--drip-source-right-cm`标出地表滴灌源区；三者是绘图标注参数，不参与误差计算。
 
 输出内容：
 
 - `hydrus_2d_comparison_summary.csv`：`theta_mae`、`theta_rmse`、`theta_bias`、`theta_corr`、`delta_theta_rmse`、湿润区面积、湿润区交并比、湿润宽度、湿润深度和峰值距离。
 - `hydrus_2d_comparison_points.csv`：HYDRUS点位、插值后的MAIZSIM值、残差和可选的`Delta theta`残差。
-- `hydrus_2d_comparison_fields.png`：HYDRUS、MAIZSIM和差值三联图。
+- `hydrus_2d_comparison_fields.png`：HYDRUS、MAIZSIM和差值三联图；如果提供滴灌标注参数，图中会用红色虚线和地表线段标出滴头中心和滴灌源区。
+- `hydrus_2d_comparison_manifest.json`：如果提供`--comparison-manifest`，输出目录会复制一份同条件元数据，便于审计。
 
 当前状态：
 
 - 工具链已经具备HYDRUS二维数值场接入口和形态指标计算。
-- 单元测试使用合成场验证了CSV解析、MAIZSIM `G03`深度转换、插值、`theta`误差、湿润区交并比和图像输出。
+- 单元测试使用合成场验证了CSV解析、同条件manifest字段检查、MAIZSIM `G03`深度转换、插值、`theta`误差、湿润区交并比和带滴灌标注的图像输出。
 - 仍缺同条件HYDRUS二维`theta(x,z,t)`数值文件，因此本项目当前还不能声称“HYDRUS二维形态对比通过”。有了HYDRUS导出CSV后，应使用上述模块生成正式对比表和三联图，再更新本节结论。
 
 ### 负向解析验证

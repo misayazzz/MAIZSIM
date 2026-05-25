@@ -201,15 +201,20 @@ def _build_hydrus_curve_targets():
                     elapsed_hours,
                     width_limit,
                 )
+                effective_target_width = _fortran_effective_target_width(
+                    target_width,
+                    widths[7],
+                    width_limit,
+                )
                 coverage = _partial_coverage_at_target(
                     grid_path,
                     center_node=7,
-                    target_width=target_width,
+                    target_width=effective_target_width,
                 )
                 complete_segment_width = _discrete_width_at_or_below_target(
                     grid_path,
                     center_node=7,
-                    target_width=target_width,
+                    target_width=effective_target_width,
                 )
                 rows.append(
                     {
@@ -222,6 +227,9 @@ def _build_hydrus_curve_targets():
                         "surface_left_cm": coverage["surface_left_cm"],
                         "surface_right_cm": coverage["surface_right_cm"],
                         "hydrus_target_width_cm": target_width,
+                        "fortran_effective_target_width_cm": (
+                            effective_target_width
+                        ),
                         "domain_clipped_target_width_cm": coverage[
                             "domain_clipped_target_width_cm"
                         ],
@@ -238,11 +246,16 @@ def _build_hydrus_curve_targets():
                         ],
                         "partial_active_nodes": coverage["partial_active_nodes"],
                         "partial_edge_nodes": coverage["partial_edge_nodes"],
-                        "target_not_expressible_cm": (
-                            target_width - coverage["partial_covered_width_cm"]
+                        "hydrus_target_not_expressible_cm": (
+                            target_width
+                            - coverage["partial_covered_width_cm"]
+                        ),
+                        "fortran_target_not_expressible_cm": (
+                            effective_target_width
+                            - coverage["partial_covered_width_cm"]
                         ),
                         "complete_segment_not_expressible_cm": (
-                            target_width - complete_segment_width
+                            effective_target_width - complete_segment_width
                         ),
                     }
                 )
@@ -266,15 +279,21 @@ def _build_surface_partial_coverage():
                 / "LOAM2D.grd"
             )
             for elapsed_hours in _hydrus_curve_hours(soil.name):
+                widths, _ = grid_surface_widths(grid_path)
                 target_width = hydrus_surface_drip_width_cm(
                     soil.name,
                     elapsed_hours,
                     width_limit,
                 )
+                effective_target_width = _fortran_effective_target_width(
+                    target_width,
+                    widths[7],
+                    width_limit,
+                )
                 coverage = _partial_coverage_at_target(
                     grid_path,
                     center_node=7,
-                    target_width=target_width,
+                    target_width=effective_target_width,
                 )
                 for segment in coverage["segments"]:
                     rows.append(
@@ -282,6 +301,10 @@ def _build_surface_partial_coverage():
                             "soil": soil.name,
                             "grid": grid.name,
                             "elapsed_hours": elapsed_hours,
+                            "hydrus_target_width_cm": target_width,
+                            "fortran_effective_target_width_cm": (
+                                effective_target_width
+                            ),
                             "node": segment["node"],
                             "x_cm": segment["x"],
                             "segment_left_cm": segment["segment_left"],
@@ -337,15 +360,20 @@ def _run_hydrus_curve_cases():
                     elapsed_hours,
                     width_limit,
                 )
+                effective_target_width = _fortran_effective_target_width(
+                    target_width,
+                    widths[7],
+                    width_limit,
+                )
                 coverage = _partial_coverage_at_target(
                     run_dir / "LOAM2D.grd",
                     center_node=7,
-                    target_width=target_width,
+                    target_width=effective_target_width,
                 )
                 complete_segment_width = _discrete_width_at_or_below_target(
                     run_dir / "LOAM2D.grd",
                     center_node=7,
-                    target_width=target_width,
+                    target_width=effective_target_width,
                 )
                 rows.append(
                     {
@@ -360,6 +388,9 @@ def _run_hydrus_curve_cases():
                         "surface_left_cm": coverage["surface_left_cm"],
                         "surface_right_cm": coverage["surface_right_cm"],
                         "hydrus_target_width_cm": target_width,
+                        "fortran_effective_target_width_cm": (
+                            effective_target_width
+                        ),
                         "domain_clipped_target_width_cm": coverage[
                             "domain_clipped_target_width_cm"
                         ],
@@ -382,11 +413,16 @@ def _run_hydrus_curve_cases():
                         ],
                         "partial_active_nodes": coverage["partial_active_nodes"],
                         "partial_edge_nodes": coverage["partial_edge_nodes"],
-                        "target_not_expressible_cm": (
-                            target_width - coverage["partial_covered_width_cm"]
+                        "hydrus_target_not_expressible_cm": (
+                            target_width
+                            - coverage["partial_covered_width_cm"]
+                        ),
+                        "fortran_target_not_expressible_cm": (
+                            effective_target_width
+                            - coverage["partial_covered_width_cm"]
                         ),
                         "complete_segment_not_expressible_cm": (
-                            target_width - complete_segment_width
+                            effective_target_width - complete_segment_width
                         ),
                         "drip_input_mm": metric.drip_sum_mm,
                         "drip_demand_mm": metric.drip_demand_sum_mm,
@@ -568,7 +604,7 @@ def _build_checks(
     active = case_matrix[case_matrix["scenario"] != "baseline"].copy()
     curve_error_abs_max = float(curve_matrix["width_error_vs_discrete_cm"].abs().max())
     curve_target_unexpressed_abs_max = float(
-        curve_targets["target_not_expressible_cm"].abs().max()
+        curve_targets["fortran_target_not_expressible_cm"].abs().max()
     )
     single_node_cases = float(
         (
@@ -645,11 +681,11 @@ def _build_checks(
             ),
         },
         {
-            "check": "hydrus_curve_target_unexpressed_abs_max_cm",
+            "check": "fortran_target_unexpressed_abs_max_cm",
             "value": curve_target_unexpressed_abs_max,
             "status": "review",
             "detail": (
-                "Continuous HYDRUS target width not expressible after partial "
+                "Fortran effective target width not expressible after partial "
                 "boundary coverage, usually because the target interval reaches "
                 "the modeled surface edge."
             ),
@@ -1109,6 +1145,10 @@ def _discrete_width_at_or_below_target(path, center_node, target_width):
         if width <= target_width + 1.0e-6:
             best = width
     return float(best)
+
+
+def _fortran_effective_target_width(hydrus_target_width, center_width, width_limit):
+    return min(max(float(hydrus_target_width), float(center_width)), float(width_limit))
 
 
 def _partial_coverage_at_target(path, center_node, target_width):

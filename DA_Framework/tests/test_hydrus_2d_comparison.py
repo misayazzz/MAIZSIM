@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ except ImportError:
 from da_framework.hydrus_2d_comparison import (
     compare_theta_fields,
     main,
+    read_comparison_manifest,
     read_hydrus_theta_csv,
     read_maizsim_g03_theta,
 )
@@ -89,6 +91,17 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(comparison.metrics["maizsim_wet_area_cm2"], 2.0)
         self.assertAlmostEqual(comparison.metrics["peak_delta_distance_cm"], 0.0)
 
+    def test_read_comparison_manifest_requires_same_condition_keys(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            path.write_text(
+                json.dumps({"hydrus_project": "SurfaceDrip"}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "missing required keys"):
+                read_comparison_manifest(path)
+
     def test_cli_writes_summary_points_and_figure(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_cli_") as tmp_dir:
             root = Path(tmp_dir)
@@ -96,11 +109,13 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             hydrus_base_path = root / "hydrus_base.csv"
             maizsim_path = root / "LOAM2D.G03"
             maizsim_base_path = root / "baseline.G03"
+            manifest_path = root / "manifest.json"
             output_dir = root / "out"
             _write_hydrus_csv(hydrus_path, [0.20, 0.20, 0.30, 0.20])
             _write_hydrus_csv(hydrus_base_path, [0.20, 0.20, 0.20, 0.20])
             _write_g03(maizsim_path, [0.20, 0.20, 0.28, 0.22])
             _write_g03(maizsim_base_path, [0.20, 0.20, 0.20, 0.20])
+            manifest_path.write_text(json.dumps(_manifest()), encoding="utf-8")
 
             exit_code = main(
                 [
@@ -118,6 +133,8 @@ class Hydrus2DComparisonTests(unittest.TestCase):
                     str(output_dir),
                     "--wet-delta-threshold",
                     "0.05",
+                    "--comparison-manifest",
+                    str(manifest_path),
                 ]
             )
 
@@ -125,6 +142,7 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue((output_dir / "hydrus_2d_comparison_points.csv").exists())
             self.assertTrue((output_dir / "hydrus_2d_comparison_fields.png").exists())
+            self.assertTrue((output_dir / "hydrus_2d_comparison_manifest.json").exists())
             self.assertAlmostEqual(float(summary.loc[0, "wet_iou"]), 1.0)
 
 
@@ -157,6 +175,32 @@ def _write_g03(path, theta):
         path,
         index=False,
     )
+
+
+def _manifest():
+    return {
+        "hydrus_project": "synthetic_surface_drip",
+        "maizsim_run": "synthetic_maizsim",
+        "soil_hydraulic_parameters": {
+            "theta_r": 0.05,
+            "theta_s": 0.40,
+            "alpha_cm_inv": 0.02,
+            "n": 1.4,
+            "ks_cm_h": 2.0,
+        },
+        "initial_condition": "uniform theta=0.20",
+        "emitter_rate_l_h": 2.0,
+        "applied_volume_l": 4.0,
+        "event_duration_h": 2.0,
+        "output_time": "2024-06-01T00:00:00",
+        "domain_width_cm": 10.0,
+        "domain_depth_cm": 10.0,
+        "drip_x_cm": 0.0,
+        "drip_source_left_cm": -2.0,
+        "drip_source_right_cm": 2.0,
+        "boundary_conditions": "synthetic closed side/free drainage bottom",
+        "baseline_definition": "same setup without drip irrigation",
+    }
 
 
 if __name__ == "__main__":

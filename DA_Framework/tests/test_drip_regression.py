@@ -22,8 +22,12 @@ from da_framework.drip_regression import validate_matrix_outputs
 from da_framework.drip_regression import write_soil_file
 from da_framework.hydrus_drip_calibration import DRIP_WET_WIDTH_FALLBACK_CM
 from da_framework.hydrus_drip_calibration import HYDRUS_SURFACE_DRIP_TARGETS
+from da_framework.hydrus_drip_calibration import HYDRUS_SURFACE_DRIP_WIDTH_CURVES_CM
 from da_framework.hydrus_drip_calibration import calibrated_drip_wet_width_max_cm
 from da_framework.hydrus_drip_calibration import hydrus_surface_drip_width_cm
+from da_framework.hydrus_drip_calibration import (
+    read_hydrus_surface_drip_digitized_targets,
+)
 
 
 class DripRegressionTests(unittest.TestCase):
@@ -85,6 +89,21 @@ class DripRegressionTests(unittest.TestCase):
             ),
             10.0,
         )
+
+    def test_hydrus_digitized_reference_csv_matches_code_curve(self):
+        rows = read_hydrus_surface_drip_digitized_targets()
+        grouped = {}
+        for row in rows:
+            grouped.setdefault(row["soil_name"], []).append(
+                (row["elapsed_hours"], row["target_full_wet_width_cm"])
+            )
+
+        self.assertEqual(
+            set(grouped),
+            set(HYDRUS_SURFACE_DRIP_WIDTH_CURVES_CM),
+        )
+        for soil_name, curve in HYDRUS_SURFACE_DRIP_WIDTH_CURVES_CM.items():
+            self.assertEqual(grouped[soil_name], list(curve))
 
     def test_write_soil_file_replaces_material_row(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_soil_") as tmp_dir:

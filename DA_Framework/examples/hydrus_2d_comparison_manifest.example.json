@@ -1,0 +1,23 @@
+{
+  "hydrus_project": "SurfaceDrip_loam_2Lh_4L",
+  "maizsim_run": "LOAM2D_precision_drip_short",
+  "soil_hydraulic_parameters": {
+    "theta_r": 0.078,
+    "theta_s": 0.43,
+    "alpha_cm_inv": 0.036,
+    "n": 1.56,
+    "ks_cm_h": 1.04
+  },
+  "initial_condition": "Record the HYDRUS initial pressure head or theta field and use the equivalent MAIZSIM initial condition.",
+  "emitter_rate_l_h": 2.0,
+  "applied_volume_l": 4.0,
+  "event_duration_h": 2.0,
+  "output_time": "Use the same absolute or event-relative output time in both models.",
+  "domain_width_cm": 40.0,
+  "domain_depth_cm": 55.0,
+  "drip_x_cm": 12.1,
+  "drip_source_left_cm": 4.1,
+  "drip_source_right_cm": 20.4,
+  "boundary_conditions": "Describe top, bottom, and side boundary conditions; note whether root uptake and evaporation are off or matched.",
+  "baseline_definition": "Same soil, initial condition, domain, boundary conditions, and time period without drip irrigation."
+}

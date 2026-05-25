@@ -21,6 +21,23 @@ class FieldComparison:
     points: pd.DataFrame
 
 
+REQUIRED_COMPARISON_MANIFEST_KEYS = (
+    "hydrus_project",
+    "maizsim_run",
+    "soil_hydraulic_parameters",
+    "initial_condition",
+    "emitter_rate_l_h",
+    "applied_volume_l",
+    "event_duration_h",
+    "output_time",
+    "domain_width_cm",
+    "domain_depth_cm",
+    "drip_x_cm",
+    "boundary_conditions",
+    "baseline_definition",
+)
+
+
 def read_hydrus_theta_csv(path):
     """Read a HYDRUS-exported theta field from a CSV file.
 
@@ -56,6 +73,24 @@ def read_hydrus_theta_csv(path):
         result["area_cm2"] = _numeric(frame[area_col], area_col, output_path)
     _validate_field(result, output_path)
     return result
+
+
+def read_comparison_manifest(path):
+    """Read and validate same-condition metadata for a HYDRUS comparison."""
+    input_path = Path(path)
+    manifest = json.loads(input_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Comparison manifest must be a JSON object: {input_path}.")
+    missing = [
+        key
+        for key in REQUIRED_COMPARISON_MANIFEST_KEYS
+        if key not in manifest or manifest[key] in ("", None)
+    ]
+    if missing:
+        raise ValueError(
+            f"Comparison manifest {input_path} is missing required keys: {missing}."
+        )
+    return manifest
 
 
 def read_maizsim_g03_theta(path, date=None):
@@ -131,7 +166,14 @@ def compare_theta_fields(
     return FieldComparison(metrics=metrics, points=points)
 
 
-def plot_comparison(comparison, path):
+def plot_comparison(
+    comparison,
+    path,
+    *,
+    drip_x_cm=None,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
+):
     """Plot HYDRUS, MAIZSIM, and residual fields on HYDRUS reference points."""
     points = comparison.points
     if "hydrus_delta_theta" in points.columns:
@@ -173,6 +215,13 @@ def plot_comparison(comparison, path):
     last = None
     for ax, (column, title), cmap, (vmin, vmax) in zip(axes, columns, cmaps, ranges):
         last = _tri_contour(ax, points, column, cmap=cmap, vmin=vmin, vmax=vmax)
+        _annotate_drip_source(
+            ax,
+            points,
+            drip_x_cm=drip_x_cm,
+            drip_source_left_cm=drip_source_left_cm,
+            drip_source_right_cm=drip_source_right_cm,
+        )
         ax.set_title(title)
         ax.set_xlabel("x (cm)")
     axes[0].set_ylabel("Depth (cm)")
@@ -181,7 +230,16 @@ def plot_comparison(comparison, path):
     plt.close(fig)
 
 
-def write_comparison_outputs(comparison, output_dir, prefix="hydrus_2d_comparison"):
+def write_comparison_outputs(
+    comparison,
+    output_dir,
+    prefix="hydrus_2d_comparison",
+    *,
+    drip_x_cm=None,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
+    comparison_manifest=None,
+):
     """Write summary CSV, point CSV, JSON index, and a comparison figure."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -189,15 +247,28 @@ def write_comparison_outputs(comparison, output_dir, prefix="hydrus_2d_compariso
     points_path = output_path / f"{prefix}_points.csv"
     figure_path = output_path / f"{prefix}_fields.png"
     index_path = output_path / f"{prefix}_outputs.json"
+    manifest_path = output_path / f"{prefix}_manifest.json"
 
     pd.DataFrame([comparison.metrics]).to_csv(summary_path, index=False)
     comparison.points.to_csv(points_path, index=False)
-    plot_comparison(comparison, figure_path)
+    plot_comparison(
+        comparison,
+        figure_path,
+        drip_x_cm=drip_x_cm,
+        drip_source_left_cm=drip_source_left_cm,
+        drip_source_right_cm=drip_source_right_cm,
+    )
     outputs = {
         "summary_csv": str(summary_path),
         "points_csv": str(points_path),
         "figure": str(figure_path),
     }
+    if comparison_manifest is not None:
+        manifest_path.write_text(
+            json.dumps(comparison_manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        outputs["comparison_manifest_json"] = str(manifest_path)
     index_path.write_text(json.dumps(outputs, indent=2), encoding="utf-8")
     return outputs
 
@@ -205,6 +276,11 @@ def write_comparison_outputs(comparison, output_dir, prefix="hydrus_2d_compariso
 def main(arguments=None):
     """Command-line entry point for HYDRUS 2D field comparison."""
     args = _parse_args(arguments)
+    manifest = (
+        read_comparison_manifest(args.comparison_manifest)
+        if args.comparison_manifest
+        else None
+    )
     hydrus = read_hydrus_theta_csv(args.hydrus_csv)
     maizsim = read_maizsim_g03_theta(args.maizsim_g03, args.date)
     hydrus_baseline = (
@@ -229,7 +305,27 @@ def main(arguments=None):
         hydrus_baseline=hydrus_baseline,
         wet_delta_threshold=args.wet_delta_threshold,
     )
-    outputs = write_comparison_outputs(comparison, args.output_dir, args.prefix)
+    drip_x_cm = _arg_or_manifest(args.drip_x_cm, manifest, "drip_x_cm")
+    drip_source_left_cm = _arg_or_manifest(
+        args.drip_source_left_cm,
+        manifest,
+        "drip_source_left_cm",
+    )
+    drip_source_right_cm = _arg_or_manifest(
+        args.drip_source_right_cm,
+        manifest,
+        "drip_source_right_cm",
+    )
+    _validate_drip_annotation_args(drip_source_left_cm, drip_source_right_cm)
+    outputs = write_comparison_outputs(
+        comparison,
+        args.output_dir,
+        args.prefix,
+        drip_x_cm=drip_x_cm,
+        drip_source_left_cm=drip_source_left_cm,
+        drip_source_right_cm=drip_source_right_cm,
+        comparison_manifest=manifest,
+    )
     if arguments is None:
         print(json.dumps(outputs, indent=2))
     return 0
@@ -317,10 +413,75 @@ def _tri_contour(ax, points, column, *, cmap, vmin, vmax):
     return contour
 
 
+def _annotate_drip_source(
+    ax,
+    points,
+    *,
+    drip_x_cm=None,
+    drip_source_left_cm=None,
+    drip_source_right_cm=None,
+):
+    surface_depth = float(points["depth_cm"].min())
+    max_depth = float(points["depth_cm"].max())
+    if drip_x_cm is not None:
+        drip_x = float(drip_x_cm)
+        ax.axvline(drip_x, color="#d62728", linestyle="--", linewidth=0.8)
+        ax.scatter(
+            [drip_x],
+            [surface_depth],
+            marker="v",
+            s=18,
+            color="#d62728",
+            zorder=5,
+        )
+        ax.text(
+            drip_x,
+            surface_depth + 0.04 * max(1.0, max_depth - surface_depth),
+            "drip",
+            color="#d62728",
+            fontsize=6,
+            ha="left",
+            va="top",
+        )
+    if drip_source_left_cm is not None and drip_source_right_cm is not None:
+        left = float(drip_source_left_cm)
+        right = float(drip_source_right_cm)
+        ax.hlines(
+            surface_depth,
+            xmin=left,
+            xmax=right,
+            colors="#d62728",
+            linewidth=1.4,
+            zorder=5,
+        )
+        ax.vlines(
+            [left, right],
+            surface_depth,
+            surface_depth + 0.015 * max(1.0, max_depth - surface_depth),
+            colors="#d62728",
+            linewidth=1.0,
+            zorder=5,
+        )
+
+
 def _standard_field(frame, name):
     result = frame[["x_cm", "depth_cm", "theta", "area_cm2"]].copy()
     _validate_field(result, name)
     return result
+
+
+def _arg_or_manifest(value, manifest, key):
+    if value is not None or manifest is None:
+        return value
+    return manifest.get(key)
+
+
+def _validate_drip_annotation_args(left, right):
+    if (left is None) != (right is None):
+        raise ValueError(
+            "Both drip source endpoints are required: "
+            "--drip-source-left-cm and --drip-source-right-cm."
+        )
 
 
 def _validate_field(frame, source):
@@ -423,6 +584,16 @@ def _parse_args(arguments):
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--prefix", default="hydrus_2d_comparison")
     parser.add_argument("--wet-delta-threshold", type=float, default=0.005)
+    parser.add_argument(
+        "--comparison-manifest",
+        help=(
+            "Optional JSON metadata proving HYDRUS and MAIZSIM were run under "
+            "the same soil, boundary, emitter, and output-time conditions."
+        ),
+    )
+    parser.add_argument("--drip-x-cm", type=float)
+    parser.add_argument("--drip-source-left-cm", type=float)
+    parser.add_argument("--drip-source-right-cm", type=float)
     return parser.parse_args(arguments)
 
 

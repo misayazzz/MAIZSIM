@@ -47,8 +47,9 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 事件总时长为`duration_h = (tAppl_stop - tAppl_start) * 24`。
 - 目标宽度随事件进程单调增加，最大不超过`DripWetWidthMax`。
 - 对已有HYDRUS数字化土壤目标，使用分段线性曲线：
-  - 砂壤土：来自`hydrus_surface_drip_digitized_targets.csv`的`target_full_wet_width_cm`。
+  - 砂壤土：来自`DA_Framework/reference/hydrus_surface_drip_digitized_targets.csv`的`target_full_wet_width_cm`。
   - 壤土：来自同一文件的`target_full_wet_width_cm`。
+- 代码实际目标宽度会先钳到中心地表边界段宽度，再截断到`DripWetWidthMax`；验证表中需要同时保留连续HYDRUS目标和Fortran实际目标。
 - 对无HYDRUS曲线的土壤或普通输入，使用保守幂律：
 
 ```text
@@ -65,6 +66,7 @@ progress = min(1, elapsed_h / reference_duration_h)
 - 目标区间与控制区间求交得到`CoverWidth`；边缘边界段允许部分覆盖。
 - 实际输出宽度为`CoverWidth`之和，而不是完整边界段`Width(k)`之和。
 - 如果HYDRUS目标区间超出模型有限地表范围，实际可表达宽度会被域边界裁剪。
+- 这里的部分覆盖是有效源区权重，不是把MAIZSIM边界几何真实切成子段；边缘完整边界段会按覆盖比例降低通量密度。
 
 ## 通量分配
 
@@ -129,7 +131,8 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 4. 生成逐边界段部分覆盖明细CSV，用于核对`covered_fraction`、`node_weight`和`flux_fraction`。
 5. 生成二维`theta`、`delta theta`、根系叠加和湿润宽度时间序列图。
 6. 增加HYDRUS二维`theta` CSV导入和MAIZSIM `G03`插值对比工具，用于外部HYDRUS数值场到位后的直接对比。
-7. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
+7. 增加同条件manifest入口，用于记录HYDRUS工程、MAIZSIM run、土壤水力参数、初始条件、滴头流量、总水量、输出时刻、边界条件和baseline定义。
+8. 增加图像质量检查：PNG非空、非纯色、滴头标记存在、地表滴灌源区范围标记存在、活动湿润区位于滴头附近。
 
 ## 验证矩阵
 
@@ -149,7 +152,8 @@ sum(DripRate(k) * Width(k)) = SourceFlux
    - 单滴头，2 h，4 L等效输入。
    - 对比实际`DripWetWidthMax`与HYDRUS目标宽度的域裁剪值、旧完整段表达值和新部分覆盖表达值。
    - 输出`theta`和`delta theta`二维图。
-   - 当外部HYDRUS二维CSV可用时，输出`theta`场MAE/RMSE、湿润区交并比、湿润宽度/深度和三联图。
+   - 当外部HYDRUS二维CSV可用时，输出`theta`场MAE/RMSE、湿润区交并比、湿润宽度/深度和带滴灌标注的三联图。
+   - 若HYDRUS CSV缺少单元面积，湿润面积指标只能解释为采样点权重近似；正式报告应优先提供`area_cm2`。
 
 4. 长季节作物算例：
    - 3种土壤、3种网格、至少5类场景。

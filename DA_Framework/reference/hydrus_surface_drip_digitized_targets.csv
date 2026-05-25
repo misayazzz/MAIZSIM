@@ -1,0 +1,19 @@
+soil_name,elapsed_hours,target_full_wet_width_cm,target_saturated_radius_cm,event_duration_h,emitter_rate_l_h,applied_volume_l,source,source_figure,digitization_note
+loam,0.0,0.0,0.0,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.03,5.74,2.87,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.05,12.34,6.17,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.1,20.32,10.16,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.2,25.24,12.62,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.3,28.56,14.28,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,0.5,32.16,16.08,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,1.0,35.68,17.84,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+loam,2.0,39.7,19.85,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.0,0.0,0.0,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.03,8.26,4.13,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.05,10.86,5.43,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.1,13.46,6.73,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.2,15.52,7.76,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.3,16.3,8.15,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,0.5,16.58,8.29,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,1.0,16.3,8.15,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.
+sandy_loam,2.0,16.3,8.15,2.0,2.0,4.0,Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized,Figure 8,First-pass manual digitization of saturated-radius curve; use as MAIZSIM surface-width calibration only.

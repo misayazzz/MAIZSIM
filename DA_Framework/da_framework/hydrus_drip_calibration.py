@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
+from pathlib import Path
 
 
 DRIP_WET_WIDTH_FALLBACK_CM = 20.0
+HYDRUS_SURFACE_DRIP_DIGITIZED_TARGETS_CSV = (
+    Path(__file__).resolve().parents[1]
+    / "reference"
+    / "hydrus_surface_drip_digitized_targets.csv"
+)
 HYDRUS_SURFACE_DRIP_SOURCE = (
     "Lazarovitch_et_al_2023_Fig8_SurfaceDrip_digitized"
 )
@@ -100,6 +107,33 @@ def drip_wet_width_calibration_source(soil_name):
     if target is None:
         return "fallback_no_hydrus_surface_drip_target"
     return target.source
+
+
+def read_hydrus_surface_drip_digitized_targets(path=None):
+    """Read the reference CSV used to document the digitized width curves."""
+    input_path = Path(path) if path is not None else HYDRUS_SURFACE_DRIP_DIGITIZED_TARGETS_CSV
+    rows = []
+    with input_path.open(newline="", encoding="utf-8") as stream:
+        for row in csv.DictReader(stream):
+            rows.append(
+                {
+                    "soil_name": row["soil_name"],
+                    "elapsed_hours": float(row["elapsed_hours"]),
+                    "target_full_wet_width_cm": float(
+                        row["target_full_wet_width_cm"]
+                    ),
+                    "target_saturated_radius_cm": float(
+                        row["target_saturated_radius_cm"]
+                    ),
+                    "event_duration_h": float(row["event_duration_h"]),
+                    "emitter_rate_l_h": float(row["emitter_rate_l_h"]),
+                    "applied_volume_l": float(row["applied_volume_l"]),
+                    "source": row["source"],
+                    "source_figure": row["source_figure"],
+                    "digitization_note": row["digitization_note"],
+                }
+            )
+    return rows
 
 
 def _interpolate_curve(curve, elapsed_hours):
