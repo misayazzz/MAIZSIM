@@ -276,7 +276,8 @@
 
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
-          If(DripSpreadMode(jj).eq.1) DripBypassRunoff=1
+          If(DripSpreadMode(jj).eq.1.or.
+     !      DripSpreadMode(jj).eq.2) DripBypassRunoff=1
           If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
             DripBypassWaterMover=1
           Endif
@@ -357,7 +358,8 @@
               DripLastTime(jj,in)=time
             Endif
             DripLastPressure(jj,in)=PressureFactor
-            If(DripSpreadMode(jj).eq.1) then
+            If(DripSpreadMode(jj).eq.1.or.
+     !        DripSpreadMode(jj).eq.2) then
               MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
               StepHours=amin1(sngl(Step*24.0D0),
      !          sngl((tAppl_stop(jj)-time)*24.0D0))
@@ -369,9 +371,15 @@
               TargetWetWidth=DripTargetWidth(MaxWetWidth,
      !          EffectiveHours)
               MinEffHours=amin1(0.03,MaxEventHours)
-              If(EffectiveHours.lt.MinEffHours.and.
+              If(DripSpreadMode(jj).eq.1.and.
+     !          EffectiveHours.lt.MinEffHours.and.
      !          PressureFactor.gt.0.0) then
                 TargetWetWidth=amax1(TargetWetWidth,MaxWetWidth)
+              ElseIf(DripSpreadMode(jj).eq.2.and.
+     !          EffectiveHours.lt.MinEffHours.and.
+     !          PressureFactor.gt.0.0) then
+                TargetWetWidth=amax1(TargetWetWidth,
+     !            DripTargetWidth(MaxWetWidth,MinEffHours))
               Endif
               TargetWetWidth=amax1(TargetWetWidth,Width(CenterBnd))
               TargetWetWidth=amin1(TargetWetWidth,MaxWetWidth)
@@ -461,7 +469,8 @@
             TotalWidth=0.0
             TotalMeasure=0.0
             ActiveNodes=0
-            If(DripSpreadMode(jj).eq.1) then
+            If(DripSpreadMode(jj).eq.1.or.
+     !        DripSpreadMode(jj).eq.2) then
               If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
                 TargetLeft=0.0
                 TargetRight=TargetWetWidth
@@ -664,7 +673,8 @@ c remaining water after source saturation is reported as capacity loss.
      !          RemainingWater/(Step*Width(CenterBnd))
               Endif
             Endif
-            If(DripSpreadMode(jj).eq.1) then
+            If(DripSpreadMode(jj).eq.1.or.
+     !        DripSpreadMode(jj).eq.2) then
               If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
                 HalfWidth=amax1(TargetWetWidth,DripTol)
               Else
@@ -775,6 +785,10 @@ c remaining water after source saturation is reported as capacity loss.
      !                DripDemand_Rate(DripSurfBnd(k))+DemandRate
                     DripPressureLoss_Rate(DripSurfBnd(k))=
      !                DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                    If(DripSpreadMode(jj).eq.2) then
+                      DripPressureLimit_Rate(DripSurfBnd(k))=
+     !                  DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
+                    Endif
                   Endif
                 EndDo
               Else
@@ -838,6 +852,10 @@ c remaining water after source saturation is reported as capacity loss.
      !                DripDemand_Rate(DripSurfBnd(k))+DemandRate
                     DripPressureLoss_Rate(DripSurfBnd(k))=
      !                DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                    If(DripSpreadMode(jj).eq.2) then
+                      DripPressureLimit_Rate(DripSurfBnd(k))=
+     !                  DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
+                    Endif
                   Endif
                 EndDo
               Endif
@@ -854,10 +872,6 @@ c remaining water after source saturation is reported as capacity loss.
      !            DripDemand_Rate(DripSurfBnd(k))+DemandRate
                 DripPressureLoss_Rate(DripSurfBnd(k))=
      !            DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
-                If(DripSpreadMode(jj).eq.2) then
-                  DripPressureLimit_Rate(DripSurfBnd(k))=
-     !              DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
-                Endif
               EndDo
             Endif
             DripWetNodes_StepSum=DripWetNodes_StepSum+
@@ -928,7 +942,8 @@ c remaining water after source saturation is reported as capacity loss.
         If(tAppl_stop(jj).gt.time+0.001*Step) then
           NextTime=amin1(NextTime,tAppl_stop(jj))
         Endif
-        If(DripSpreadMode(jj).eq.1) then
+        If(DripSpreadMode(jj).eq.1.or.
+     !    DripSpreadMode(jj).eq.2) then
           Do i=2,9
             CurveTime=tAppl_start(jj)+DripCurveHour(i)/24.0
             If(CurveTime.gt.time+0.001*Step.and.

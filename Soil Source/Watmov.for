@@ -11,17 +11,22 @@
       Include 'puplant.ins'
       Include 'puweath.ins'
       include 'PuSurface.ins'
+      Parameter (NTabD=100,NPar=13)
       
       Double precision A,B,C, B_1, A_1
       Double precision dt,dtOld,t,tOld,PI,DPI,F2
-      Double precision DripShare,DripExcess,DripPotential
+      Double precision DripShare,DripExcess,DripPotential,
+     !                 DripDemand,DripActual,DripLoss,DripSatLimit
       real ATG,HSP
 cccz move it to "PuSurface.ins" for public use 
 cccz  Double precision CriticalH, CriticalH_R
       Logical Explic,ItCrit,FreeD
       Real  hOld_1(NumNPD)
       Real Dif(NumNPD)
+      Real BaseQ(NumNPD),BaseHOld(NumNPD)
       Integer trigger_Runoff, p_Runoff
+      Integer BaseCodeW(NumNPD)
+      Logical DripPressureNode(NumNPD)
       Dimension A(MBandD,NumNPD),B(NumNPD),F(NumNPD),DS(NumNPD),
      !    Cap(NumNPD),ListE(NumElD),E(3,3),iLoc(3),Fc(NumNPD),
      !    Sc(NumNPD),B_1(NumNPD),ThOld_1(NumNPD),A_1(MBandD,NumNPD)
@@ -31,6 +36,10 @@ cccz  Double precision CriticalH, CriticalH_R
      !                MaxIt,TolTh,TolH,dt,dtOld,tOld,
      !                thR(NMatD),hSat(NMatD),
      !                isat(NumBPD),FreeD
+      Common /HydPar/ SoilPar(NPar,NMatD),
+     !                hTab(NTabD),ConTab(NTabD,NMatD),
+     !                CapTab(NTabD,NMatD),ConSat(NMatD),
+     !                TheTab(NTabD,NMatD),alh1,dlh
       If (lInput.eq.0) goto 11  
         FreeD=.true.
         CriticalH=5.1D0
@@ -96,7 +105,24 @@ C
       tOld = Time
       t=Time
       dt=Step
-      
+      Do i=1,NumNP
+        BaseQ(i)=Q(i)
+        BaseCodeW(i)=CodeW(i)
+        BaseHOld(i)=hOld(i)
+      Enddo
+
+c
+c   Start of iteration loop
+c
+1111  Iter=0
+      Explic=.false.
+
+      Do i=1,NumNP
+        Q(i)=BaseQ(i)
+        CodeW(i)=BaseCodeW(i)
+        DripPressureNode(i)=.false.
+      Enddo
+
 cccz set the auto irrgation part before the iteration
       do k=1, NumBp
         i=KXB(k)
@@ -105,14 +131,22 @@ cccz set the auto irrgation part before the iteration
            if (Q(i).gt.0.0) CodeW(i)=-4  !cccz make sure bc changes if Qn goes > 0 (infiltration) after adding the autoirrigation
         endif
       enddo
-      
 
-     
-c
-c   Start of iteration loop
-c     
-1111  Iter=0
-      Explic=.false.
+      do k=1, NumBp
+        i=KXB(k)
+        if((abs(CodeW(i)).eq.4).and.
+     &     (DripPressureLimit_Rate(k).gt.0.0)) then
+           DripDemand=dble(DripPressureLimit_Rate(k)*Width(k))
+           DripSatLimit=dble(ConSat(MatNumN(i))*Width(k))
+           if (DripDemand.gt.DripSatLimit) then
+             Q(i)=Q(i)+sngl(DripSatLimit)
+             if (Q(i).gt.0.0) CodeW(i)=-4
+           else
+             Q(i)=Q(i)+DripPressureLimit_Rate(k)*Width(k)
+             if (Q(i).gt.0.0) CodeW(i)=-4
+           endif
+        endif
+      enddo
 
         Fc(:)=0.
         Sc(:)=0.
@@ -551,7 +585,8 @@ C
 C   Save new boundary conditions If any
 C
           Do i=1,NumNP
-            If (CodeW(i).gt.0) hOld(i)=hNew(i)
+            If (CodeW(i).gt.0.and.(.not.DripPressureNode(i)))
+     !        hOld(i)=hNew(i)
           Enddo
 
           Do 618 i=1,NumNP
@@ -680,7 +715,20 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           hNew(i)=CriticalH+h_Pond(k)         ! cccz could be CriticalH_R, but we force it to 
           hOld(i)=hNew(i)
         endif
-        If(DripInput_Rate(k).gt.0.0.and.Q(i).gt.1.0E-5) then
+        If(DripPressureLimit_Rate(k).gt.0.0) then
+          DripDemand=dble(DripPressureLimit_Rate(k)*Width(k))
+          DripActual=dmax1(0.0D0,dble(QAct(i)))
+          DripActual=dmin1(DripActual,DripDemand)
+          DripLoss=dmax1(DripDemand-DripActual,0.0D0)
+          If(Width(k).gt.1.0E-8) then
+            DripInput_Rate(k)=sngl(DripActual/dble(Width(k)))
+          Endif
+          If(DripLoss.gt.0.0D0) then
+            RO(i)=amax1(RO(i),sngl(DripLoss))
+            DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
+     !        DripLoss*Step
+          Endif
+        ElseIf(DripInput_Rate(k).gt.0.0.and.Q(i).gt.1.0E-5) then
           DripPotential=dble(DripInput_Rate(k)*Width(k))
           DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
           DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
