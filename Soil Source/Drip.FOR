@@ -27,13 +27,14 @@
      !     HalfWidth,WeightSum,NodeWeight,DistX,
      !     CurveTime,DripTargetWidth,DripCurveHour,DeltaHours,
      !     MaxEventHours,DripEffHours,DripLastTime,
-     !     DripLastPressure,TargetLeft,TargetRight,
+     !     DripLastPressure,StepHours,TargetLeft,TargetRight,
      !     SegmentLeft,SegmentRight,CoverLeft,CoverRight,
      !     CoverWidth,CoverMeasure,TotalMeasure,DripCoverMeasure,
      !     SourceDepth,SourceVolume,NodeDepth,WaterDepth,
      !     ThetaCur,ThetaTry,ThetaRel,VgM,AlphaVG,NVG,
      !     ThetaR,ThetaS,RemainingWater,AppliedWater,
-     !     CapacityDepth,AddDepth,MaxTheta
+     !     CapacityDepth,AddDepth,MaxTheta,RadialWeight,
+     !     DepthWeight,SourceWeight
       Real Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
       Real DripThOld(NumNPD),DripHTemp(NumNPD),DripHOld(NumNPD)
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
@@ -353,10 +354,16 @@
             Endif
             DripLastPressure(jj,in)=PressureFactor
             If(DripSpreadMode(jj).eq.1) then
-              EffectiveHours=DripEffHours(jj,in)
+              MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
+              StepHours=amin1(sngl(Step*24.0D0),
+     !          sngl((tAppl_stop(jj)-time)*24.0D0))
+              StepHours=amax1(0.0,StepHours)
+              EffectiveHours=DripEffHours(jj,in)+
+     !          StepHours*PressureFactor
+              EffectiveHours=amax1(0.0,
+     !          amin1(EffectiveHours,MaxEventHours))
               TargetWetWidth=DripTargetWidth(MaxWetWidth,
      !          EffectiveHours)
-              MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
               MinEffHours=amin1(0.03,MaxEventHours)
               If(EffectiveHours.lt.MinEffHours.and.
      !          PressureFactor.gt.0.0) then
@@ -553,7 +560,23 @@ c remaining water after source saturation is reported as capacity loss.
                       Endif
                       MaxTheta=ThetaS-1.0E-5
                       If(MaxTheta.gt.ThetaCur+DripTol) then
-                        SourceVolume=SourceVolume+nodeArea(m)
+                        SourceWeight=1.0
+                        If(DripMode(jj).eq.3) then
+                          If(KAT.eq.1.and.
+     !                      abs(x(SourceNode)).le.DripTol) then
+                            DistX=x(m)
+                          Else
+                            DistX=abs(x(m)-x(SourceNode))
+                          Endif
+                          RadialWeight=amax1(0.05,
+     !                    1.0-DistX/amax1(TargetWetWidth,DripTol))
+                          DepthWeight=amax1(0.50,
+     !                    1.0-0.5*NodeDepth/
+     !                    amax1(SourceDepth,DripTol))
+                          SourceWeight=RadialWeight*DepthWeight
+                        Endif
+                        SourceVolume=SourceVolume+
+     !                    nodeArea(m)*SourceWeight
                       Endif
                     Endif
                   Endif
@@ -583,7 +606,23 @@ c remaining water after source saturation is reported as capacity loss.
                         Endif
                         MaxTheta=ThetaS-1.0E-5
                         CapacityDepth=amax1(0.0,MaxTheta-ThetaCur)
-                        AddDepth=amin1(WaterDepth,CapacityDepth)
+                        SourceWeight=1.0
+                        If(DripMode(jj).eq.3) then
+                          If(KAT.eq.1.and.
+     !                      abs(x(SourceNode)).le.DripTol) then
+                            DistX=x(m)
+                          Else
+                            DistX=abs(x(m)-x(SourceNode))
+                          Endif
+                          RadialWeight=amax1(0.05,
+     !                    1.0-DistX/amax1(TargetWetWidth,DripTol))
+                          DepthWeight=amax1(0.50,
+     !                    1.0-0.5*NodeDepth/
+     !                    amax1(SourceDepth,DripTol))
+                          SourceWeight=RadialWeight*DepthWeight
+                        Endif
+                        AddDepth=amin1(WaterDepth*SourceWeight,
+     !                    CapacityDepth)
                         If(AddDepth.gt.DripTol) then
                           ThetaTry=ThetaCur+AddDepth
                           ThetaTry=amax1(ThetaR+1.0E-5,
