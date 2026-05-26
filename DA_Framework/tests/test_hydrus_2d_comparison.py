@@ -174,6 +174,33 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertEqual(int(comparison.points["hydrus_wet"].sum()), 1)
         self.assertEqual(int(comparison.points["maizsim_wet"].sum()), 1)
 
+    def test_compare_theta_fields_uses_nearest_peak_plateau_distance(self):
+        hydrus = _field_at(
+            theta=[0.30, 0.30, 0.20, 0.20],
+            x=[0.0, 10.0, 0.0, 10.0],
+            depth=[0.0, 0.0, 10.0, 10.0],
+        )
+        maizsim = _field_at(
+            theta=[0.31, 0.29, 0.20, 0.20],
+            x=[0.0, 10.0, 0.0, 10.0],
+            depth=[0.0, 0.0, 10.0, 10.0],
+        )
+        baseline = _field_at(
+            theta=[0.20, 0.20, 0.20, 0.20],
+            x=[0.0, 10.0, 0.0, 10.0],
+            depth=[0.0, 0.0, 10.0, 10.0],
+        )
+
+        comparison = compare_theta_fields(
+            maizsim,
+            hydrus,
+            maizsim_baseline=baseline,
+            hydrus_baseline=baseline,
+            wet_delta_threshold=0.05,
+        )
+
+        self.assertAlmostEqual(comparison.metrics["peak_delta_distance_cm"], 0.0)
+
     def test_compare_theta_fields_reports_source_connected_wet_body(self):
         hydrus = _component_field(theta=[0.30, 0.30, 0.20, 0.20, 0.30, 0.30])
         maizsim = hydrus.copy()
@@ -300,6 +327,17 @@ def _field(theta, area=None, volume=None):
     if volume is not None:
         frame["axisym_volume_cm3"] = volume
     return frame
+
+
+def _field_at(theta, x, depth):
+    return pd.DataFrame(
+        {
+            "x_cm": x,
+            "depth_cm": depth,
+            "theta": theta,
+            "area_cm2": [1.0] * len(theta),
+        }
+    )
 
 
 def _component_field(theta):

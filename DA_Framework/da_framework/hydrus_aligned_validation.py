@@ -152,6 +152,8 @@ def prepare_hydrus_aligned_runs(
     duration_h = float(selector.get("t_max_h", 2.0)) - float(selector.get("t_init_h", 0.0))
     source = _source_boundary_node(boundary.nodes)
     source_width = float(source["width"])
+    # KAT=1 uses the HYDRUS axisymmetric boundary integration weight; Drip.FOR
+    # multiplies wAppl by Width, so this recovers the original L/h emitter rate.
     w_appl_cm_h = rate_l_h * 1000.0 / source_width
 
     base_run = repo / BASE_RUN_RELATIVE
@@ -163,6 +165,7 @@ def prepare_hydrus_aligned_runs(
         write_maizsim_soil_file(run_dir / "Loam_200cm.soi", selector)
         write_maizsim_node_file(run_dir / "LOAM2D.nod", project.dimensions.node_count)
         write_maizsim_time_file(run_dir / "LOAM2D.tim")
+        write_zero_weather_header_file(run_dir / "WyeClimate.dat")
         write_zero_weather_file(run_dir / "LOAM2D.wea")
         write_zero_management_file(run_dir / "LOAM2D.man")
         write_no_sprinkler_irrigation_file(run_dir / "LOAM2D.irr")
@@ -674,7 +677,7 @@ def write_maizsim_time_file(path):
 
 
 def write_zero_weather_file(path):
-    """Write near-neutral hourly weather with no rain and minimal evaporation driver."""
+    """Write hourly weather with no rain and no atmospheric evaporation driver."""
     rows = [
         "*** zero-weather HYDRUS-aligned short validation",
         " JDay   Date  Hour     Rad      Temper    rain     Wind   RH   CO2",
@@ -682,8 +685,26 @@ def write_zero_weather_file(path):
     dates = [("117", INITIAL_DATE), ("118", FINAL_DATE)]
     for jday, date in dates:
         for hour in range(1, 25):
-            rows.append(f" {jday} '{date}' {hour} 0 20 0 0 98 380")
+            rows.append(f" {jday} '{date}' {hour} 0 20 0 0 100 380")
     Path(path).write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def write_zero_weather_header_file(path):
+    """Write weather descriptors that let constant temperature imply zero VPD."""
+    lines = [
+        "***STANDARD METEOROLOGICAL DATA  Header file for HYDRUS-aligned no-VPD run",
+        "Latitude Longitude",
+        " 39.02        -76.55 ",
+        "^Daily Bulb T(1) ^ Daily Wind(2) ^RainIntensity(3) ^Daily Conc^(4) ,Furrow(5) ^Rel_humid(6) ^CO2(7)",
+        " 0             0             0             0             0             0             0 ",
+        "Parameters for changing of units: BSOLAR BTEMP ATEMP ERAIN BWIND BIR ",
+        " BSOLAR is 1e6/3600 to go from j m-2 h-1 to wm-2",
+        " 1000000       1             0             0.1           1             1 ",
+        "Average values for the site",
+        "wind    ChemConc     CO2  ",
+        "8 0 380",
+    ]
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_zero_management_file(path):

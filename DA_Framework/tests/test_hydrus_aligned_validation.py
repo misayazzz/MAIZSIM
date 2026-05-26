@@ -16,6 +16,8 @@ from da_framework.hydrus_aligned_validation import (
     write_threshold_sensitivity_outputs,
     write_maizsim_drip_file,
     write_maizsim_grid_from_hydrus,
+    write_zero_weather_header_file,
+    write_zero_weather_file,
 )
 from da_framework.hydrus_official_export import (
     HydrusDimensions,
@@ -125,6 +127,28 @@ class HydrusAlignedValidationTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
 
         self.assertIn("123.45 1 0 0 1 0 0 0 2", text)
+
+    def test_write_zero_weather_file_uses_saturated_air_for_no_evaporation(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_weather_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.wea"
+
+            write_zero_weather_file(path)
+
+            lines = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn("RH", lines[1])
+        self.assertTrue(all(line.split()[-2] == "100" for line in lines[2:]))
+
+    def test_write_zero_weather_header_file_disables_rh_cap(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_weather_") as tmp_dir:
+            path = Path(tmp_dir) / "WyeClimate.dat"
+
+            write_zero_weather_header_file(path)
+
+            lines = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn("Rel_humid", lines[3])
+        self.assertEqual(lines[4].split()[5], "0")
 
     def test_write_threshold_sensitivity_outputs_writes_csv_and_png(self):
         hydrus = _theta_field([0.20, 0.20, 0.30, 0.20])

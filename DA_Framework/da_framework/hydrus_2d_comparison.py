@@ -822,11 +822,27 @@ def _max_or_zero(values):
 
 
 def _peak_distance(points):
-    hydrus_idx = int(points["hydrus_delta_theta"].idxmax())
-    maizsim_idx = int(points["maizsim_delta_theta"].idxmax())
-    dx = float(points.loc[maizsim_idx, "x_cm"] - points.loc[hydrus_idx, "x_cm"])
-    dz = float(points.loc[maizsim_idx, "depth_cm"] - points.loc[hydrus_idx, "depth_cm"])
-    return float(np.hypot(dx, dz))
+    hydrus_delta = points["hydrus_delta_theta"].to_numpy(dtype=float)
+    maizsim_delta = points["maizsim_delta_theta"].to_numpy(dtype=float)
+    hydrus_max = float(np.nanmax(hydrus_delta))
+    maizsim_max = float(np.nanmax(maizsim_delta))
+    hydrus_tol = max(1.0e-9, abs(hydrus_max) * 1.0e-6)
+    maizsim_tol = max(1.0e-9, abs(maizsim_max) * 1.0e-6)
+    hydrus_peaks = points.loc[
+        points["hydrus_delta_theta"] >= hydrus_max - hydrus_tol,
+        ["x_cm", "depth_cm"],
+    ].to_numpy(dtype=float)
+    maizsim_peaks = points.loc[
+        points["maizsim_delta_theta"] >= maizsim_max - maizsim_tol,
+        ["x_cm", "depth_cm"],
+    ].to_numpy(dtype=float)
+    if len(hydrus_peaks) == 0 or len(maizsim_peaks) == 0:
+        return 0.0
+    distances = []
+    for point in maizsim_peaks:
+        delta = hydrus_peaks - point
+        distances.append(float(np.min(np.hypot(delta[:, 0], delta[:, 1]))))
+    return float(min(distances))
 
 
 def _parse_args(arguments):
