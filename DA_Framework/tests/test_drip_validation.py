@@ -257,12 +257,12 @@ class DripValidationTests(unittest.TestCase):
                             "Date,Date_time,DripWetWidthMax,"
                             "DripPressureFactorMin,CumRain,infil,"
                             "DripDemand,DripPressureLoss,"
-                            "DripHydraulicExcess,DripSourceInput,"
-                            "DripSourceLoss,DripWetNodesMean,"
+                            "DripHydraulicExcess,DripActualInfil,"
+                            "DripSourceInput,DripSourceLoss,DripWetNodesMean,"
                             "DripWetNodesMax,DripWetWidthMean,"
                             "DripPressureFactorMean"
                         ),
-                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.8,0.2,2.0,3.0,30.0,0.88",
+                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,2.0,3.0,30.0,0.88",
                     ]
                 )
                 + "\n",
@@ -274,6 +274,7 @@ class DripValidationTests(unittest.TestCase):
         self.assertAlmostEqual(frame["drip_demand_mm"].iloc[0], 5.0)
         self.assertAlmostEqual(frame["drip_pressure_loss_mm"].iloc[0], 0.2)
         self.assertAlmostEqual(frame["drip_hydraulic_excess_mm"].iloc[0], 0.1)
+        self.assertAlmostEqual(frame["drip_actual_infil_mm"].iloc[0], 4.7)
         self.assertAlmostEqual(frame["drip_source_input_mm"].iloc[0], 4.8)
         self.assertAlmostEqual(frame["drip_source_loss_mm"].iloc[0], 0.2)
         self.assertAlmostEqual(frame["drip_wet_nodes_mean"].iloc[0], 2.0)

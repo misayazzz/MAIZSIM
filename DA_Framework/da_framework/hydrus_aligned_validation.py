@@ -91,6 +91,7 @@ def prepare_hydrus_aligned_runs(
     emitter_rate_l_h=None,
     drip_mode_override=None,
     drip_spread_mode=1,
+    drip_wet_width_max_cm=None,
 ):
     """Create baseline and drip MAIZSIM runs aligned to one official HYDRUS project."""
     repo = _resolve_repo_root(repo_root)
@@ -122,14 +123,17 @@ def prepare_hydrus_aligned_runs(
     ks_cm_h = float(selector.get("soil_hydraulic_parameters", {}).get("ks_cm_h", 1.0))
     drip_spread_mode = int(drip_spread_mode)
     use_direct_split = ks_cm_h < 2.0 and drip_spread_mode == 1
-    drip_radius_cm = (
-        float(hydrus_metrics["wet_width_cm"])
-        if use_direct_split
-        else _hydrus_calibrated_drip_radius_cm(
+    if drip_wet_width_max_cm is not None:
+        drip_radius_cm = float(drip_wet_width_max_cm)
+    elif drip_spread_mode == 2:
+        drip_radius_cm = 0.0
+    elif use_direct_split:
+        drip_radius_cm = float(hydrus_metrics["wet_width_cm"])
+    else:
+        drip_radius_cm = _hydrus_calibrated_drip_radius_cm(
             case_prefix,
             fallback=float(hydrus_metrics["wet_width_cm"]),
         )
-    )
     # Direct split applies water to a control volume; subsequent redistribution
     # reaches the final HYDRUS wet depth, so the source depth is shallower.
     drip_source_depth_cm = (
@@ -190,6 +194,7 @@ def prepare_hydrus_aligned_runs(
         "emitter_rate_l_h": rate_l_h,
         "applied_volume_l": rate_l_h * duration_h,
         "event_duration_h": duration_h,
+        "hydrus_output_time_h": hydrus_output_time,
         "output_time": f"HYDRUS {hydrus_output_time:g} h; MAIZSIM final hourly frame",
         "domain_width_cm": float(project.mesh.nodes["x_cm"].max() - project.mesh.nodes["x_cm"].min()),
         "domain_depth_cm": float(project.mesh.nodes["depth_cm"].max() - project.mesh.nodes["depth_cm"].min()),
@@ -232,6 +237,7 @@ def run_hydrus_aligned_validation(
     emitter_rate_l_h=None,
     drip_mode_override=None,
     drip_spread_mode=1,
+    drip_wet_width_max_cm=None,
     timeout_seconds=180,
 ):
     """Prepare runs, execute MAIZSIM, and write HYDRUS/MAIZSIM 2D comparisons."""
@@ -245,6 +251,7 @@ def run_hydrus_aligned_validation(
         emitter_rate_l_h=emitter_rate_l_h,
         drip_mode_override=drip_mode_override,
         drip_spread_mode=drip_spread_mode,
+        drip_wet_width_max_cm=drip_wet_width_max_cm,
     )
     _run_model_checked(prepared.baseline_dir, timeout_seconds=timeout_seconds)
     _run_model_checked(prepared.drip_dir, timeout_seconds=timeout_seconds)
@@ -255,7 +262,7 @@ def run_hydrus_aligned_validation(
         project,
         output_path,
         prefix=prepared.prefix,
-        output_time_h=float(prepared.manifest["event_duration_h"]),
+        output_time_h=float(prepared.manifest["hydrus_output_time_h"]),
         baseline_time_h=0.0,
         wet_delta_threshold=wet_delta_threshold,
         drip_x_cm=prepared.manifest["drip_x_cm"],
@@ -342,9 +349,11 @@ def _g05_drip_diagnostics(baseline_g05, drip_g05):
     baseline = read_g05_surface_water(baseline_g05)
     drip = read_g05_surface_water(drip_g05)
     columns = (
+        "drip_input_mm",
         "drip_demand_mm",
         "drip_pressure_loss_mm",
         "drip_hydraulic_excess_mm",
+        "drip_actual_infil_mm",
         "drip_source_input_mm",
         "drip_source_loss_mm",
     )
@@ -360,6 +369,26 @@ def _g05_drip_diagnostics(baseline_g05, drip_g05):
     if source_input is not None and source_loss is not None and demand is not None:
         result["g05_source_closure_residual_mm"] = float(
             demand - source_input - source_loss
+        )
+    drip_input = result.get("g05_drip_input_mm_sum")
+    pressure_loss = result.get("g05_drip_pressure_loss_mm_sum")
+    actual_infil = result.get("g05_drip_actual_infil_mm_sum")
+    hydraulic_excess = result.get("g05_drip_hydraulic_excess_mm_sum")
+    if (
+        demand is not None
+        and pressure_loss is not None
+        and drip_input is not None
+    ):
+        result["g05_boundary_input_closure_residual_mm"] = float(
+            demand - pressure_loss - drip_input
+        )
+    if (
+        drip_input is not None
+        and actual_infil is not None
+        and hydraulic_excess is not None
+    ):
+        result["g05_boundary_acceptance_residual_mm"] = float(
+            drip_input - actual_infil - hydraulic_excess
         )
     return result
 
@@ -894,6 +923,7 @@ def main(arguments=None):
         timeout_seconds=args.timeout_seconds,
         drip_mode_override=args.drip_mode,
         drip_spread_mode=args.drip_spread_mode,
+        drip_wet_width_max_cm=args.drip_wet_width_max_cm,
     )
     if arguments is None:
         print(json.dumps(outputs, indent=2))
@@ -915,6 +945,7 @@ def _parse_args(arguments):
     parser.add_argument("--emitter-rate-l-h", type=float)
     parser.add_argument("--drip-mode", type=int)
     parser.add_argument("--drip-spread-mode", type=int, default=1)
+    parser.add_argument("--drip-wet-width-max-cm", type=float)
     parser.add_argument("--timeout-seconds", type=float, default=180)
     return parser.parse_args(arguments)
 

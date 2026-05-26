@@ -428,6 +428,10 @@ def _delta_metrics(
     maizsim_delta = points["maizsim_delta_theta"].to_numpy(dtype=float)
     hydrus_wet = hydrus_delta >= float(threshold)
     maizsim_wet = maizsim_delta >= float(threshold)
+    points["hydrus_wet"] = hydrus_wet
+    points["maizsim_wet"] = maizsim_wet
+    points["hydrus_source_wet"] = False
+    points["maizsim_source_wet"] = False
     intersection = hydrus_wet & maizsim_wet
     union = hydrus_wet | maizsim_wet
     union_area = float(weights[union].sum())
@@ -486,6 +490,8 @@ def _delta_metrics(
             drip_source_left_cm=drip_source_left_cm,
             drip_source_right_cm=drip_source_right_cm,
         )
+        points["hydrus_source_wet"] = hydrus_source_wet
+        points["maizsim_source_wet"] = maizsim_source_wet
         source_intersection = hydrus_source_wet & maizsim_source_wet
         source_union = hydrus_source_wet | maizsim_source_wet
         source_union_area = float(weights[source_union].sum())

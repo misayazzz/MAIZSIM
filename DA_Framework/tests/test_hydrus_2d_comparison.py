@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import matplotlib.image as mpimg
 import numpy as np
 import pandas as pd
 
@@ -168,6 +169,10 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(comparison.metrics["hydrus_wet_area_cm2"], 2.0)
         self.assertAlmostEqual(comparison.metrics["maizsim_wet_area_cm2"], 2.0)
         self.assertAlmostEqual(comparison.metrics["peak_delta_distance_cm"], 0.0)
+        self.assertIn("hydrus_wet", comparison.points.columns)
+        self.assertIn("maizsim_wet", comparison.points.columns)
+        self.assertEqual(int(comparison.points["hydrus_wet"].sum()), 1)
+        self.assertEqual(int(comparison.points["maizsim_wet"].sum()), 1)
 
     def test_compare_theta_fields_reports_source_connected_wet_body(self):
         hydrus = _component_field(theta=[0.30, 0.30, 0.20, 0.20, 0.30, 0.30])
@@ -191,6 +196,10 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             0.0,
         )
         self.assertAlmostEqual(comparison.metrics["source_wet_iou"], 1.0)
+        self.assertIn("hydrus_source_wet", comparison.points.columns)
+        self.assertIn("maizsim_source_wet", comparison.points.columns)
+        self.assertEqual(int(comparison.points["hydrus_source_wet"].sum()), 2)
+        self.assertEqual(int(comparison.points["maizsim_source_wet"].sum()), 2)
 
     def test_compare_theta_fields_reports_axisymmetric_storage_metrics(self):
         hydrus = _field(
@@ -269,6 +278,12 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             self.assertTrue((output_dir / "hydrus_2d_comparison_fields.png").exists())
             self.assertTrue((output_dir / "hydrus_2d_comparison_manifest.json").exists())
             self.assertAlmostEqual(float(summary.loc[0, "wet_iou"]), 1.0)
+            points = pd.read_csv(output_dir / "hydrus_2d_comparison_points.csv")
+            self.assertIn("hydrus_wet", points.columns)
+            self.assertIn("maizsim_wet", points.columns)
+            _assert_png_has_drip_annotation(
+                output_dir / "hydrus_2d_comparison_fields.png"
+            )
 
 
 def _field(theta, area=None, volume=None):
@@ -314,6 +329,17 @@ def _write_g03(path, theta):
         path,
         index=False,
     )
+
+
+def _assert_png_has_drip_annotation(path):
+    image = mpimg.imread(path)
+    assert len(image.shape) == 3
+    assert float(np.nanstd(image[..., :3])) > 0.0
+    red = image[..., 0]
+    green = image[..., 1]
+    blue = image[..., 2]
+    red_pixels = (red > 0.60) & (green < 0.35) & (blue < 0.35)
+    assert int(red_pixels.sum()) > 10
 
 
 def _manifest():

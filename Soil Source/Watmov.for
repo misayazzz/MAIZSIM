@@ -136,15 +136,8 @@ cccz set the auto irrgation part before the iteration
         i=KXB(k)
         if((abs(CodeW(i)).eq.4).and.
      &     (DripPressureLimit_Rate(k).gt.0.0)) then
-           DripDemand=dble(DripPressureLimit_Rate(k)*Width(k))
-           DripSatLimit=dble(ConSat(MatNumN(i))*Width(k))
-           if (DripDemand.gt.DripSatLimit) then
-             Q(i)=Q(i)+sngl(DripSatLimit)
-             if (Q(i).gt.0.0) CodeW(i)=-4
-           else
-             Q(i)=Q(i)+DripPressureLimit_Rate(k)*Width(k)
-             if (Q(i).gt.0.0) CodeW(i)=-4
-           endif
+           Q(i)=Q(i)+DripPressureLimit_Rate(k)*Width(k)
+           if (Q(i).gt.0.0) CodeW(i)=-4
         endif
       enddo
 
@@ -386,11 +379,6 @@ c   Critical surface pressure on the soil-atmosphere surface
 c   valid for evaporation only
 c
          If (K.eq.4) then
-            If (DripPressureLimit_Rate(i).gt.0.0.and.Q(n).gt.0.0
-     &          .and.hNew(n).ge.-1.0E-4) then
-              hNew(n)=0.0
-              Goto 3131
-            Endif
             If (abs(Q(n)).gt.abs(-VarBW(i,3)*Width(i))
      &                          .or.Q(n)*(-VarBW(i,3)).le.0) then
               CodeW(n)=-4
@@ -407,12 +395,6 @@ c
               CodeW(n)=4
               hNew(n)=hCritA
                Goto 3131
-            Endif
-            If (DripPressureLimit_Rate(i).gt.0.0.and.Q(n).gt.0.0
-     &          .and.hNew(n).ge.0.0) then
-              CodeW(n)=4
-              hNew(n)=0.0
-              Goto 3131
             Endif
          Endif
 3131     continue
@@ -720,9 +702,8 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           DripActual=dmax1(0.0D0,dble(QAct(i)))
           DripActual=dmin1(DripActual,DripDemand)
           DripLoss=dmax1(DripDemand-DripActual,0.0D0)
-          If(Width(k).gt.1.0E-8) then
-            DripInput_Rate(k)=sngl(DripActual/dble(Width(k)))
-          Endif
+          DripActualInfil_Flux=DripActualInfil_Flux+
+     !      DripActual*Step
           If(DripLoss.gt.0.0D0) then
             RO(i)=amax1(RO(i),sngl(DripLoss))
             DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+

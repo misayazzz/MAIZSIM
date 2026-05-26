@@ -6,6 +6,7 @@ cccz the following blocks are for irrigation
 c Drip water and diagnostics since the last surface output print.
        Double Precision DripInput_Flux,DripDemand_Flux,
      !        DripPressureLoss_Flux,DripHydraulicExcess_Flux,
+     !        DripActualInfil_Flux,
      !        DripSourceInput_Flux,DripSourceLoss_Flux
        Double Precision DripWetNodes_Sum,DripWetNodes_Max,
      !        DripWetWidth_Sum,DripWetWidth_Max,
@@ -21,6 +22,7 @@ c Drip water and diagnostics since the last surface output print.
        Integer DripBypassRunoff,DripBypassWaterMover
        Common /DripOutput/ DripInput_Flux,DripDemand_Flux,
      !        DripPressureLoss_Flux,DripHydraulicExcess_Flux,
+     !        DripActualInfil_Flux,
      !        DripSourceInput_Flux,DripSourceLoss_Flux,
      !        DripWetNodes_Sum,DripWetNodes_Max,
      !        DripWetWidth_Sum,DripWetWidth_Max,

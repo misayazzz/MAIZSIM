@@ -104,6 +104,7 @@ def main():
     _plot_curve_widths(curve_targets, curve_matrix)
     _plot_short_widths(short_matrix)
     _plot_delta_root_plate()
+    _plot_root_density_plate()
     _plot_spatial_shape_metrics(spatial)
 
     outputs = {
@@ -122,6 +123,7 @@ def main():
             str(OUT_DIR / "precision_hydrus_curve_width.png"),
             str(OUT_DIR / "precision_short_hydrus_width.png"),
             str(OUT_DIR / "precision_delta_theta_root_overlay_0601.png"),
+            str(OUT_DIR / "precision_root_density_0601.png"),
             str(OUT_DIR / "precision_spatial_shape_metrics.png"),
         ],
     }
@@ -949,6 +951,59 @@ def _plot_delta_root_plate():
     fig.subplots_adjust(right=0.88, wspace=0.08)
     fig.savefig(
         OUT_DIR / "precision_delta_theta_root_overlay_0601.png",
+        dpi=600,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+def _plot_root_density_plate():
+    soils = ("sandy_loam", "loam", "clay_loam")
+    frames = []
+    max_root = 0.0
+    for soil in soils:
+        drip = REGRESSION_ROOT / f"{soil}__base_x100__long_high_single"
+        frame = _delta_root_frame(
+            _read_g03(REGRESSION_ROOT / f"{soil}__base_x100__baseline" / "LOAM2D.G03"),
+            _read_g03(drip / "LOAM2D.G03"),
+            _read_g04(drip / "LOAM2D.G04"),
+            DATE_FOR_PLATE,
+        )
+        frames.append((soil, drip, frame))
+        max_root = max(max_root, float(frame["root_density"].max()))
+    max_root = max(max_root, 1.0e-9)
+    fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.8), sharex=True, sharey=True)
+    last = None
+    for ax, (soil, drip_dir, frame) in zip(axes, frames):
+        width_limit = calibrated_drip_wet_width_max_cm(soil)
+        coverage = _partial_coverage_at_target(
+            Path(drip_dir) / "LOAM2D.grd",
+            center_node=7,
+            target_width=width_limit,
+        )
+        wet_interval = (
+            max(coverage["target_left_cm"], coverage["surface_left_cm"]),
+            min(coverage["target_right_cm"], coverage["surface_right_cm"]),
+        )
+        triang = mtri.Triangulation(frame["X"], frame["depth_cm"])
+        last = ax.tricontourf(
+            triang,
+            frame["root_density"],
+            levels=np.linspace(0.0, max_root, 15),
+            cmap="YlGn",
+            vmin=0.0,
+            vmax=max_root,
+        )
+        _mark_drip(ax, drip_dir, wet_interval=wet_interval)
+        ax.set_title(soil)
+        ax.set_xlabel("x (cm)")
+        ax.invert_yaxis()
+    axes[0].set_ylabel("Depth (cm)")
+    cax = fig.add_axes([0.91, 0.18, 0.018, 0.68])
+    fig.colorbar(last, cax=cax, label="Root density")
+    fig.subplots_adjust(right=0.88, wspace=0.08)
+    fig.savefig(
+        OUT_DIR / "precision_root_density_0601.png",
         dpi=600,
         bbox_inches="tight",
     )

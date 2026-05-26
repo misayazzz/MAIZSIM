@@ -25,7 +25,7 @@ C summary output variables
      &     SumArrayTh, MaxY, Cumulative_OM_N_sink,
      &     DripInput, SeasonDripInput, DripDemand,
      &     DripPressureLoss, DripHydraulicExcess,
-     &     DripSourceInput, DripSourceLoss,
+     &     DripActualInfil, DripSourceInput, DripSourceLoss,
      &     DripWetNodesMean, DripWetNodesMax,
      &     DripWetWidthMean, DripWetWidthMax,
      &     DripPressureFactorMean, DripPressureFactorMin
@@ -121,6 +121,7 @@ cccz
         DripDemand=0.0
         DripPressureLoss=0.0
         DripHydraulicExcess=0.0
+        DripActualInfil=0.0
         DripSourceInput=0.0
         DripSourceLoss=0.0
         DripWetNodesMean=0.0
@@ -129,9 +130,11 @@ cccz
         DripWetWidthMax=0.0
         DripPressureFactorMean=0.0
         DripPressureFactorMin=0.0
+        DripInput_Flux=0.0D0
         DripDemand_Flux=0.0D0
         DripPressureLoss_Flux=0.0D0
         DripHydraulicExcess_Flux=0.0D0
+        DripActualInfil_Flux=0.0D0
         DripSourceInput_Flux=0.0D0
         DripSourceLoss_Flux=0.0D0
         DripWetNodes_Sum=0.0D0
@@ -212,7 +215,7 @@ C G05 file  Surface Graphics
      &      "SeasInfil,","ThetaAvail,","CO2FLux,","O2FLux,","N2OFLux,",
      &      "DripInput,","SeasDrip,","DripDemand,",
      &      "DripPressureLoss,","DripHydraulicExcess,",
-     &      "DripSourceInput,","DripSourceLoss,",
+     &      "DripActualInfil,","DripSourceInput,","DripSourceLoss,",
      &      "DripWetNodesMean,","DripWetNodesMax,",
      &      "DripWetWidthMean,","DripWetWidthMax,",
      &      "DripPressureFactorMean,","DripPressureFactorMin"
@@ -510,6 +513,7 @@ cccz
               DripPressureLoss=DripPressureLoss_Flux/gridWidth*10.0
               DripHydraulicExcess=DripHydraulicExcess_Flux/
      &          gridWidth*10.0
+              DripActualInfil=DripActualInfil_Flux/gridWidth*10.0
               DripSourceInput=DripSourceInput_Flux/gridWidth*10.0
               DripSourceLoss=DripSourceLoss_Flux/gridWidth*10.0
               If(DripDiag_Time.gt.0.0D0) then
@@ -592,7 +596,7 @@ C     Gas unit conversion to ugCo2/cm2
      &              (Surface_Gas_Flux(jjj),jjj=1,NumG),
      &              DripInput, SeasonDripInput, DripDemand,
      &              DripPressureLoss, DripHydraulicExcess,
-     &              DripSourceInput, DripSourceLoss,
+     &              DripActualInfil, DripSourceInput, DripSourceLoss,
      &              DripWetNodesMean, DripWetNodesMax,
      &              DripWetWidthMean, DripWetWidthMax,
      &              DripPressureFactorMean, DripPressureFactorMin
@@ -651,6 +655,8 @@ cccz ---------------------- finish mulch printing --------------------------
         DripPressureLoss_Flux=0.0D0
         DripHydraulicExcess=0.0
         DripHydraulicExcess_Flux=0.0D0
+        DripActualInfil=0.0
+        DripActualInfil_Flux=0.0D0
         DripSourceInput=0.0
         DripSourceInput_Flux=0.0D0
         DripSourceLoss=0.0
@@ -708,9 +714,9 @@ C format 5 is water, 6 is roots Vy is the last on on this lin
   6   Format (1x,A16,T20,A5,T36,A2,T46,A2,T56,A5,T65,A7,T78,A7, T90,A6,
      &        T102, A6, T112, A11, T124, A8, T136, A8)
  10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',                  !relative water content  
-     &        25(F16.3, ','),F16.3)  !format for flux data  [G03]
+     &        26(F16.3, ','),F16.3)  !format for flux data  [G03]
  13   Format (1x,F17.6,',',A15,',',15(F16.3, ','), F16.3)  ! format for second flux data [G06]
- 20   Format (1x,38A24)              !format for flux header [G05]
+ 20   Format (1x,39A24)              !format for flux header [G05]
  21   Format (1x,12A16)           ! format for Organic Matter header
 2103  Format (1x,A12,T20,A12,T49,A2,T64,A2,T75,A10,T95,A10,T109,A10)
 2104  Format (1x,F17.6,',',A15,',',4(F16.4,','),F16.4)     
