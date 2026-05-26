@@ -19,12 +19,14 @@
 - `DripSpreadMode=2`低`Ks`保护版已在官方Drip1/Drip2上复验：二维湿润宽度均与HYDRUS一致，`wet_iou`分别为`0.905`和`0.925`。
 - 二维图已经标出滴头位置和地表源区，points CSV已经输出湿润体布尔掩膜，便于复核湿润体面积、宽度、深度和连通范围。
 - 作物算例已经额外输出二维根系密度图和`Delta theta`+根系等值线叠加图，用来判断滴灌增湿区是否进入根区。
+- 已新增目标3严格验收脚本`hydrus_goal3_acceptance.py`，把二维形态、储水残差、峰值位置、体积加权误差、G05闭合和PNG滴头标注纳入同一张pass/fail表。
 
 当前不能说：
 
 - 已完整复现HYDRUS有限元SurfaceDrip压力头受限边界。
 - `DripSpreadMode=2`已经无经验保护地通过壤土和砂壤土；当前低`Ks`保护阈值`DripLowKsBypassLimit=48 cm/day`仍是工程保护，不是HYDRUS原算法。
 - Drip1已经在储水量上完全对齐HYDRUS；当前Drip1二维形态好，但储水仍偏高`1.379 L`。
+- 当前低`Ks`保护版已经达到目标3。严格验收显示Drip2全项通过，但Drip1在储水残差、峰值湿润位置和体积加权`Delta theta`误差三项失败。
 - 45个工程回归算例全部通过严格精度验收；最新检查中`case_count=45`通过，但HYDRUS曲线宽度误差最大`1.47 cm`，该项仍为`fail`，主要出现在壤土早期宽度受网格/边界段表达能力限制的算例。
 
 ## 代码层面的最新实现
@@ -82,6 +84,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 尝试2：不切压力边界，而是在`DripSpreadMode=2`中用活动地表宽度的`ConSat * 局部压力修正因子 * 边界宽度`总容量封顶本步输入通量。结果：砂壤土Drip2保持原有好结果，`wet_iou=0.925`、储水`3.856 L`；但壤土Drip1在滴灌事件开始后300秒超时，停在`39199.917`附近，说明低渗场景仍存在求解收敛问题。
 - 尝试3：在`WaterMover()`中做互补主动集，通量解若产生正压则切到`h=0`，压力解若实际通量超过滴灌需求则切回通量边界。结果：可以编译，但Drip1和Drip2都在300秒超时，说明当前求解器中直接在非线性迭代内部反复切换`CodeW`会破坏短时官方滴灌算例的收敛性。
 - 尝试4：用`CapSum < SourceDemandFlux`作为低`Ks`旁路判据，避免固定土壤阈值。结果：Drip2保持好结果，但Drip1又回到`50.000 cm`横向铺开，储水`22.163 L`，`wet_iou=0.433`。原因是当前`CapSum`估算含干土吸力修正，会高估短时可接纳通量，不能可靠判定低渗透壤土的地表径流伪扩散风险。
+- 尝试5：在`WaterMover()`中引入局部`DripSolve_Rate`，先按需求通量求解，再用解后的`QAct`估算本步实际可接纳量，降低同一步滴灌通量后重解。结果：Drip1可运行但比低`Ks`保护基线更差，储水残差增至`+1.426 L`；Drip2在300秒超时，停在滴灌事件开始附近`39199.917`。原因是当前求解器在同一时间步内反复降低通量并重入非线性求解时收敛性不足，且重解并未真正把未接纳水转移给相邻活动边界段。
 
 这些失败结果说明，当前不能用简单的`h=0`切换、单次容量封顶或直接在原非线性迭代里切换`CodeW`来替代HYDRUS的完整动态湿润面积算法。真正需要的是一个供水受限且收敛受控的主动集外循环：本步求解后计算每个活动边界段实际可接纳通量，未接纳部分在同一步分配给相邻地表段，然后在更新后的活动集上重解；最终只有实际接纳通量进入土体，剩余量进入`DripHydraulicExcess`或径流诊断。
 
@@ -94,6 +97,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DA_Framework/da_framework/hydrus_official_export.py`
 - `DA_Framework/da_framework/hydrus_2d_comparison.py`
 - `DA_Framework/da_framework/hydrus_aligned_validation.py`
+- `DA_Framework/da_framework/hydrus_goal3_acceptance.py`
 - `DA_Framework/da_framework/drip_precision_validation.py`
 
 当前能力：
@@ -105,6 +109,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - 图中黑色等值线表示当前`Delta theta`阈值下的湿润锋。
 - points CSV新增`hydrus_wet`、`maizsim_wet`、`hydrus_source_wet`和`maizsim_source_wet`布尔列。
 - 自动输出阈值敏感性CSV和PNG，检查宽度、深度、IoU和储水比例是否依赖单一阈值。
+- 目标3验收脚本读取`*_aligned_validation_summary.csv`和`*_aligned_fields.png`，检查IoU、宽深误差、储水残差、峰值位置、体积加权`Delta theta`误差、G05闭合和红色滴灌标注。
 - 作物精度验证新增`precision_root_density_0601.png`，与既有`precision_delta_theta_root_overlay_0601.png`配套。
 
 ## 官方HYDRUS基准
@@ -208,6 +213,26 @@ G05边界诊断：
 - Drip2储水误差较小，`3.856 L`对`3.997 L`；Drip1仍偏高`1.379 L`，约为HYDRUS储水增量的`34.6%`，表层偏湿仍明显。
 - 因此`mode2`可以作为“二维形态明显改善的实验压力边界线”记录，但不能写成“已经完整复现HYDRUS SurfaceDrip”。当前低`Ks`旁路是对MAIZSIM通用地表径流模块的工程保护，不是HYDRUS主动集本身。
 
+目标3严格验收命令：
+
+```powershell
+pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_goal3_acceptance `
+  --summary tmp\codex_goal3_lowks_outputs_Drip1\Drip1LowKs_aligned_validation_summary.csv `
+  --summary tmp\codex_goal3_lowks_outputs_Drip2\Drip2LowKs_aligned_validation_summary.csv `
+  --output-csv tmp\codex_goal3_lowks_acceptance\goal3_acceptance.csv
+```
+
+当前验收结果为`21 pass / 3 fail`。失败项全部来自Drip1：
+
+| 工程 | 检查项 | 当前值 | 阈值 | 状态 |
+| --- | --- | ---: | ---: | --- |
+| `Drip1` | 储水绝对残差 | `1.379 L` | `<= 0.4 L` | `fail` |
+| `Drip1` | 峰值湿润位置距离 | `17.575 cm` | `<= 1 cm` | `fail` |
+| `Drip1` | 体积加权`Delta theta` RMSE | `0.00952` | `<= 0.006` | `fail` |
+| `Drip2` | 全部目标3检查 | 通过 | - | `pass` |
+
+因此，如果目标就是“精细模拟滴灌湿润体形态并和HYDRUS二维图对比”，当前答案是：工具链已经足够细，但物理实现尚未达标；下一步必须继续改`WaterMover`/滴灌边界处理，而不是只调整绘图或文字描述。
+
 ## 根系二维图
 
 官方HYDRUS Drip1/Drip2是无作物短时算例，不能直接验证根系吸水。为回答“滴灌湿润体是否覆盖作物根区”，当前使用MAIZSIM作物算例输出两类二维图：
@@ -261,7 +286,7 @@ msbuild maizsim07.sln /p:Configuration=Release /p:Platform=x64
 Python单元测试：
 
 ```powershell
-pixi run --manifest-path pixi.toml python -m unittest DA_Framework.tests.test_hydrus_aligned_validation DA_Framework.tests.test_hydrus_2d_comparison DA_Framework.tests.test_drip_validation DA_Framework.tests.test_drip_regression DA_Framework.tests.test_maizsim_drip_inputs DA_Framework.tests.test_hydrus_official_export
+pixi run --manifest-path pixi.toml python -m unittest DA_Framework.tests.test_hydrus_aligned_validation DA_Framework.tests.test_hydrus_2d_comparison DA_Framework.tests.test_drip_validation DA_Framework.tests.test_drip_regression DA_Framework.tests.test_maizsim_drip_inputs DA_Framework.tests.test_hydrus_official_export DA_Framework.tests.test_hydrus_goal3_acceptance
 ```
 
 精度和根系图验证：
@@ -273,9 +298,10 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 已完成结果：
 
 - Fortran/C++构建成功，0个错误，73个既有警告。
-- 相关Python单元测试60个通过。
+- 相关Python单元测试65个通过。
 - Drip1/Drip2主线二维对照已完成。
 - Drip1/Drip2的`mode2`实验对照已完成。
+- 目标3严格验收已运行，当前低`Ks`保护版为`21 pass / 3 fail`，未达完整目标3。
 - 根系叠加图和根系密度二维图已生成。
 
 ## 仍需后续处理
