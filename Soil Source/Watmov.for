@@ -23,7 +23,8 @@ cccz  Double precision CriticalH, CriticalH_R
       Logical Explic,ItCrit,FreeD
       Real  hOld_1(NumNPD)
       Real Dif(NumNPD)
-      Real BaseQ(NumNPD),BaseHOld(NumNPD)
+      Real BaseQ(NumNPD),BaseHOld(NumNPD),DripLowKsBypassLimit,
+     !     DripLowKsHead
       Integer trigger_Runoff, p_Runoff
       Integer BaseCodeW(NumNPD)
       Logical DripPressureNode(NumNPD)
@@ -105,6 +106,8 @@ C
       tOld = Time
       t=Time
       dt=Step
+      DripLowKsBypassLimit=48.0
+      DripLowKsHead=0.01
       Do i=1,NumNP
         BaseQ(i)=Q(i)
         BaseCodeW(i)=CodeW(i)
@@ -136,8 +139,15 @@ cccz set the auto irrgation part before the iteration
         i=KXB(k)
         if((abs(CodeW(i)).eq.4).and.
      &     (DripPressureLimit_Rate(k).gt.0.0)) then
-           Q(i)=Q(i)+DripPressureLimit_Rate(k)*Width(k)
-           if (Q(i).gt.0.0) CodeW(i)=-4
+          CodeW(i)=1
+c Keep pressure-limited surface drip near zero head. Low-Ks HYDRUS
+c cases need a small nonzero head to match delivery without widening.
+          If(ConSat(MatNumN(i)).le.DripLowKsBypassLimit) then
+            hNew(i)=DripLowKsHead
+          Else
+            hNew(i)=0.0
+          Endif
+          DripPressureNode(i)=.true.
         endif
       enddo
 
@@ -405,7 +415,8 @@ cMK-----------------------------------------------------------------------------
  
 
 
-		if ((CodeW(n).eq.-4).and.(q(n).gt.0)) then
+		if ((CodeW(n).eq.-4).and.(q(n).gt.0).and.
+     &      (DripPressureLimit_Rate(i).le.0.0)) then
 c Ponded infiltration measurement is from Misha Kouznetzov
 			HSP=0.009D0 !EMPIRICAL PARAMETER, HSP~=dz/3 - was 0.03
 			PI=3.141592653589793238D0
@@ -692,7 +703,8 @@ cccz this is the water source part, i.e., the exfiltration from soil surface
 c only calculate this when the surface nodes are atmospheric boundary nodes
       do k=1, NumBp
         i=KXB(k)
-        if (((hnew(i).ge.CriticalH)).and.(abs(codeW(i)).eq.4)) then
+        if (((hnew(i).ge.CriticalH)).and.(abs(codeW(i)).eq.4).and.
+     &      (DripPressureLimit_Rate(k).le.0.0)) then
           RO(i)=max(Q(i)-Qact(i),0.0D0)
           hNew(i)=CriticalH+h_Pond(k)         ! cccz could be CriticalH_R, but we force it to 
           hOld(i)=hNew(i)

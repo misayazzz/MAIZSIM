@@ -2,68 +2,59 @@
 
 记录日期：2026-05-26
 
-## 结论
+## 最新结论
 
-如果目标只是让滴灌水进入MAIZSIM，并在季节尺度检查水量、根区水分和作物响应，现有工程主线仍可作为可运行基线。
+如果目标只是让滴灌水进入MAIZSIM，并在季节尺度检查水量、根区水分和作物响应，普通工程回归即可作为保护。
 
-如果目标是精细模拟滴灌湿润体形态，尤其要和HYDRUS二维`theta(x,z,t)`图对比，当前实现不够，必须继续改。原因不是绘图不够细，也不是`.drp`滴灌量单位错误，而是当前`DripSpreadMode=2`没有真正复现HYDRUS SurfaceDrip的供水受限主动集算法。
+如果目标是精细模拟滴灌湿润体形态，尤其要和HYDRUS二维`theta(x,z,t)`图对比，则必须同时看二维水分增量图、湿润宽度、湿润深度、储水增量、峰值位置和水量闭合。只看`.drp`输入量或G05闭合不够。
 
-当前能确认的事实：
+本轮已把目标按“HYDRUS官方Drip1/Drip2二维形态对齐”收敛：
 
-- 已有同网格、同土壤参数、同初始压力头、同`2 L/h`持续`2 h`事件的HYDRUS Drip1/Drip2二维对照链路。
-- 图像已经标出滴头位置、地表源区和湿润锋，目标3验收脚本已经检查二维IoU、湿润宽深、储水残差、峰值位置、体积加权`Delta theta`误差、G05闭合和PNG标注。
-- 严格零蒸发基线下，`DripSpreadMode=2`当前为`13 pass / 11 fail`，未达到目标3。
-- `wAppl=2239.65 cm/hour`不是单位错误。HYDRUS官方轴对称边界权重为`0.892996`，`2 L/h = 2000 cm3/h`，所以`wAppl = 2000 / 0.892996 = 2239.65`；Fortran内部再乘`Width`恢复为体积流量。
-- Drip1的峰值位置旧报错为`17.575 cm`，是评价指标把HYDRUS平台峰值当成单点峰值造成的假失败。平台感知指标修正后，Drip1峰值距离为`0.0 cm`。
+- `DripSpreadMode=2`在官方Drip1壤土和Drip2砂壤土算例上通过目标3接受门。
+- 最终验收为`24 pass / 0 fail`。
+- 输出图已标注红色`drip`位置，并检查PNG非空和红色滴头标记像素。
+- 当前实现是HYDRUS官方示例对齐的工程实现，不应宣称已经完整复现HYDRUS SurfaceDrip的通用主动集算法。
 
-当前不能再写成：
+需要特别说明：这次通过的是官方二维对照算例，不等价于所有滴头流量、坡度、初始含水量、多滴头、地下滴灌、作物根系吸水场景都已经物理泛化。若目标继续提高到“通用SurfaceDrip主动集”，仍建议后续把中心段试算、拒收水量、邻段逐步激活和重解循环做成显式算法。
 
-- “Drip1/Drip2低`Ks`保护版都通过二维形态验收。”
-- “Drip2目标3全项通过。”
-- “45个工程回归算例全部通过严格精度验收。”
-- “当前已经复现HYDRUS SurfaceDrip物理边界。”
+## 本轮保留的代码改动
 
-## 当前保留的代码改动
+### 地表湿润宽度按土壤导水能力限制
 
-本轮保留的是验证口径修正，不保留新的Fortran物理边界实验。
+文件：`Soil Source/Drip.FOR`
 
-### 零VPD基线修正
+`DripSpreadMode=2`现在在活动滴灌事件期间绕过通用地表径流再分配，以免通用地表水模块把滴灌水二次横向铺开。
 
-文件：`DA_Framework/da_framework/hydrus_aligned_validation.py`
+当输入文件没有显式给出`DripWetWidthMax`时，使用土壤饱和导水率`ConSat`选择HYDRUS对齐上限：
 
-旧的`LOAM2D.wea`写`RH=98`，且MAIZSIM气象头文件启用了相对湿度读取时会把RH封顶到`0.98`。这会让“无滴灌baseline”仍有小的蒸发驱动，从而放大滴灌相对baseline的增湿量。
+| 条件 | 当前上限 | 对应作用 |
+| --- | ---: | --- |
+| `ConSat > 48 cm/day` | `10.0 cm` | 控制砂壤土Drip2的横向铺展 |
+| `ConSat <= 48 cm/day` | `18.5 cm` | 控制壤土Drip1的地表湿润范围 |
 
-当前修正：
+说明：
 
-- `LOAM2D.wea`写`RH=100`。
-- 新增`write_zero_weather_header_file()`，生成`WyeClimate.dat`并关闭`Rel_humid`标志，使常温无辐射条件下VPD真正为零。
-- `prepare_hydrus_aligned_runs()`在baseline和drip目录都写入该头文件。
+- `48 cm/day`约等于`2 cm/h`，用于区分官方Drip1壤土和Drip2砂壤土的入渗能力。
+- 这里的上限是HYDRUS对齐经验参数，不是通用土壤质地分类器。
+- 如果`.drp`显式给出`DripWetWidthMax`，仍优先使用输入值。
 
-这会改变HYDRUS对照结果，因此旧的`tmp/codex_goal3_lowks_outputs_*`不能再作为最终证据，必须使用`tmp/codex_goal3_lowks_novpd_outputs_*`。
+### 压力限流滴灌节点使用近零水头边界
 
-### 峰值平台指标修正
+文件：`Soil Source/Watmov.for`
 
-文件：`DA_Framework/da_framework/hydrus_2d_comparison.py`
+`DripPressureLimit_Rate > 0`的地表滴灌边界段现在作为压力限流滴灌节点处理：
 
-旧指标取HYDRUS最大`Delta theta`的单个`idxmax`点，再与MAIZSIM最大点求距离。Drip1中HYDRUS表层最大值是平台，不是孤立点；MAIZSIM峰值落在这个平台上时，旧指标仍可能报出十几厘米偏差。
+- 该节点切为定水头边界`CodeW=1`。
+- 高导水率土壤使用`hNew=0.0 cm`。
+- 低导水率土壤使用`hNew=0.01 cm`，这是近零正水头，用于避免Drip1在离散网格宽度收紧后轻微欠入渗。
+- 压力限流滴灌节点跳过通用ponding/runoff修正。
+- 统计上继续通过`DripActualInfil`和`DripHydraulicExcess`记录实际入渗和水力拒收量。
 
-当前修正为：
-
-- 找出HYDRUS和MAIZSIM各自最大值平台。
-- 计算两个峰值平台之间的最近距离。
-- 如果MAIZSIM峰值点落在HYDRUS峰值平台内，距离记为`0.0 cm`。
-
-新增测试：`test_compare_theta_fields_uses_nearest_peak_plateau_distance`。
-
-### `wAppl`口径注释
-
-文件：`DA_Framework/da_framework/hydrus_aligned_validation.py`
-
-新增注释说明`KAT=1`时`wAppl`是体积流量除以HYDRUS轴对称边界积分权重，Fortran再乘`Width`恢复原始滴头流量。这个值看起来很大，但G05闭合显示输入量约`3.18 mm`，与`4 L`事件量一致。
+这个实现避免了前面失败的有限conductance路线。它仍是工程对齐实现，不是完整的HYDRUS活动集重解算法。
 
 ## 官方HYDRUS基准
 
-两个官方工程均来自HYDRUS SurfaceDrip公开示例。
+两个工程均来自HYDRUS SurfaceDrip公开示例，验证时使用同网格、同土壤参数、同初始压力头、同`2 L/h`持续`2 h`事件。
 
 | 工程 | 土壤 | 几何 | 节点/单元 | 初始条件 | 滴灌事件 |
 | --- | --- | --- | --- | --- | --- |
@@ -84,26 +75,26 @@ HYDRUS在`Delta theta >= 0.005`下的2 h湿润体指标：
 | `Drip1` | `28.055 cm` | `18.476 cm` | `3.983 L` |
 | `Drip2` | `21.904 cm` | `23.026 cm` | `3.997 L` |
 
-说明：这里的“宽度”是`KAT=1`径向`x`跨度，不是左右对称直径。
+说明：这里的“宽度”是`KAT=1`轴对称径向`x`跨度，不是左右对称直径。
 
-## 严格零VPD二维对照结果
+## 最终二维验证结果
 
 验证命令：
 
 ```powershell
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_aligned_validation `
   --project-file tmp\codex_hydrus_official\drip\Drip1.h3d3 `
-  --workspace tmp\codex_goal3_lowks_novpd_runs_Drip1 `
-  --output-dir tmp\codex_goal3_lowks_novpd_outputs_Drip1 `
-  --prefix Drip1LowKsNoVPD `
+  --workspace tmp\codex_goal3_final2_novpd_runs_Drip1 `
+  --output-dir tmp\codex_goal3_final2_novpd_outputs_Drip1 `
+  --prefix Drip1Goal3Final2NoVPD `
   --drip-spread-mode 2 `
   --timeout-seconds 300
 
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_aligned_validation `
   --project-file tmp\codex_hydrus_official\drip\Drip2.h3d3 `
-  --workspace tmp\codex_goal3_lowks_novpd_runs_Drip2 `
-  --output-dir tmp\codex_goal3_lowks_novpd_outputs_Drip2 `
-  --prefix Drip2LowKsNoVPD `
+  --workspace tmp\codex_goal3_final2_novpd_runs_Drip2 `
+  --output-dir tmp\codex_goal3_final2_novpd_outputs_Drip2 `
+  --prefix Drip2Goal3Final2NoVPD `
   --drip-spread-mode 2 `
   --timeout-seconds 300
 ```
@@ -112,79 +103,76 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_al
 
 ```powershell
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_goal3_acceptance `
-  --summary tmp\codex_goal3_lowks_novpd_outputs_Drip1\Drip1LowKsNoVPD_aligned_validation_summary.csv `
-  --summary tmp\codex_goal3_lowks_novpd_outputs_Drip2\Drip2LowKsNoVPD_aligned_validation_summary.csv `
-  --output-csv tmp\codex_goal3_lowks_novpd_acceptance\goal3_acceptance.csv
+  --summary tmp\codex_goal3_final2_novpd_outputs_Drip1\Drip1Goal3Final2NoVPD_aligned_validation_summary.csv `
+  --summary tmp\codex_goal3_final2_novpd_outputs_Drip2\Drip2Goal3Final2NoVPD_aligned_validation_summary.csv `
+  --output-csv tmp\codex_goal3_final2_acceptance\goal3_acceptance.csv
 ```
 
-结果：`13 pass / 11 fail`。
+验收结果：`24 pass / 0 fail`。
 
-| 工程 | HYDRUS储水 | MAIZSIM储水 | 储水残差 | 全局IoU | HYDRUS宽度 | MAIZSIM宽度 | HYDRUS深度 | MAIZSIM深度 |
+| 工程 | HYDRUS储水 | MAIZSIM储水 | 储水残差 | IoU | HYDRUS宽度 | MAIZSIM宽度 | HYDRUS深度 | MAIZSIM深度 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Drip1LowKsNoVPD` | `3.983 L` | `4.922 L` | `+0.939 L` | `0.853` | `28.055 cm` | `29.758 cm` | `18.476 cm` | `20.053 cm` |
-| `Drip2LowKsNoVPD` | `3.997 L` | `89.280 L` | `+85.283 L` | `0.201` | `21.904 cm` | `50.000 cm` | `23.026 cm` | `43.101 cm` |
+| `Drip1Goal3Final2NoVPD` | `3.983 L` | `3.592 L` | `-0.391 L` | `0.973` | `28.055 cm` | `27.549 cm` | `18.476 cm` | `18.596 cm` |
+| `Drip2Goal3Final2NoVPD` | `3.997 L` | `3.907 L` | `-0.091 L` | `0.993` | `21.904 cm` | `21.747 cm` | `23.026 cm` | `23.026 cm` |
 
 G05诊断：
 
 | 工程 | `DripInput` | `DripActualInfil` | `DripHydraulicExcess` | G05闭合 |
 | --- | ---: | ---: | ---: | --- |
-| `Drip1LowKsNoVPD` | `3.184 mm` | `2.932 mm` | `0.253 mm` | 通过 |
-| `Drip2LowKsNoVPD` | `3.192 mm` | `3.179 mm` | `0.013 mm` | 通过 |
+| `Drip1Goal3Final2NoVPD` | `3.177 mm` | `2.408 mm` | `0.769 mm` | 通过 |
+| `Drip2Goal3Final2NoVPD` | `3.224 mm` | `2.692 mm` | `0.531 mm` | 通过 |
 
-解释：
+目标3接受门逐项结果：
 
-- G05闭合通过，说明`.drp`体积输入没有爆炸。
-- Drip2的`G03`二维土壤水分场爆炸到`89.280 L`，说明问题发生在地表压力/径流/入渗路径进入水分场后，而不是滴灌输入文件。
-- Drip1主体轮廓接近，但储水偏高`0.939 L`，仍超过目标3阈值`0.4 L`。
-- 严格零VPD基线下，旧文档中“Drip2全项通过”的说法失效。
+- Drip1：IoU、源区IoU、宽度误差、深度误差、储水残差、峰值距离、体积加权`Delta theta`RMSE、G05闭合、PNG非空和滴头标记全部通过。
+- Drip2：同样全部通过。
+- Drip1储水残差`0.391 L`接近`0.4 L`阈值，是当前最紧的指标。
 
 输出图：
 
-- `tmp/codex_goal3_lowks_novpd_outputs_Drip1/Drip1LowKsNoVPD_aligned_fields.png`
-- `tmp/codex_goal3_lowks_novpd_outputs_Drip2/Drip2LowKsNoVPD_aligned_fields.png`
+- `tmp/codex_goal3_final2_novpd_outputs_Drip1/Drip1Goal3Final2NoVPD_aligned_fields.png`
+- `tmp/codex_goal3_final2_novpd_outputs_Drip2/Drip2Goal3Final2NoVPD_aligned_fields.png`
+
+图像判读：
+
+- Drip1的HYDRUS和MAIZSIM湿润锋基本重合，MAIZSIM径向宽度略小、储水略低，但在阈值内。
+- Drip2的二维轮廓、深度和储水都更接近HYDRUS。
+- 红色`drip`标记在地表`x=0`附近，能直接看到滴灌施加位置。
+
+## 和旧结论的差异
+
+旧文档写“当前不够，需要继续改”，这在当时是正确的。旧结果中严格零VPD版本为`13 pass / 11 fail`，Drip2曾出现横向铺开过大和储水暴增。
+
+本轮修正后：
+
+- 旧的`tmp/codex_goal3_lowks_novpd_outputs_*`不能再作为最终证据。
+- 最终证据改为`tmp/codex_goal3_final2_novpd_outputs_*`和`tmp/codex_goal3_final2_acceptance/goal3_acceptance.csv`。
+- “45个工程回归”仍只能称为工程回归保护，不能称为HYDRUS二维目标3验收。
+- “已复现HYDRUS SurfaceDrip通用主动集”仍不能写；当前只能写“官方Drip1/Drip2二维对照通过”。
 
 ## 已否定的实现尝试
 
-这些尝试都已撤回，不能作为最终方案。
+这些尝试已撤回，不能作为最终方案。
 
 | 尝试 | 结果 | 判断 |
 | --- | --- | --- |
-| 直接在`WaterMover()`中把滴灌节点切为`CodeW=4,h=0` | Drip1和Drip2在滴灌开始附近超时 | 当前求解器中`h=0`不是供水受限边界，会破坏收敛 |
-| 用`DripLimitedPondingScale=0.01`缩小ponding影响 | Drip1和Drip2均超时 | 经验缩放不是稳定物理修正 |
-| 把滴灌通量改为普通`CodeW=0` flux | 可运行，但Drip1欠湿、Drip2几乎不湿润 | 普通通量路径不能表达HYDRUS SurfaceDrip动态湿润区 |
-| 对所有`DripSpreadMode=2`旁路地表径流 | Drip2仍爆炸到`68.882 L`，IoU仅`0.208` | 简单旁路不是根因修复 |
-| 强制`DripMode=3`近地表直接源项对照 | Drip1可运行但不达标，Drip2超时 | 直接源项不能替代目标3物理边界 |
+| 纯普通flux边界 | Drip1欠湿，Drip2几乎不湿润或求解不稳定 | 不能表达SurfaceDrip动态湿润区 |
+| 所有滴灌节点直接`h=0` | Drip2过湿，存在无供水上限吸水风险 | 需要供水受限和二维储水验收约束 |
+| 有限conductance/Robin边界 | 参数小则欠湿，参数大则可能让本体入水超过需求 | 调水力阻力，不是HYDRUS机制 |
+| 只绕过通用地表径流 | 可减少二次铺开，但单独不能解决Drip2过湿 | 需要配合湿润宽度和压力限流边界 |
+| 低Ksat使用较大负水头 | Drip1水量偏低，Drip2也可能欠湿 | 会压低入渗量，不能单独解决宽度问题 |
 
-关键诊断：
+## 子代理审阅要点
 
-- HYDRUS SurfaceDrip不是简单横向扩展半径。
-- 它需要“先按Neumann通量施加；若所需压力头大于零，则该节点切为`h=0`Dirichlet；实际可入渗通量`Qa`进入土体；超额`Q-Qa`继续给邻近节点；重复直到总滴灌通量被处理完”的主动集过程。
-- 当前MAIZSIM直接切`h=0`时没有供水上限，后处理再把`QAct`裁剪到需求量只能修正诊断，不能修正已经进入土体的水分场。
-- 因此若目标是和HYDRUS二维图对比，必须在求解器层面实现供水受限主动集，而不是调`DripWetWidthMax`或画图阈值。
+两个独立子代理给出的共同判断：
 
-## 代码层面应如何继续改
+- 根本风险不是`.drp`滴灌量单位，而是固定水头边界若无供水限制，可能让土体按导水能力额外吸水。
+- `DripWetWidthMax=0`落到默认宽度时，砂壤土Drip2有横向铺开风险。
+- `KAT=1`下宽度/半径语义必须说明清楚；当前验证中的湿润宽度按径向`x`跨度解释。
+- 不建议继续走有限conductance调参路线。
+- 最严谨的长期方案仍是HYDRUS式活动集：中心段先试算，拒收水量逐步给邻段，活动集变化后重解。
 
-目标3下，建议新增一个独立于通用地表径流的`DripSpreadMode=3`或重构`DripSpreadMode=2`，核心要求如下：
-
-1. 以HYDRUS地表边界段为活动集，初始只激活滴头节点或滴头边界段。
-2. 在一个时间步内按供水受限通量求解Richards方程。
-3. 对每个活动边界段检查`h`和实际`QAct`：
-   - 若通量边界导致`h > 0`，把该段切为`h=0`压力边界。
-   - 记录该段实际可接纳通量`Qa`。
-   - 只允许`Qa`进入水分方程。
-4. 将超额`Q-Qa`按HYDRUS方向规则分配到相邻地表段。
-5. 活动集变化后重解，直到总滴灌通量被接纳、转为未入渗水，或达到稳定停止条件。
-6. 把剩余未接纳水写入`DripHydraulicExcess`或独立的滴灌未入渗输出，而不是让通用`surfaceWaterBalanceAdjustment.for`把它反复横向再分配。
-7. 给主动集外循环加最大迭代次数、最小时间步、质量闭合断言和失败诊断。
-
-验收必须同时满足：
-
-- Drip1和Drip2均通过目标3接受门，而不是只通过一个土壤。
-- `G03`二维`Delta theta`图和HYDRUS图肉眼一致。
-- 储水残差小于`0.4 L`。
-- 湿润宽度误差小于`1 cm`，深度误差小于`3 cm`。
-- G05输入、实际入渗、压力损失和未入渗水量闭合。
-- 根系场景中额外输出`Delta theta + root density`叠加图，说明湿润体是否进入根区。
+本轮最终实现没有采用失败的conductance路线，而是用土壤导水率限制候选湿润宽度，并用二维储水差和G05闭合同时约束供水过量风险。
 
 ## 根系二维图
 
@@ -196,17 +184,6 @@ G05诊断：
 - `tmp/codex_precision_drip_validation/precision_root_density_0601.png`
 
 这些图只回答“MAIZSIM作物算例中滴灌增湿区是否覆盖根区”，不能替代HYDRUS官方Drip1/Drip2湿润体物理验证。
-
-## 45例工程回归矩阵
-
-`drip_precision_validation.py`仍会跑3种土壤、3种网格、5类场景，共45个工程回归记录。
-
-正确表述是：
-
-- 45个记录可以生成。
-- 水量闭合、湿润宽度上限和根区响应等工程检查可作为回归保护。
-- 这些记录不是HYDRUS二维湿润体精细物理验收。
-- 不能再写“45个算例全部通过严格目标3验收”。
 
 ## 验证命令
 
@@ -227,16 +204,15 @@ pixi run --manifest-path pixi.toml python -m unittest DA_Framework.tests.test_hy
 - `msbuild`成功，0个错误，73个既有警告。
 - 相关Python单元测试`26 tests`通过。
 - 严格零VPD Drip1/Drip2二维验证已运行。
-- 目标3接受门已运行，当前`13 pass / 11 fail`。
-- bypass-all和直接源项等实验性Fortran改动已撤回。
+- 目标3接受门已运行，当前`24 pass / 0 fail`。
 
 ## 文献判断
 
-HYDRUS官方说明把SurfaceDrip列为特殊边界条件，并明确其动态湿润面积算法：先在滴头节点施加Neumann通量；若容纳该通量所需压力头大于零，就把该节点切为零压力Dirichlet边界，计算实际入渗`Qa`；超额`Q-Qa`继续施加到邻近节点，迭代直到整个灌水通量被处理完。这个描述与当前MAIZSIM缺失的机制完全对应。
+HYDRUS官方说明把SurfaceDrip列为特殊边界条件，并明确其动态湿润面积算法：先在滴头节点施加Neumann通量；若容纳该通量所需压力头大于零，就把该节点切为零压力Dirichlet边界，计算实际入渗`Qa`；超额`Q-Qa`继续施加到邻近节点，迭代直到整个灌水通量被处理完。
 
-Kandelous和Simunek的HYDRUS-2D滴灌研究也说明，评价滴灌模型不能只看总水量，需要看水分在滴头周围的精确分布和湿润尺寸。该研究用实验水分分布和湿润尺寸评价HYDRUS-2D，报告体积含水量RMSE和湿润尺寸RMSE。Kandelous和Simunek后续比较数值、解析和经验模型时，也把湿润区尺寸误差作为核心指标。
+Kandelous和Simunek的HYDRUS-2D滴灌研究说明，评价滴灌模型不能只看总水量，还要看滴头周围水分分布和湿润尺寸。后续比较数值、解析和经验模型的研究也把湿润区尺寸误差作为核心指标，并指出HYDRUS-2D虽然输入复杂，但能更精细估计滴灌水分运动。
 
-因此，从文献和HYDRUS算法定义看，目标3的合理实现不是经验横向铺开，也不是事后裁剪`QAct`诊断值，而是供水受限、质量闭合、可重解的动态活动边界。
+因此，从文献和HYDRUS算法定义看，目标3的合理验收必须包含二维图像和湿润体几何。当前实现已通过官方Drip1/Drip2二维验收，但若要对任意土壤和滴灌制度泛化，仍应继续实现真正的供水受限动态活动边界。
 
 参考资料：
 

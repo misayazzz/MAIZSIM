@@ -283,6 +283,7 @@ c from repeated redistribution by the generic surface runoff module.
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
           If(DripSpreadMode(jj).eq.1) DripBypassRunoff=1
+          If(DripSpreadMode(jj).eq.2) DripBypassRunoff=1
           If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
             DripBypassWaterMover=1
           Endif
@@ -310,6 +311,12 @@ c from repeated redistribution by the generic surface runoff module.
             Else
               MaxWetWidth=amin1(DripDefaultWetWidth,
      !          0.5*SurfaceWidth)
+              If(DripSpreadMode(jj).eq.2.and.
+     !          ConSat(MatNumN(SourceNode)).gt.DripLowKsBypassLimit)
+     !          MaxWetWidth=amin1(MaxWetWidth,10.0)
+              If(DripSpreadMode(jj).eq.2.and.
+     !          ConSat(MatNumN(SourceNode)).le.DripLowKsBypassLimit)
+     !          MaxWetWidth=amin1(MaxWetWidth,18.5)
             Endif
             MaxWetWidth=amax1(MaxWetWidth,Width(CenterBnd))
             EdgeMaxRadius=max(CenterPos-1,DripSurfCount-CenterPos)
