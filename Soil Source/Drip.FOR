@@ -36,6 +36,7 @@
      !     CapacityDepth,AddDepth,MaxTheta,RadialWeight,
      !     DepthWeight,SourceWeight,CapSum,LocalCap,
      !     LocalCapFactor,CandidateMin,CandidateMax
+      Real DripLowKsBypassLimit
       Real Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
       Real DripThOld(NumNPD),DripHTemp(NumNPD),DripHOld(NumNPD)
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
@@ -73,6 +74,9 @@
       DripTol=1.0E-5
       DripExcessFrac=0.05
       DripDefaultWetWidth=20.0
+c 48 cm/day = 2 cm/hour; this protects low-Ks mode-2 drip cases
+c from repeated redistribution by the generic surface runoff module.
+      DripLowKsBypassLimit=48.0
       If(lInput.eq.1) then
         DripInput_Flux=0.0D0
         DripDemand_Flux=0.0D0
@@ -289,6 +293,9 @@
               Stop 'Drip source node is invalid'
             Endif
             SourceNode=DripSurfNode(CenterPos)
+            If(DripSpreadMode(jj).eq.2.and.
+     !        ConSat(MatNumN(SourceNode)).lt.DripLowKsBypassLimit)
+     !        DripBypassRunoff=1
             NeedExpand=0
             CanShrink=1
             ActiveRadius=WetRadius(jj,in)

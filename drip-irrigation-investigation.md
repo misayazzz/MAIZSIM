@@ -10,19 +10,21 @@
 
 如果目标是精细模拟滴灌湿润体形态，尤其要和HYDRUS二维`theta(x,z,t)`图对比，旧实现不够，必须用二维场、湿润锋轮廓、储水量和根区叠加图共同验收。当前代码已经补齐了这套验证链路，但物理边界模型仍应分成两条线看：
 
-- 稳定工程主线：`DripSpreadMode=1`，对低`Ks`壤土自动使用`DripMode=3`近地表直接源项；这是当前最稳定的HYDRUS二维形态对照基线。
-- 实验压力边界线：`DripSpreadMode=2`，不再使用HYDRUS最终湿润宽度作为输入，而是按当前土壤导水能力估算活动地表宽度，并通过`WaterMover`地表通量路径进入水分方程。该线在砂壤土Drip2结果较好，但在壤土Drip1严重失真，不能声称已经复现HYDRUS SurfaceDrip主动集算法。
+- 稳定工程主线：`DripSpreadMode=1`，对低`Ks`壤土自动使用`DripMode=3`近地表直接源项；这是当前最稳定的工程回归基线。
+- 实验压力边界线：`DripSpreadMode=2`，不再使用HYDRUS最终湿润宽度作为输入，而是按当前土壤导水能力估算活动地表宽度，并通过`WaterMover`地表通量路径进入水分方程。本轮新增低`Ks`地表径流保护后，官方Drip1/Drip2的二维湿润体宽度和IoU都明显改善，但它仍不是完整HYDRUS SurfaceDrip主动集算法。
 
 因此当前可以说：
 
 - 已具备和官方HYDRUS Drip1/Drip2做同网格、同土壤参数、同初始压力头、同滴灌事件的二维图像对照工具链。
+- `DripSpreadMode=2`低`Ks`保护版已在官方Drip1/Drip2上复验：二维湿润宽度均与HYDRUS一致，`wet_iou`分别为`0.905`和`0.925`。
 - 二维图已经标出滴头位置和地表源区，points CSV已经输出湿润体布尔掩膜，便于复核湿润体面积、宽度、深度和连通范围。
 - 作物算例已经额外输出二维根系密度图和`Delta theta`+根系等值线叠加图，用来判断滴灌增湿区是否进入根区。
 
 当前不能说：
 
 - 已完整复现HYDRUS有限元SurfaceDrip压力头受限边界。
-- 壤土和砂壤土都已在`DripSpreadMode=2`压力边界线下通过。
+- `DripSpreadMode=2`已经无经验保护地通过壤土和砂壤土；当前低`Ks`保护阈值`DripLowKsBypassLimit=48 cm/day`仍是工程保护，不是HYDRUS原算法。
+- Drip1已经在储水量上完全对齐HYDRUS；当前Drip1二维形态好，但储水仍偏高`1.379 L`。
 - 45个工程回归算例全部通过严格精度验收；最新检查中`case_count=45`通过，但HYDRUS曲线宽度误差最大`1.47 cm`，该项仍为`fail`，主要出现在壤土早期宽度受网格/边界段表达能力限制的算例。
 
 ## 代码层面的最新实现
@@ -51,6 +53,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DripSpreadMode=0`：旧的入渗受限触发扩展模式。
 - `DripSpreadMode=1`：稳定工程主线。按目标湿润宽度激活地表范围；对低`Ks`HYDRUS对齐算例，Python工具会使用`DripMode=3`近地表直接源项。
 - `DripSpreadMode=2`：实验压力边界线。当前不是完整HYDRUS主动集，而是按局部导水能力估算活动宽度，再通过`WaterMover`地表通量路径求解。
+- `DripLowKsBypassLimit=48 cm/day`：低`Ks`保护阈值，等价于`2 cm/hour`。当`DripSpreadMode=2`且源节点`ConSat`低于该值时，旁路通用地表径流再分配，避免低渗透壤土中滴灌超额水被反复横向铺开；该阈值需要后续参数化或继续标定。
 - `DripWetWidthMax`：地表最大湿润宽度或半径口径。`KAT=1`且滴头在轴线时按径向区间`[0,R]`解释。
 - `DripMode=1/2`：压力补偿模式，要求`DripHIn>0`。
 - `DripMode=3`：近地表直接源项模式，不走压力补偿公式，`DripPcMax`表示直接源项深度。
@@ -61,7 +64,7 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DripSpreadMode=2`默认不再从HYDRUS最终湿润宽度反填`DripWetWidthMax`，避免把验证目标当作模型输入。
 - `DripSpreadMode=2`活动宽度改为由局部容量估算决定：从滴头中心向相邻地表节点扩展，直到`ConSat * 局部压力修正因子 * 边界宽度`的合计容量能覆盖滴灌通量，或达到默认最大宽度。
 - `DripSpreadMode=2`不再强制18秒小步长；之前该尝试会导致官方算例明显超时。
-- `DripSpreadMode=2`不再绕过普通地表处理；它仍通过`WaterMover`求解，不直接改`ThNew/hNew`。
+- `DripSpreadMode=2`默认仍通过`WaterMover`求解，不直接改`ThNew/hNew`；仅在低`Ks`保护触发时旁路`surfaceWaterBalanceAdjustment.for`的通用地表径流再分配，超额水保留在`DripHydraulicExcess`诊断中。
 - G05新增`DripActualInfil`，并区分`DripInput`、`DripActualInfil`和`DripHydraulicExcess`，用于检查边界输入、实际接纳入渗和未接纳水量的闭合。
 - G05输出格式已同步扩展，避免新增字段后数据行换行导致`Date`解析错误。
 
@@ -69,17 +72,20 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 
 - 没有严格的`h=0`压力头主动集重解。
 - 没有在同一步内把不能接纳的超额通量逐节点重新分配并反复求解。
-- 对低渗透性壤土仍会产生严重不合理储水放大。
+- 低`Ks`保护能消除Drip1的50 cm横向铺开，但Drip1储水仍偏高，说明它是工程保护而不是完整物理闭合。
 
 ### 2026-05-26续做的主动集尝试
 
-为推进目标3，又单独验证了三个更接近HYDRUS SurfaceDrip的Fortran实现方向；三者均未保留为最终代码：
+为推进目标3，又单独验证了四个更接近HYDRUS SurfaceDrip的Fortran实现方向；这四个尝试均未保留为最终代码：
 
 - 尝试1：在`WaterMover()`中把`DripPressureLimit_Rate>0`且解后`hNew>=0`的地表节点切为`CodeW=4,h=0`压力边界并重解。结果：可以编译，但当前MAIZSIM压力边界没有滴灌供水上限，砂壤土Drip2储水从HYDRUS的`3.997 L`放大到`40.252 L`，`wet_iou`降到`0.415`。因此这不是可接受的主动集实现。
 - 尝试2：不切压力边界，而是在`DripSpreadMode=2`中用活动地表宽度的`ConSat * 局部压力修正因子 * 边界宽度`总容量封顶本步输入通量。结果：砂壤土Drip2保持原有好结果，`wet_iou=0.925`、储水`3.856 L`；但壤土Drip1在滴灌事件开始后300秒超时，停在`39199.917`附近，说明低渗场景仍存在求解收敛问题。
 - 尝试3：在`WaterMover()`中做互补主动集，通量解若产生正压则切到`h=0`，压力解若实际通量超过滴灌需求则切回通量边界。结果：可以编译，但Drip1和Drip2都在300秒超时，说明当前求解器中直接在非线性迭代内部反复切换`CodeW`会破坏短时官方滴灌算例的收敛性。
+- 尝试4：用`CapSum < SourceDemandFlux`作为低`Ks`旁路判据，避免固定土壤阈值。结果：Drip2保持好结果，但Drip1又回到`50.000 cm`横向铺开，储水`22.163 L`，`wet_iou=0.433`。原因是当前`CapSum`估算含干土吸力修正，会高估短时可接纳通量，不能可靠判定低渗透壤土的地表径流伪扩散风险。
 
 这些失败结果说明，当前不能用简单的`h=0`切换、单次容量封顶或直接在原非线性迭代里切换`CodeW`来替代HYDRUS的完整动态湿润面积算法。真正需要的是一个供水受限且收敛受控的主动集外循环：本步求解后计算每个活动边界段实际可接纳通量，未接纳部分在同一步分配给相邻地表段，然后在更新后的活动集上重解；最终只有实际接纳通量进入土体，剩余量进入`DripHydraulicExcess`或径流诊断。
+
+本轮最终保留的是低`Ks`保护补丁：当`DripSpreadMode=2`且源节点`ConSat < 48 cm/day`时，跳过通用地表径流再分配，防止低渗透官方Drip1中未接纳滴灌水沿地表被重复铺开。这个补丁在Drip1/Drip2二维图上有效，但仍应被视为经验保护；后续若要发表或替代HYDRUS，必须继续做真正主动集。
 
 ### Python验证工具链
 
@@ -175,32 +181,32 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_al
 ```powershell
 pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.hydrus_aligned_validation `
   --project-file tmp\codex_hydrus_official\drip\Drip2.h3d3 `
-  --workspace tmp\codex_goal3_mode2_runs_Drip2_v9 `
-  --output-dir tmp\codex_goal3_mode2_outputs_v9 `
-  --prefix Drip2Mode2 `
+  --workspace tmp\codex_goal3_lowks_runs_Drip2 `
+  --output-dir tmp\codex_goal3_lowks_outputs_Drip2 `
+  --prefix Drip2LowKs `
   --drip-spread-mode 2 `
-  --timeout-seconds 240
+  --timeout-seconds 300
 ```
 
 结果：
 
 | 工程 | HYDRUS储水 | MAIZSIM储水 | 储水残差 | 全局IoU | HYDRUS宽度 | MAIZSIM宽度 | HYDRUS深度 | MAIZSIM深度 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Drip1` | `3.983 L` | `23.259 L` | `+19.276 L` | `0.437` | `28.055 cm` | `50.000 cm` | `18.476 cm` | `20.763 cm` |
+| `Drip1` | `3.983 L` | `5.362 L` | `+1.379 L` | `0.905` | `28.055 cm` | `28.055 cm` | `18.476 cm` | `19.764 cm` |
 | `Drip2` | `3.997 L` | `3.856 L` | `-0.141 L` | `0.925` | `21.904 cm` | `21.904 cm` | `23.026 cm` | `21.122 cm` |
 
 G05边界诊断：
 
 | 工程 | `DripInput` | `DripActualInfil` | `DripHydraulicExcess` | 接纳闭合残差 |
 | --- | ---: | ---: | ---: | ---: |
-| `Drip1` | `3.159 mm` | `2.397 mm` | `0.761 mm` | `0.001 mm` |
+| `Drip1` | `3.183 mm` | `2.961 mm` | `0.222 mm` | `~0 mm` |
 | `Drip2` | `3.168 mm` | `3.162 mm` | `0.006 mm` | `~0 mm` |
 
 解释：
 
-- `mode2`在砂壤土Drip2上已经比旧实现明显合理，宽度对齐、储水接近、IoU高。
-- `mode2`在壤土Drip1上严重不合理，储水达到施水量的`5.81`倍，说明低`Ks`条件下仍缺真正的压力头主动集和超额通量重分配。
-- 因此`mode2`只能作为实验路径保留，不能作为当前目标3的完整完成依据。
+- 低`Ks`保护后，`mode2`在Drip1和Drip2上的二维湿润宽度都与HYDRUS一致，IoU均超过`0.90`。
+- Drip2储水误差较小，`3.856 L`对`3.997 L`；Drip1仍偏高`1.379 L`，约为HYDRUS储水增量的`34.6%`，表层偏湿仍明显。
+- 因此`mode2`可以作为“二维形态明显改善的实验压力边界线”记录，但不能写成“已经完整复现HYDRUS SurfaceDrip”。当前低`Ks`旁路是对MAIZSIM通用地表径流模块的工程保护，不是HYDRUS主动集本身。
 
 ## 根系二维图
 
@@ -249,13 +255,13 @@ G05边界诊断：
 构建：
 
 ```powershell
-& 'F:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe' maizsim07.sln /t:2dmaizsim /p:Configuration=Release /p:Platform=x64 /m
+msbuild maizsim07.sln /p:Configuration=Release /p:Platform=x64
 ```
 
 Python单元测试：
 
 ```powershell
-pixi run --manifest-path pixi.toml python -m unittest DA_Framework.tests.test_hydrus_2d_comparison DA_Framework.tests.test_hydrus_aligned_validation DA_Framework.tests.test_drip_validation
+pixi run --manifest-path pixi.toml python -m unittest DA_Framework.tests.test_hydrus_aligned_validation DA_Framework.tests.test_hydrus_2d_comparison DA_Framework.tests.test_drip_validation DA_Framework.tests.test_drip_regression DA_Framework.tests.test_maizsim_drip_inputs DA_Framework.tests.test_hydrus_official_export
 ```
 
 精度和根系图验证：
@@ -267,7 +273,7 @@ pixi run --manifest-path pixi.toml python -m DA_Framework.da_framework.drip_prec
 已完成结果：
 
 - Fortran/C++构建成功，0个错误，73个既有警告。
-- 相关Python单元测试29个通过。
+- 相关Python单元测试60个通过。
 - Drip1/Drip2主线二维对照已完成。
 - Drip1/Drip2的`mode2`实验对照已完成。
 - 根系叠加图和根系密度二维图已生成。
