@@ -1,0 +1,71 @@
+{
+  "suite_name": "surface_drip_external_2d_validation",
+  "precision_dir": "E:/Codex/codex_drip_sourcewidth_precision_final",
+  "readiness_thresholds": {
+    "external_case_count_min": 3,
+    "external_soil_parameter_set_count_min": 3,
+    "external_irrigation_event_setting_count_min": 2,
+    "external_output_time_count_min": 2,
+    "external_soil_ks_ratio_min": 5,
+    "external_emitter_rate_ratio_min": 1.5,
+    "external_event_duration_span_h_min": 2,
+    "external_output_time_span_h_min": 2,
+    "root_spatial_record_count_min": 36,
+    "root_spatial_soil_count_min": 3,
+    "root_spatial_grid_count_min": 3,
+    "root_spatial_scenario_count_min": 4,
+    "root_spatial_temporal_case_count_min": 36,
+    "root_spatial_temporal_date_count_min": 7,
+    "root_positive_storage_cm2_min": 0.1,
+    "root_storage_fraction_min": 0.95,
+    "root_temporal_positive_storage_cm2_min": 0.1,
+    "root_temporal_storage_fraction_min": 0.95,
+    "theta_rmse_max": 0.03,
+    "delta_theta_rmse_max": 0.025,
+    "wet_iou_min": 0.65,
+    "source_wet_iou_min": 0.65,
+    "require_source_wet_metrics": 1,
+    "peak_delta_distance_cm_max": 5.0,
+    "wet_width_error_cm_max": 5.0,
+    "wet_depth_error_cm_max": 8.0,
+    "delta_storage_rel_error_max": 0.1,
+    "require_storage_metrics": 1,
+    "point_count_min": 20,
+    "comparison_point_fraction_min": 0.95,
+    "comparison_area_fraction_min": 0.95,
+    "uncertainty_within_2sd_fraction_min": 0.8,
+    "require_uncertainty_metrics": 1
+  },
+  "comparisons": [
+    {
+      "name": "loam_surface_drip_2lh_2h_t2h",
+      "maizsim_g03": "path/to/maizsim_drip/LOAM2D.G03",
+      "hydrus_csv": "path/to/hydrus_export/loam_t2h_theta_output.csv",
+      "maizsim_baseline_g03": "path/to/maizsim_baseline/LOAM2D.G03",
+      "hydrus_baseline_csv": "path/to/hydrus_export/loam_t0h_theta_baseline.csv",
+      "comparison_manifest": "path/to/manifests/loam_surface_drip_2lh_2h_t2h.json",
+      "date": "2007-05-01",
+      "wet_delta_threshold": 0.005
+    },
+    {
+      "name": "sand_surface_drip_1lh_4h_t4h",
+      "maizsim_g03": "path/to/maizsim_drip_sand/SAND2D.G03",
+      "hydrus_csv": "path/to/hydrus_export/sand_t4h_theta_output.csv",
+      "maizsim_baseline_g03": "path/to/maizsim_baseline_sand/SAND2D.G03",
+      "hydrus_baseline_csv": "path/to/hydrus_export/sand_t0h_theta_baseline.csv",
+      "comparison_manifest": "path/to/manifests/sand_surface_drip_1lh_4h_t4h.json",
+      "date": "2007-05-01",
+      "wet_delta_threshold": 0.005
+    },
+    {
+      "name": "clay_surface_drip_3lh_2h_t6h",
+      "maizsim_g03": "path/to/maizsim_drip_clay/CLAY2D.G03",
+      "hydrus_csv": "path/to/hydrus_export/clay_t6h_theta_output.csv",
+      "maizsim_baseline_g03": "path/to/maizsim_baseline_clay/CLAY2D.G03",
+      "hydrus_baseline_csv": "path/to/hydrus_export/clay_t0h_theta_baseline.csv",
+      "comparison_manifest": "path/to/manifests/clay_surface_drip_3lh_2h_t6h.json",
+      "date": "2007-05-01",
+      "wet_delta_threshold": 0.005
+    }
+  ]
+}

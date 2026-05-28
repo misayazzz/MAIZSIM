@@ -65,6 +65,26 @@ class ModelRunnerTests(unittest.TestCase):
         self.assertTrue(result.run_dir.is_absolute())
         self.assertTrue(result.stderr_path.is_absolute())
 
+    def test_run_model_treats_stdout_failure_marker_as_failure(self):
+        with tempfile.TemporaryDirectory(prefix="codex_model_runner_marker_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+            (run_dir / "run.dat").write_text("", encoding="utf-8")
+
+            def write_marker(*args, **kwargs):
+                kwargs["stdout"].write("ORTHOMIN TERMINATES -- TOO MANY ITERATIONS")
+                kwargs["stderr"].write("WaterMover non-finite head")
+                return SimpleNamespace(returncode=0)
+
+            with patch(
+                "da_framework.model_runner.subprocess.run",
+                side_effect=write_marker,
+            ):
+                result = run_model(run_dir)
+
+        self.assertFalse(result.success)
+        self.assertIn("ORTHOMIN TERMINATES", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()

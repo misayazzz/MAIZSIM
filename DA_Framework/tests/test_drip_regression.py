@@ -10,6 +10,8 @@ from da_framework.drip_regression import DEFAULT_GRIDS
 from da_framework.drip_regression import DEFAULT_SCENARIOS
 from da_framework.drip_regression import DEFAULT_SOILS
 from da_framework.drip_regression import DripScenario
+from da_framework.drip_regression import REGRESSION_WATER_DTMX_DAYS
+from da_framework.drip_regression import REQUIRED_OUTPUTS
 from da_framework.drip_regression import RegressionCase
 from da_framework.drip_regression import SoilVariant
 from da_framework.drip_regression import build_regression_cases
@@ -17,6 +19,7 @@ from da_framework.drip_regression import grid_surface_widths
 from da_framework.drip_regression import prepare_regression_case
 from da_framework.drip_regression import render_drip_event_line
 from da_framework.drip_regression import scale_grid_file
+from da_framework.drip_regression import set_water_dtmax
 from da_framework.drip_regression import validate_case_output
 from da_framework.drip_regression import validate_matrix_outputs
 from da_framework.drip_regression import write_soil_file
@@ -41,6 +44,7 @@ class DripRegressionTests(unittest.TestCase):
         )
         self.assertTrue(any(case.scenario is None for case in cases))
         self.assertTrue(any(case.scenario and case.scenario.pressure_reference for case in cases))
+        self.assertIn(".G04", REQUIRED_OUTPUTS)
 
     def test_hydrus_surface_drip_calibration_targets(self):
         self.assertAlmostEqual(
@@ -167,13 +171,35 @@ class DripRegressionTests(unittest.TestCase):
 
             drip_text = (case_dir / "LOAM2D.drp").read_text(encoding="utf-8")
             soil_text = (case_dir / "Loam_200cm.soi").read_text(encoding="utf-8")
+            water_values = (
+                (case_dir / "WaterMovDefault.dat")
+                .read_text(encoding="utf-8")
+                .splitlines()[2]
+                .split()
+            )
             widths, grid_width = grid_surface_widths(case_dir / "LOAM2D.grd")
 
         self.assertIn("16.3", drip_text)
         self.assertNotIn("{wet_width_max_cm", drip_text)
         self.assertIn(f"{DEFAULT_SOILS[1].ks:.3f}", soil_text)
+        self.assertAlmostEqual(float(water_values[5]), REGRESSION_WATER_DTMX_DAYS)
         self.assertGreater(grid_width, 0.0)
         self.assertIn(7, widths)
+
+    def test_set_water_dtmax_updates_parameter_row(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_water_") as tmp_dir:
+            water_path = Path(tmp_dir) / "WaterMovDefault.dat"
+            water_path.write_text(
+                "title\n"
+                "MaxIt TolTh TolH hCritA hCritS DtMx htab1 htabN EPSI.Heat EPSI.Solute\n"
+                "20 0.01 0.05 -1.0E+5 1.0E-3 0.02 0.001 1000 0.5 0.5\n",
+                encoding="utf-8",
+            )
+
+            set_water_dtmax(water_path, 0.005)
+
+            values = water_path.read_text(encoding="utf-8").splitlines()[2].split()
+        self.assertEqual(values[5], "0.005")
 
     def test_validate_case_output_checks_drip_accounting(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_metrics_") as tmp_dir:
@@ -202,6 +228,12 @@ class DripRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(metrics.drip_demand_sum_mm, 1.0)
         self.assertAlmostEqual(metrics.drip_pressure_loss_sum_mm, 0.2)
         self.assertAlmostEqual(metrics.drip_hydraulic_excess_sum_mm, 0.1)
+        self.assertAlmostEqual(metrics.drip_actual_infil_sum_mm, 0.7)
+        self.assertAlmostEqual(metrics.drip_source_input_sum_mm, 0.6)
+        self.assertAlmostEqual(metrics.drip_source_loss_sum_mm, 0.2)
+        self.assertAlmostEqual(metrics.demand_input_pressure_residual_mm, 0.0)
+        self.assertAlmostEqual(metrics.input_source_residual_mm, 0.0)
+        self.assertAlmostEqual(metrics.input_acceptance_residual_mm, 0.0)
         self.assertAlmostEqual(metrics.drip_wet_nodes_max, 1.0)
         self.assertAlmostEqual(metrics.drip_wet_width_max_cm, 2.0)
         self.assertAlmostEqual(metrics.drip_pressure_factor_min, 0.8)
@@ -332,6 +364,12 @@ def _write_minimal_base_run(base):
     base.mkdir()
     (base / "run.dat").write_text("", encoding="utf-8")
     (base / "Loam_200cm.soi").write_text("", encoding="utf-8")
+    (base / "WaterMovDefault.dat").write_text(
+        "title\n"
+        "MaxIt TolTh TolH hCritA hCritS DtMx htab1 htabN EPSI.Heat EPSI.Solute\n"
+        "20 0.01 0.05 -1.0E+5 1.0E-3 0.02 0.001 1000 0.5 0.5\n",
+        encoding="utf-8",
+    )
     (base / "LOAM2D.grd").write_text(_mini_grid(), encoding="utf-8")
     (base / "LOAM2D.drp").write_text("", encoding="utf-8")
 
@@ -354,16 +392,19 @@ def _g05_metrics_text(wet_nodes_mean=1.0, wet_nodes_max=1.0):
     header = (
         "Date,CumRain,infil,Runoff,Drainage,DripInput,SeasDrip,"
         "DripDemand,DripPressureLoss,DripHydraulicExcess,"
+        "DripActualInfil,DripSourceInput,DripSourceLoss,"
         "DripWetNodesMean,DripWetNodesMax,DripWetWidthMean,"
         "DripWetWidthMax,DripPressureFactorMean,DripPressureFactorMin"
     )
     rows = [
         (
             "05/01/2007,1.0,0.8,0.0,0.0,0.4,0.4,0.5,0.1,0.05,"
+            "0.35,0.3,0.1,"
             f"{wet_nodes_mean},{wet_nodes_max},2.0,2.0,0.8,0.8"
         ),
         (
             "05/02/2007,1.0,0.7,0.0,0.0,0.4,0.8,0.5,0.1,0.05,"
+            "0.35,0.3,0.1,"
             f"{wet_nodes_mean},{wet_nodes_max},2.0,2.0,0.8,0.8"
         ),
     ]
@@ -427,6 +468,9 @@ def _baseline_values():
         "drip_demand": 0.0,
         "drip_pressure_loss": 0.0,
         "drip_hydraulic_excess": 0.0,
+        "drip_actual_infil": 0.0,
+        "drip_source_input": 0.0,
+        "drip_source_loss": 0.0,
         "wet_nodes_mean": 0.0,
         "wet_nodes_max": 0.0,
         "wet_width_mean": 0.0,
@@ -445,6 +489,8 @@ def _drip_values():
             "drip_input": 12.0,
             "seas_drip": 12.0,
             "drip_demand": 12.0,
+            "drip_actual_infil": 12.0,
+            "drip_source_input": 12.0,
             "wet_nodes_mean": 1.0,
             "wet_nodes_max": 1.0,
             "wet_width_mean": 2.0,
@@ -460,6 +506,7 @@ def _single_row_g05(values):
     header = (
         "Date,CumRain,infil,Runoff,Drainage,DripInput,SeasDrip,"
         "DripDemand,DripPressureLoss,DripHydraulicExcess,"
+        "DripActualInfil,DripSourceInput,DripSourceLoss,"
         "DripWetNodesMean,DripWetNodesMax,DripWetWidthMean,"
         "DripWetWidthMax,DripPressureFactorMean,DripPressureFactorMin"
     )
@@ -469,6 +516,8 @@ def _single_row_g05(values):
         f"{values['drainage']},{values['drip_input']},"
         f"{values['seas_drip']},{values['drip_demand']},"
         f"{values['drip_pressure_loss']},{values['drip_hydraulic_excess']},"
+        f"{values['drip_actual_infil']},{values['drip_source_input']},"
+        f"{values['drip_source_loss']},"
         f"{values['wet_nodes_mean']},{values['wet_nodes_max']},"
         f"{values['wet_width_mean']},{values['wet_width_max']},"
         f"{values['pressure_factor_mean']},{values['pressure_factor_min']}"

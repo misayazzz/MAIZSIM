@@ -1,3 +1,4 @@
+import json
 import struct
 import tempfile
 import unittest
@@ -124,8 +125,18 @@ class HydrusOfficialExportTests(unittest.TestCase):
             self.assertTrue((output_dir / "mini_summary.csv").exists())
             self.assertTrue((output_dir / "mini_hydrus_fields.png").exists())
             self.assertTrue((output_dir / "mini_hydrus_manifest.json").exists())
+            self.assertTrue((output_dir / "mini_official_export_audit.json").exists())
             summary = pd.read_csv(output_dir / "mini_summary.csv")
+            audit = json.loads(
+                (output_dir / "mini_official_export_audit.json").read_text(
+                    encoding="utf-8",
+                )
+            )
             self.assertAlmostEqual(float(summary.loc[0, "output_time_h"]), 2.0)
+            self.assertEqual(audit["selected_times"]["output_time_h"], 2.0)
+            self.assertIn("DIMENSIO.IN", audit["stream_audit"])
+            self.assertIn("sha256", audit["artifacts"]["figure"])
+            self.assertTrue(audit["artifacts"]["figure"]["nonblank"])
 
     def test_read_official_project_from_extracted_dir(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_project_") as tmp_dir:

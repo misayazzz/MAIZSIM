@@ -22,7 +22,7 @@ RUN_FILE = "run.dat"
 EXECUTABLE_NAME = "2dMAIZSIM.exe"
 DLL_NAME = "Maizsim.dll"
 BASE_RUN_RELATIVE = Path("DA_Framework") / "base_runs" / "SingleLayerLoam2D"
-REQUIRED_OUTPUTS = (".G03", ".G05")
+REQUIRED_OUTPUTS = (".G03", ".G04", ".G05")
 
 
 @dataclass(frozen=True)
@@ -91,6 +91,12 @@ class CaseMetrics:
     drip_demand_sum_mm: float
     drip_pressure_loss_sum_mm: float
     drip_hydraulic_excess_sum_mm: float
+    drip_actual_infil_sum_mm: float
+    drip_source_input_sum_mm: float
+    drip_source_loss_sum_mm: float
+    demand_input_pressure_residual_mm: float
+    input_source_residual_mm: float
+    input_acceptance_residual_mm: float
     drip_wet_nodes_mean: float
     drip_wet_nodes_max: float
     drip_wet_width_mean_cm: float
@@ -156,6 +162,8 @@ DEFAULT_GRIDS = (
     GridVariant(name="base_x100", x_scale=1.00),
     GridVariant(name="wide_x125", x_scale=1.25),
 )
+
+REGRESSION_WATER_DTMX_DAYS = 0.005
 
 DEFAULT_SCENARIOS = (
     DripScenario(
@@ -291,6 +299,7 @@ def prepare_regression_case(base_run, executable_dir, case):
     shutil.copy2(exe_dir / EXECUTABLE_NAME, run_dir / EXECUTABLE_NAME)
     shutil.copy2(exe_dir / DLL_NAME, run_dir / DLL_NAME)
     write_soil_file(run_dir / "Loam_200cm.soi", case.soil)
+    set_water_dtmax(run_dir / "WaterMovDefault.dat", REGRESSION_WATER_DTMX_DAYS)
     scale_grid_file(run_dir / "LOAM2D.grd", case.grid.x_scale)
     write_drip_file(run_dir / "LOAM2D.drp", case.scenario, case.soil)
     return run_dir
@@ -310,6 +319,26 @@ def write_soil_file(path, soil):
         ),
     ]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def set_water_dtmax(path, dtmx_days):
+    """Set the MAIZSIM water-mover maximum time step in days."""
+    water_path = Path(path)
+    lines = water_path.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(lines):
+        parts = line.split()
+        if len(parts) < 10:
+            continue
+        try:
+            for value in parts[:10]:
+                float(value)
+        except ValueError:
+            continue
+        parts[5] = f"{dtmx_days:g}"
+        lines[index] = " ".join(parts)
+        water_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return
+    raise ValueError(f"Could not find water-mover parameter row in {water_path}")
 
 
 def scale_grid_file(path, x_scale):
@@ -473,6 +502,9 @@ def validate_case_output(case):
         "DripDemand",
         "DripPressureLoss",
         "DripHydraulicExcess",
+        "DripActualInfil",
+        "DripSourceInput",
+        "DripSourceLoss",
         "DripWetNodesMean",
         "DripWetNodesMax",
         "DripWetWidthMean",
@@ -498,6 +530,9 @@ def validate_case_output(case):
         "SeasDrip",
         "DripPressureLoss",
         "DripHydraulicExcess",
+        "DripActualInfil",
+        "DripSourceInput",
+        "DripSourceLoss",
         "DripWetNodesMean",
         "DripWetNodesMax",
         "DripWetWidthMean",
@@ -563,6 +598,13 @@ def validate_case_output(case):
                     "G05 DripWetWidthMax exceeds configured drip wetted-width limit"
                 )
 
+    drip_demand_sum = float(numeric["DripDemand"].sum())
+    drip_pressure_loss_sum = float(numeric["DripPressureLoss"].sum())
+    drip_hydraulic_excess_sum = float(numeric["DripHydraulicExcess"].sum())
+    drip_actual_infil_sum = float(numeric["DripActualInfil"].sum())
+    drip_source_input_sum = float(numeric["DripSourceInput"].sum())
+    drip_source_loss_sum = float(numeric["DripSourceLoss"].sum())
+
     return CaseMetrics(
         name=case.name,
         success=True,
@@ -573,9 +615,21 @@ def validate_case_output(case):
         runoff_sum_mm=float(numeric["Runoff"].sum()),
         drainage_sum_mm=float(numeric["Drainage"].sum()),
         expected_drip_mm=expected,
-        drip_demand_sum_mm=float(numeric["DripDemand"].sum()),
-        drip_pressure_loss_sum_mm=float(numeric["DripPressureLoss"].sum()),
-        drip_hydraulic_excess_sum_mm=float(numeric["DripHydraulicExcess"].sum()),
+        drip_demand_sum_mm=drip_demand_sum,
+        drip_pressure_loss_sum_mm=drip_pressure_loss_sum,
+        drip_hydraulic_excess_sum_mm=drip_hydraulic_excess_sum,
+        drip_actual_infil_sum_mm=drip_actual_infil_sum,
+        drip_source_input_sum_mm=drip_source_input_sum,
+        drip_source_loss_sum_mm=drip_source_loss_sum,
+        demand_input_pressure_residual_mm=(
+            drip_demand_sum - drip_sum - drip_pressure_loss_sum
+        ),
+        input_source_residual_mm=(
+            drip_sum - drip_source_input_sum - drip_source_loss_sum
+        ),
+        input_acceptance_residual_mm=(
+            drip_sum - drip_actual_infil_sum - drip_hydraulic_excess_sum
+        ),
         drip_wet_nodes_mean=drip_wet_nodes_mean,
         drip_wet_nodes_max=float(numeric["DripWetNodesMax"].max()),
         drip_wet_width_mean_cm=drip_wet_width_mean,
@@ -633,6 +687,36 @@ def _summary(repo, workspace, cases, metrics):
             ),
             6,
         ),
+        "drip_actual_infil_mm": round(
+            sum(metrics[case.name].drip_actual_infil_sum_mm for case in drip_cases),
+            6,
+        ),
+        "drip_source_input_mm": round(
+            sum(metrics[case.name].drip_source_input_sum_mm for case in drip_cases),
+            6,
+        ),
+        "drip_source_loss_mm": round(
+            sum(metrics[case.name].drip_source_loss_sum_mm for case in drip_cases),
+            6,
+        ),
+        "demand_input_pressure_residual_mm": round(
+            sum(
+                metrics[case.name].demand_input_pressure_residual_mm
+                for case in drip_cases
+            ),
+            6,
+        ),
+        "input_source_residual_mm": round(
+            sum(metrics[case.name].input_source_residual_mm for case in drip_cases),
+            6,
+        ),
+        "input_acceptance_residual_mm": round(
+            sum(
+                metrics[case.name].input_acceptance_residual_mm
+                for case in drip_cases
+            ),
+            6,
+        ),
         "expected_drip_mm": round(
             sum(metrics[case.name].expected_drip_mm for case in drip_cases),
             6,
@@ -677,6 +761,30 @@ def _summary(repo, workspace, cases, metrics):
                 ),
                 "drip_hydraulic_excess_sum_mm": round(
                     metric.drip_hydraulic_excess_sum_mm,
+                    6,
+                ),
+                "drip_actual_infil_sum_mm": round(
+                    metric.drip_actual_infil_sum_mm,
+                    6,
+                ),
+                "drip_source_input_sum_mm": round(
+                    metric.drip_source_input_sum_mm,
+                    6,
+                ),
+                "drip_source_loss_sum_mm": round(
+                    metric.drip_source_loss_sum_mm,
+                    6,
+                ),
+                "demand_input_pressure_residual_mm": round(
+                    metric.demand_input_pressure_residual_mm,
+                    6,
+                ),
+                "input_source_residual_mm": round(
+                    metric.input_source_residual_mm,
+                    6,
+                ),
+                "input_acceptance_residual_mm": round(
+                    metric.input_acceptance_residual_mm,
                     6,
                 ),
                 "drip_wet_nodes_mean": round(metric.drip_wet_nodes_mean, 6),

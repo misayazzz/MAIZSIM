@@ -72,7 +72,7 @@
 	const int NumNPD=4000, NumElD=3500, NumBPD=600, NSeepD = 2,
               NumSPD= 30, NumSD =10, NDrainD=2, NumDR=30, 
 			  NumGD = 3, NumPlD=100, 
-              NMatD=15, NumModD=20, MBandD=15,
+              NMatD=15, NumModD=20, MBandD=64,
 	          NumSurfDatD=3+NumGD+NumSD;
 	int compare(const void *arg1, const void *arg2); //Function for comparing two numbers in a sort routine
 #pragma pack(2)

@@ -53,6 +53,7 @@ class DripEvent:
     pressure_pc_max_cm: float = 0.0
     wet_width_max_cm: float = 0.0
     spread_mode: int = 0
+    source_width_cm: float = 0.0
 
     @property
     def duration_hours(self):
@@ -86,6 +87,8 @@ class DripSchedule:
         MAIZSIM G05 reports surface water terms as grid-averaged mm.
         For a fixed-node surface drip event, the expected increment is:
         rate_cm_hr * duration_hr * sum(node_width_cm) / grid_width_cm * 10.
+        If an event defines source_width_cm, that width overrides the grid
+        node width to keep physical emitter flow independent of mesh spacing.
         """
         grid_width = _positive_float(grid_width_cm, "grid_width_cm")
         width_by_node = {
@@ -95,15 +98,22 @@ class DripSchedule:
 
         total_cm2_per_cm = 0.0
         for event in self.events:
-            missing = [node for node in event.nodes if node not in width_by_node]
-            if missing:
-                raise ValueError(
-                    "Missing node width for drip node(s): "
-                    + ", ".join(str(node) for node in missing)
+            if event.source_width_cm > 0.0:
+                total_cm2_per_cm += (
+                    event.applied_depth_cm
+                    * event.source_width_cm
+                    * len(event.nodes)
                 )
-            total_cm2_per_cm += event.applied_depth_cm * sum(
-                width_by_node[node] for node in event.nodes
-            )
+            else:
+                missing = [node for node in event.nodes if node not in width_by_node]
+                if missing:
+                    raise ValueError(
+                        "Missing node width for drip node(s): "
+                        + ", ".join(str(node) for node in missing)
+                    )
+                total_cm2_per_cm += event.applied_depth_cm * sum(
+                    width_by_node[node] for node in event.nodes
+                )
 
         return total_cm2_per_cm / grid_width * 10.0
 
@@ -175,6 +185,7 @@ def parse_drip_file(path):
                 pressure_pc_max_cm=event["pressure_pc_max_cm"],
                 wet_width_max_cm=event["wet_width_max_cm"],
                 spread_mode=event["spread_mode"],
+                source_width_cm=event["source_width_cm"],
             )
         )
 
@@ -324,13 +335,13 @@ def build_public_comparison_report_skeleton(
 
 def _parse_event_line(line, event_index, path):
     tokens = _split_tokens(line)
-    if len(tokens) not in (6, 11, 12, 13):
+    if len(tokens) not in (6, 11, 12, 13, 14):
         raise ValueError(
-            f"Drip event {event_index + 1} in {path} must have 6, 11, 12, or 13 fields: "
+            f"Drip event {event_index + 1} in {path} must have 6, 11, 12, 13, or 14 fields: "
             "start_date, start_hour, stop_date, stop_hour, rate_cm_hr, "
             "node_count[, pressure_mode, pressure_head_cm, pressure_exponent, "
             "pressure_pc_min_cm, pressure_pc_max_cm[, wet_width_max_cm"
-            "[, spread_mode]]]"
+            "[, spread_mode[, source_width_cm]]]]"
         )
     start_date, start_hour, stop_date, stop_hour, rate, node_count = tokens[:6]
     pressure_mode = 0
@@ -340,7 +351,8 @@ def _parse_event_line(line, event_index, path):
     pressure_pc_max_cm = 0.0
     wet_width_max_cm = 0.0
     spread_mode = 0
-    if len(tokens) in (11, 12, 13):
+    source_width_cm = 0.0
+    if len(tokens) in (11, 12, 13, 14):
         pressure_mode = _parse_int(tokens[6], "pressure_mode", event_index)
         pressure_head_cm = _parse_float(tokens[7], "pressure_head_cm", event_index)
         pressure_exponent = _parse_float(
@@ -358,14 +370,20 @@ def _parse_event_line(line, event_index, path):
             "pressure_pc_max_cm",
             event_index,
         )
-    if len(tokens) in (12, 13):
+    if len(tokens) in (12, 13, 14):
         wet_width_max_cm = _parse_float(
             tokens[11],
             "wet_width_max_cm",
             event_index,
         )
-    if len(tokens) == 13:
+    if len(tokens) in (13, 14):
         spread_mode = _parse_int(tokens[12], "spread_mode", event_index)
+    if len(tokens) == 14:
+        source_width_cm = _parse_float(
+            tokens[13],
+            "source_width_cm",
+            event_index,
+        )
     start = _combine_date_hour(start_date, start_hour, event_index, "start")
     stop = _combine_date_hour(stop_date, stop_hour, event_index, "stop")
     if stop <= start:
@@ -384,14 +402,14 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} node_count must be 1-{MAX_DRIP_NODES}"
         )
-    if pressure_mode < 0 or pressure_mode > 2:
+    if pressure_mode < 0 or pressure_mode > 3:
         raise ValueError(
-            f"Drip event {event_index + 1} pressure_mode must be 0, 1, or 2"
+            f"Drip event {event_index + 1} pressure_mode must be 0, 1, 2, or 3"
         )
-    if pressure_mode > 0 and pressure_head_cm <= 0.0:
+    if pressure_mode in (1, 2) and pressure_head_cm <= 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} pressure_head_cm must be positive "
-            "when pressure_mode is enabled"
+            "when pressure_mode is 1 or 2"
         )
     if pressure_exponent <= 0.0:
         pressure_exponent = 1.0
@@ -404,9 +422,13 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
-    if spread_mode not in (0, 1):
+    if spread_mode not in (0, 1, 2):
         raise ValueError(
-            f"Drip event {event_index + 1} spread_mode must be 0 or 1"
+            f"Drip event {event_index + 1} spread_mode must be 0, 1, or 2"
+        )
+    if source_width_cm < 0.0:
+        raise ValueError(
+            f"Drip event {event_index + 1} source_width_cm must be non-negative"
         )
 
     return {
@@ -421,6 +443,7 @@ def _parse_event_line(line, event_index, path):
         "pressure_pc_max_cm": pressure_pc_max_cm,
         "wet_width_max_cm": wet_width_max_cm,
         "spread_mode": spread_mode,
+        "source_width_cm": source_width_cm,
     }
 
 

@@ -86,6 +86,50 @@ class DripValidationTests(unittest.TestCase):
         self.assertAlmostEqual(event.wet_width_max_cm, 16.3)
         self.assertEqual(event.spread_mode, 1)
 
+    def test_parse_source_width_override_for_fixed_emitter_flow(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_source_width_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "source_width.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 16.3 1 10.0",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        event = schedule.events[0]
+        self.assertEqual(event.spread_mode, 1)
+        self.assertAlmostEqual(event.source_width_cm, 10.0)
+        self.assertAlmostEqual(
+            schedule.expected_grid_depth_mm({7: 15.0}, grid_width_cm=120.0),
+            10.0 / 120.0 * 4.0 * 10.0,
+        )
+
+    def test_parse_direct_source_pressure_limited_spread_mode(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_direct_spread_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "direct_spread.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 3 0 1 0 0 20 2",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        event = schedule.events[0]
+        self.assertEqual(event.pressure_mode, 3)
+        self.assertEqual(event.pressure_head_cm, 0.0)
+        self.assertEqual(event.wet_width_max_cm, 20.0)
+        self.assertEqual(event.spread_mode, 2)
+
     def test_parse_optional_wet_width_without_pressure_fields(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_wet_width_") as tmp_dir:
             drip_path = Path(tmp_dir) / "wet_width.drp"
@@ -178,7 +222,7 @@ class DripValidationTests(unittest.TestCase):
             ),
             "invalid_pressure_mode": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 3 100 1 0 0",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 4 100 1 0 0",
                     "7",
                 ]
             ),
@@ -190,7 +234,13 @@ class DripValidationTests(unittest.TestCase):
             ),
             "invalid_spread_mode": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 2",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 3",
+                    "7",
+                ]
+            ),
+            "negative_source_width": _drip_text(
+                [
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 1 -1",
                     "7",
                 ]
             ),

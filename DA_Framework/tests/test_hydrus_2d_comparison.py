@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -82,6 +83,36 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertIn("axisym_volume_cm3", frame.columns)
         np.testing.assert_allclose(frame["axisym_volume_cm3"].to_numpy(), [10.0, 20.0])
 
+    def test_read_hydrus_theta_csv_preserves_observation_uncertainty(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_uncertainty_") as tmp_dir:
+            path = Path(tmp_dir) / "hydrus.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        "x_cm,depth_cm,theta,theta_sd,area_cm2",
+                        "0,0,0.20,0.02,1",
+                        "10,0,0.21,0.03,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            frame = read_hydrus_theta_csv(path)
+
+        self.assertIn("theta_sd", frame.columns)
+        np.testing.assert_allclose(frame["theta_sd"].to_numpy(), [0.02, 0.03])
+
+    def test_read_hydrus_theta_csv_rejects_multiple_output_times(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_csv_") as tmp_dir:
+            path = Path(tmp_dir) / "theta.csv"
+            frame = _field([0.20, 0.21, 0.22, 0.23])
+            frame["time_h"] = [2.0, 2.0, 4.0, 4.0]
+            frame.to_csv(path, index=False)
+
+            with self.assertRaisesRegex(ValueError, "multiple time"):
+                read_hydrus_theta_csv(path)
+
     def test_read_maizsim_g03_theta_selects_nearest_date_and_converts_depth(self):
         with tempfile.TemporaryDirectory(prefix="codex_maizsim_g03_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.G03"
@@ -160,6 +191,10 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         )
 
         self.assertEqual(comparison.metrics["point_count"], 4.0)
+        self.assertEqual(comparison.metrics["hydrus_reference_point_count"], 4.0)
+        self.assertEqual(comparison.metrics["comparison_point_count"], 4.0)
+        self.assertAlmostEqual(comparison.metrics["comparison_point_fraction"], 1.0)
+        self.assertAlmostEqual(comparison.metrics["comparison_area_fraction"], 1.0)
         self.assertAlmostEqual(comparison.metrics["theta_mae"], 0.01)
         self.assertAlmostEqual(
             comparison.metrics["theta_rmse"],
@@ -173,6 +208,31 @@ class Hydrus2DComparisonTests(unittest.TestCase):
         self.assertIn("maizsim_wet", comparison.points.columns)
         self.assertEqual(int(comparison.points["hydrus_wet"].sum()), 1)
         self.assertEqual(int(comparison.points["maizsim_wet"].sum()), 1)
+
+    def test_compare_theta_fields_reports_spatial_overlap_coverage(self):
+        hydrus = _field_at(
+            theta=[0.20, 0.20, 0.30, 0.20, 0.25],
+            x=[0.0, 10.0, 0.0, 10.0, 20.0],
+            depth=[0.0, 0.0, 10.0, 10.0, 0.0],
+        )
+        maizsim = _field(theta=[0.20, 0.20, 0.28, 0.22])
+        baseline = _field(theta=[0.20, 0.20, 0.20, 0.20])
+
+        comparison = compare_theta_fields(
+            maizsim,
+            hydrus,
+            maizsim_baseline=baseline,
+            hydrus_baseline=hydrus.copy(),
+            wet_delta_threshold=0.05,
+        )
+
+        self.assertEqual(comparison.metrics["hydrus_reference_point_count"], 5.0)
+        self.assertEqual(comparison.metrics["comparison_point_count"], 4.0)
+        self.assertEqual(comparison.metrics["dropped_reference_point_count"], 1.0)
+        self.assertAlmostEqual(comparison.metrics["comparison_point_fraction"], 0.8)
+        self.assertAlmostEqual(comparison.metrics["comparison_area_fraction"], 0.8)
+        self.assertAlmostEqual(comparison.metrics["hydrus_x_span_cm"], 20.0)
+        self.assertAlmostEqual(comparison.metrics["comparison_x_span_cm"], 10.0)
 
     def test_compare_theta_fields_uses_nearest_peak_plateau_distance(self):
         hydrus = _field_at(
@@ -252,6 +312,36 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             float(np.sqrt(0.00028)),
         )
 
+    def test_compare_theta_fields_reports_uncertainty_metrics(self):
+        hydrus = _field(
+            theta=[0.20, 0.20, 0.30, 0.20],
+            theta_sd=[0.02, 0.02, 0.02, 0.02],
+        )
+        maizsim = _field(theta=[0.20, 0.20, 0.28, 0.22])
+        baseline = _field(
+            theta=[0.20, 0.20, 0.20, 0.20],
+            theta_sd=[0.01, 0.01, 0.01, 0.01],
+        )
+
+        comparison = compare_theta_fields(
+            maizsim,
+            hydrus,
+            maizsim_baseline=baseline,
+            hydrus_baseline=baseline,
+            wet_delta_threshold=0.05,
+        )
+
+        self.assertEqual(comparison.metrics["theta_uncertainty_point_count"], 4.0)
+        self.assertAlmostEqual(
+            comparison.metrics["theta_abs_residual_le_2sd_fraction"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            comparison.metrics["delta_theta_abs_residual_le_2sd_fraction"],
+            1.0,
+        )
+        self.assertIn("hydrus_delta_theta_sd", comparison.points.columns)
+
     def test_read_comparison_manifest_requires_same_condition_keys(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
             path = Path(tmp_dir) / "manifest.json"
@@ -261,6 +351,248 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ValueError, "missing required keys"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_calibration_cases(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["calibration_data_used"] = True
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "calibration_data_used"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_drip_source_interval(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest.pop("drip_source_left_cm")
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "drip_source_left_cm"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_reproducibility_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest.pop("hydrus_version")
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "hydrus_version"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_reference_provenance(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["reference_data_provenance"].pop("export_tool_or_protocol")
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "reference_data_provenance"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_raw_reference_hashes(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["raw_reference_files"][0]["sha256"] = "not-a-hash"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "raw_reference_files"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_baseline_raw_reference_role(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["raw_reference_files"] = [manifest["raw_reference_files"][0]]
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "baseline"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_verifies_local_raw_reference_file(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            root = Path(tmp_dir)
+            raw_path = root / "raw_reference.csv"
+            payload = b"x_cm,depth_cm,theta\n0,0,0.20\n"
+            raw_path.write_bytes(payload)
+            path = root / "manifest.json"
+            manifest = _manifest()
+            manifest["raw_reference_files"][0].update(
+                {
+                    "path_or_uri": raw_path.name,
+                    "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+            )
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            parsed = read_comparison_manifest(path)
+
+        self.assertEqual(
+            Path(parsed["raw_reference_files"][0]["path_or_uri"]).name,
+            raw_path.name,
+        )
+        self.assertTrue(Path(parsed["raw_reference_files"][0]["path_or_uri"]).is_absolute())
+
+    def test_read_comparison_manifest_rejects_local_raw_reference_mismatch(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            root = Path(tmp_dir)
+            raw_path = root / "raw_reference.csv"
+            payload = b"x_cm,depth_cm,theta\n0,0,0.20\n"
+            raw_path.write_bytes(payload)
+            path = root / "manifest.json"
+            manifest = _manifest()
+            manifest["raw_reference_files"][0].update(
+                {
+                    "path_or_uri": raw_path.name,
+                    "size_bytes": len(payload),
+                    "sha256": "c" * 64,
+                }
+            )
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "sha256 does not match"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_validation_dataset_reuse(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            proof = manifest["independence_proof"]
+            proof["calibration_dataset_ids"] = [proof["validation_dataset_id"]]
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "validation_dataset_id"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_excluded_from_calibration(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["independence_proof"]["excluded_from_calibration"] = False
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "excluded_from_calibration"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_unknown_reference_data_type(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["reference_data_type"] = "uncalibrated_internal_fixture"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "reference_data_type"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_theta_reference_variable(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["reference_data_provenance"]["exported_variable"] = "pressure head"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "exported_variable"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_hydrus_reference_run_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest.pop("hydrus_reference_run")
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "hydrus_reference_run"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_large_hydrus_mass_balance_error(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["hydrus_reference_run"]["mass_balance_error_percent"] = 2.5
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "mass_balance_error_percent"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_validates_measured_reference_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["reference_data_type"] = "measured_2d_theta_field"
+            manifest.pop("hydrus_reference_run")
+            manifest["measured_reference_metadata"] = _measured_reference_metadata()
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            parsed = read_comparison_manifest(path)
+
+        self.assertEqual(parsed["reference_data_type"], "measured_2d_theta_field")
+
+    def test_read_comparison_manifest_rejects_missing_measured_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["reference_data_type"] = "measured_2d_theta_field"
+            manifest.pop("hydrus_reference_run")
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "measured_reference_metadata"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_numeric_event_relative_time(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["event_relative_time_h"] = "two hours"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "event_relative_time_h"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_requires_matching_hydrus_output_time(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["event_relative_time_h"] = 4.0
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "output_time_h"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_water_mover_bypass_coupling(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["water_solver_coupling"] = "direct_storage_bypass_water_mover"
+            manifest["drip_source_formulation"] = "direct_storage_split"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "water_solver_coupling"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_placeholder_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["maizsim_grid"] = {"source": "path/to/LOAM2D.grd"}
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "placeholder"):
+                read_comparison_manifest(path)
+
+    def test_read_comparison_manifest_rejects_drip_node_outside_source_interval(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_manifest_") as tmp_dir:
+            path = Path(tmp_dir) / "manifest.json"
+            manifest = _manifest()
+            manifest["drip_source_left_cm"] = 1.0
+            manifest["drip_source_right_cm"] = 2.0
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "inside"):
                 read_comparison_manifest(path)
 
     def test_cli_writes_summary_points_and_figure(self):
@@ -304,16 +636,165 @@ class Hydrus2DComparisonTests(unittest.TestCase):
             self.assertTrue((output_dir / "hydrus_2d_comparison_points.csv").exists())
             self.assertTrue((output_dir / "hydrus_2d_comparison_fields.png").exists())
             self.assertTrue((output_dir / "hydrus_2d_comparison_manifest.json").exists())
+            self.assertTrue((output_dir / "hydrus_2d_comparison_audit.json").exists())
             self.assertAlmostEqual(float(summary.loc[0, "wet_iou"]), 1.0)
             points = pd.read_csv(output_dir / "hydrus_2d_comparison_points.csv")
             self.assertIn("hydrus_wet", points.columns)
             self.assertIn("maizsim_wet", points.columns)
+            audit = json.loads(
+                (output_dir / "hydrus_2d_comparison_audit.json").read_text(
+                    encoding="utf-8",
+                )
+            )
+            self.assertEqual(
+                audit["parameters"]["interpolation"],
+                "matplotlib.tri.LinearTriInterpolator",
+            )
+            self.assertIn("sha256", audit["inputs"]["hydrus_csv"])
+            self.assertTrue(audit["artifacts"]["figure"]["nonblank"])
             _assert_png_has_drip_annotation(
                 output_dir / "hydrus_2d_comparison_fields.png"
             )
 
+    def test_cli_accepts_measured_reference_with_theta_sd_columns(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_cli_") as tmp_dir:
+            root = Path(tmp_dir)
+            hydrus_path = root / "hydrus.csv"
+            hydrus_base_path = root / "hydrus_base.csv"
+            maizsim_path = root / "LOAM2D.G03"
+            maizsim_base_path = root / "baseline.G03"
+            manifest_path = root / "manifest.json"
+            output_dir = root / "out"
+            _write_hydrus_csv(
+                hydrus_path,
+                [0.20, 0.20, 0.30, 0.20],
+                time_h=2.0,
+                theta_sd=[0.02, 0.02, 0.02, 0.02],
+            )
+            _write_hydrus_csv(
+                hydrus_base_path,
+                [0.20, 0.20, 0.20, 0.20],
+                theta_sd=[0.01, 0.01, 0.01, 0.01],
+            )
+            _write_g03(maizsim_path, [0.20, 0.20, 0.28, 0.22])
+            _write_g03(maizsim_base_path, [0.20, 0.20, 0.20, 0.20])
+            manifest = _manifest()
+            manifest["reference_data_type"] = "measured_2d_theta_field"
+            manifest.pop("hydrus_reference_run")
+            manifest["measured_reference_metadata"] = _measured_reference_metadata()
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-def _field(theta, area=None, volume=None):
+            exit_code = main(
+                [
+                    "--maizsim-g03",
+                    str(maizsim_path),
+                    "--hydrus-csv",
+                    str(hydrus_path),
+                    "--date",
+                    "2024-06-01",
+                    "--maizsim-baseline-g03",
+                    str(maizsim_base_path),
+                    "--hydrus-baseline-csv",
+                    str(hydrus_base_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--wet-delta-threshold",
+                    "0.05",
+                    "--comparison-manifest",
+                    str(manifest_path),
+                ]
+            )
+
+            points = pd.read_csv(output_dir / "hydrus_2d_comparison_points.csv")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("hydrus_theta_sd", points.columns)
+        self.assertIn("hydrus_delta_theta_sd", points.columns)
+
+    def test_cli_rejects_measured_reference_without_theta_sd_column(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_cli_") as tmp_dir:
+            root = Path(tmp_dir)
+            hydrus_path = root / "hydrus.csv"
+            hydrus_base_path = root / "hydrus_base.csv"
+            maizsim_path = root / "LOAM2D.G03"
+            maizsim_base_path = root / "baseline.G03"
+            manifest_path = root / "manifest.json"
+            output_dir = root / "out"
+            _write_hydrus_csv(hydrus_path, [0.20, 0.20, 0.30, 0.20], time_h=2.0)
+            _write_hydrus_csv(
+                hydrus_base_path,
+                [0.20, 0.20, 0.20, 0.20],
+                theta_sd=[0.01, 0.01, 0.01, 0.01],
+            )
+            _write_g03(maizsim_path, [0.20, 0.20, 0.28, 0.22])
+            _write_g03(maizsim_base_path, [0.20, 0.20, 0.20, 0.20])
+            manifest = _manifest()
+            manifest["reference_data_type"] = "measured_2d_theta_field"
+            manifest.pop("hydrus_reference_run")
+            manifest["measured_reference_metadata"] = _measured_reference_metadata()
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "theta_sd"):
+                main(
+                    [
+                        "--maizsim-g03",
+                        str(maizsim_path),
+                        "--hydrus-csv",
+                        str(hydrus_path),
+                        "--date",
+                        "2024-06-01",
+                        "--maizsim-baseline-g03",
+                        str(maizsim_base_path),
+                        "--hydrus-baseline-csv",
+                        str(hydrus_base_path),
+                        "--output-dir",
+                        str(output_dir),
+                        "--wet-delta-threshold",
+                        "0.05",
+                        "--comparison-manifest",
+                        str(manifest_path),
+                    ]
+                )
+
+    def test_cli_rejects_manifest_time_mismatch_with_hydrus_csv(self):
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_cli_") as tmp_dir:
+            root = Path(tmp_dir)
+            hydrus_path = root / "hydrus.csv"
+            hydrus_base_path = root / "hydrus_base.csv"
+            maizsim_path = root / "LOAM2D.G03"
+            maizsim_base_path = root / "baseline.G03"
+            manifest_path = root / "manifest.json"
+            output_dir = root / "out"
+            _write_hydrus_csv(hydrus_path, [0.20, 0.20, 0.30, 0.20], time_h=4.0)
+            _write_hydrus_csv(hydrus_base_path, [0.20, 0.20, 0.20, 0.20])
+            _write_g03(maizsim_path, [0.20, 0.20, 0.28, 0.22])
+            _write_g03(maizsim_base_path, [0.20, 0.20, 0.20, 0.20])
+            manifest_path.write_text(json.dumps(_manifest()), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "selected_time_h"):
+                main(
+                    [
+                        "--maizsim-g03",
+                        str(maizsim_path),
+                        "--hydrus-csv",
+                        str(hydrus_path),
+                        "--date",
+                        "2024-06-01",
+                        "--maizsim-baseline-g03",
+                        str(maizsim_base_path),
+                        "--hydrus-baseline-csv",
+                        str(hydrus_base_path),
+                        "--output-dir",
+                        str(output_dir),
+                        "--wet-delta-threshold",
+                        "0.05",
+                        "--comparison-manifest",
+                        str(manifest_path),
+                    ]
+                )
+
+
+def _field(theta, area=None, volume=None, theta_sd=None):
     if area is None:
         area = [1.0, 1.0, 1.0, 1.0]
     frame = pd.DataFrame(
@@ -326,6 +807,8 @@ def _field(theta, area=None, volume=None):
     )
     if volume is not None:
         frame["axisym_volume_cm3"] = volume
+    if theta_sd is not None:
+        frame["theta_sd"] = theta_sd
     return frame
 
 
@@ -351,8 +834,10 @@ def _component_field(theta):
     )
 
 
-def _write_hydrus_csv(path, theta):
-    frame = _field(theta)
+def _write_hydrus_csv(path, theta, time_h=None, theta_sd=None):
+    frame = _field(theta, theta_sd=theta_sd)
+    if time_h is not None:
+        frame["time_h"] = float(time_h)
     frame.to_csv(path, index=False)
 
 
@@ -396,13 +881,107 @@ def _manifest():
         "applied_volume_l": 4.0,
         "event_duration_h": 2.0,
         "output_time": "2024-06-01T00:00:00",
+        "event_relative_time_h": 2.0,
         "domain_width_cm": 10.0,
         "domain_depth_cm": 10.0,
         "drip_x_cm": 0.0,
         "drip_source_left_cm": -2.0,
         "drip_source_right_cm": 2.0,
+        "drip_source_formulation": "partial-width surface flux boundary",
+        "water_solver_coupling": "richards_surface_flux_boundary",
         "boundary_conditions": "synthetic closed side/free drainage bottom",
         "baseline_definition": "same setup without drip irrigation",
+        "hydrus_version": "synthetic-hydrus-2d",
+        "hydrus_mesh": {
+            "node_count": 4,
+            "element_count": 2,
+            "source": "synthetic in-memory mesh",
+        },
+        "hydrus_time_step_control": {"max_step_h": 0.1, "output_time_h": 2.0},
+        "maizsim_version": "synthetic-maizsim",
+        "maizsim_grid": {
+            "node_count": 4,
+            "element_count": 2,
+            "source": "synthetic G03 fixture",
+        },
+        "maizsim_time_step_control": {"water_dtmax_d": 0.005},
+        "theta_units": "cm3 cm-3",
+        "observation_source": "synthetic theta field with theta_sd columns",
+        "reference_data_type": "hydrus_2d_simulation",
+        "reference_identity": {
+            "reference_case_id": "synthetic_surface_drip_t2h",
+            "dataset_title": "Unit-test HYDRUS theta fixture",
+            "dataset_version": "fixture-v1",
+            "originating_institution": "MAIZSIM test suite",
+            "data_freeze_timestamp_utc": "2026-05-27T00:00:00Z",
+        },
+        "reference_data_provenance": {
+            "source_system": "HYDRUS-2D fixture writer",
+            "project_or_dataset_id": "synthetic_surface_drip",
+            "export_tool_or_protocol": "unit-test CSV export",
+            "exported_variable": "theta water content",
+            "spatial_support": "four nodal control areas with area_cm2 weights",
+            "time_selection": "event-relative time 2.0 h",
+            "preprocessing_steps": "direct fixture export without calibration fitting",
+        },
+        "hydrus_reference_run": {
+            "domain_mode": "cartesian_2d",
+            "soil_model": "van Genuchten-Mualem",
+            "solver_tolerances": {"water_content_tolerance": 1.0e-5},
+            "mass_balance_error_percent": 0.01,
+            "output_record_time_h": 2.0,
+            "export_command": "fixture-export --time 2.0h --variable theta",
+        },
+        "raw_reference_files": [
+            {
+                "role": "hydrus_event_theta_fixture",
+                "path_or_uri": "memory://synthetic_surface_drip/hydrus.csv",
+                "size_bytes": 128,
+                "sha256": "a" * 64,
+            },
+            {
+                "role": "hydrus_baseline_theta_fixture",
+                "path_or_uri": "memory://synthetic_surface_drip/hydrus_base.csv",
+                "size_bytes": 128,
+                "sha256": "c" * 64,
+            },
+        ],
+        "independence_proof": {
+            "parameter_freeze_commit": "199627a4a68e464dfd7c31d2cc65f1de26b54972",
+            "parameter_freeze_timestamp_utc": "2026-05-26T00:00:00Z",
+            "freeze_record_sha256": "b" * 64,
+            "calibration_dataset_ids": ["internal_fixture_calibration"],
+            "validation_dataset_id": "synthetic_surface_drip_t2h",
+            "excluded_from_calibration": True,
+            "case_selection_protocol": "unit-test validation fixture selected before comparison",
+        },
+        "uncertainty_basis": {
+            "theta_sd_source": "fixture theta_sd column",
+            "uncertainty_units": "cm3 cm-3",
+            "coverage_level": "one standard deviation",
+        },
+        "comparison_coordinate_system": "x_cm horizontal, depth_cm positive downward",
+        "validation_role": "independent_validation",
+        "calibration_data_used": False,
+        "model_parameters_frozen": True,
+        "calibration_note": (
+            "Synthetic test case; parameters are fixed before comparison."
+        ),
+    }
+
+
+def _measured_reference_metadata():
+    return {
+        "instrument_method": "2D neutron radiography fixture",
+        "instrument_ids": ["NR-001"],
+        "sensor_calibration_id": "theta-cal-001",
+        "theta_conversion_equation": "theta = a * attenuation + b",
+        "spatial_resolution_cm": 1.0,
+        "registration_method": "rigid control-point registration",
+        "registration_error_cm": 0.2,
+        "qaqc_flags": {"bad_pixels_removed": True},
+        "uncertainty_model": {"theta_sd_column": "theta_sd"},
+        "replicate_count": 2,
     }
 
 

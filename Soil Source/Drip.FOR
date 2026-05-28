@@ -21,6 +21,7 @@
      !     SourceFlux,AddRate,PressureFactor,Havail,HeadPressure,
      !     DripHIn,DripExp,DripPcMin,DripPcMax,SourceRate,
      !     SourceDemandFlux,DemandRate,LossRate,DripWetWidthMax,
+     !     DripSourceWidth,
      !     SurfaceWidth,MaxWetWidth,CandidateWidth,NodeExcess,
      !     ExcessFlux,PrevDripFlux,DripExcessFrac,
      !     DripDefaultWetWidth,TargetWetWidth,EffectiveHours,
@@ -61,6 +62,7 @@
      !     DripHIn(Max_times),DripExp(Max_times),
      !     DripPcMin(Max_times),DripPcMax(Max_times),
      !     DripWetWidthMax(Max_times),DripSpreadMode(Max_times),
+     !     DripSourceWidth(Max_times),
      !     DripEffHours(Max_times,Max_nodes),
      !     DripLastTime(Max_times,Max_nodes),
      !     DripLastPressure(Max_times,Max_nodes),
@@ -135,6 +137,7 @@ c from repeated redistribution by the generic surface runoff module.
           DripPcMax(i)=0.0
           DripWetWidthMax(i)=0.0
           DripSpreadMode(i)=0
+          DripSourceWidth(i)=0.0
           Do j=1,Max_nodes
             SourceBnd(i,j)=0
             SourceSurfPos(i,j)=0
@@ -182,7 +185,13 @@ c from repeated redistribution by the generic surface runoff module.
           DripWetWidthMax(i)=0.0
           DripSpreadMode(i)=0
           FieldCount=DripFieldCount(EventLine)
-          If(FieldCount.eq.13) then
+          If(FieldCount.eq.14) then
+            Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
+     !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i),
+     !       DripMode(i),DripHIn(i),DripExp(i),
+     !       DripPcMin(i),DripPcMax(i),DripWetWidthMax(i),
+     !       DripSpreadMode(i),DripSourceWidth(i)
+          ElseIf(FieldCount.eq.13) then
             Read(EventLine,*,IOSTAT=ios) Start_Date(i), Start_hour(i),
      !       Stop_Date(i), Stop_hour(i), wAppl(i), Num_nodes(i),
      !       DripMode(i),DripHIn(i),DripExp(i),
@@ -228,6 +237,9 @@ c from repeated redistribution by the generic surface runoff module.
           If(DripSpreadMode(i).lt.0.or.DripSpreadMode(i).gt.2) then
             Stop 'Invalid drip spread mode'
           Endif
+          If(DripSourceWidth(i).lt.0.0) then
+            Stop 'Invalid drip source width'
+          Endif
           Read(40,*,Err=20)
           Read(40,*,Err=20) (nAppl(i,j),j=1,Num_nodes(i))
         EndDo
@@ -260,6 +272,10 @@ c from repeated redistribution by the generic surface runoff module.
 
       If(Drip_times.eq.0) Return
 
+c Resolve drip wetting fronts for coupled water-solute solves.
+      dtMx(1)=dmin1(dtMx(1),0.005D0)
+      dtOpt=dmin1(dtOpt,0.005D0)
+
       Do i=1,NumBP
         DripRate(i)=0.0
         DripInput_Rate(i)=0.0
@@ -282,7 +298,8 @@ c from repeated redistribution by the generic surface runoff module.
 
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
-          If(DripSpreadMode(jj).eq.1) DripBypassRunoff=1
+          If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3)
+     !      DripBypassRunoff=1
           If(DripSpreadMode(jj).eq.2) DripBypassRunoff=1
           If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
             DripBypassWaterMover=1
@@ -436,8 +453,13 @@ c from repeated redistribution by the generic surface runoff module.
               Endif
             ElseIf(DripSpreadMode(jj).eq.2) then
               SourceRate=wAppl(jj)/PERIOD
-              SourceDemandFlux=SourceRate*Width(CenterBnd)*
-     !          PressureFactor
+              If(DripSourceWidth(jj).gt.0.0) then
+                SourceDemandFlux=SourceRate*DripSourceWidth(jj)*
+     !            PressureFactor
+              Else
+                SourceDemandFlux=SourceRate*Width(CenterBnd)*
+     !            PressureFactor
+              Endif
               DesiredRadius=MaxRadius
               TargetWetWidth=MaxWetWidth
               Do CandidateRadius=0,MaxRadius
@@ -567,7 +589,11 @@ c from repeated redistribution by the generic surface runoff module.
      !            LastRate(DripSurfBnd(k))*Width(DripSurfBnd(k))
               EndDo
               If(PrevDripFlux.le.DripTol) then
-                PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
+                If(DripSourceWidth(jj).gt.0.0) then
+                  PrevDripFlux=wAppl(jj)/PERIOD*DripSourceWidth(jj)
+                Else
+                  PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
+                Endif
               Endif
               If(ExcessFlux.gt.amax1(DripTol,
      !          DripExcessFrac*PrevDripFlux)) NeedExpand=1
@@ -655,9 +681,13 @@ c from repeated redistribution by the generic surface runoff module.
             If(TotalWidth.le.0.0.or.TotalMeasure.le.0.0)
      !        Stop 'Invalid drip wetted width'
             SourceRate=wAppl(jj)/PERIOD
-            SourceDemandFlux=SourceRate*Width(CenterBnd)
+            If(DripSourceWidth(jj).gt.0.0) then
+              SourceDemandFlux=SourceRate*DripSourceWidth(jj)
+            Else
+              SourceDemandFlux=SourceRate*Width(CenterBnd)
+            Endif
             SourceFlux=SourceDemandFlux*PressureFactor
-            If(DripSpreadMode(jj).eq.1) then
+            If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
               If(DripPcMax(jj).gt.0.0) then
                 SourceDepth=DripPcMax(jj)
               Else
@@ -790,9 +820,8 @@ c remaining water after source saturation is reported as capacity loss.
      !        Width(CenterBnd).gt.DripTol) then
                 DripSourceLoss_Flux=DripSourceLoss_Flux+
      !          dble(RemainingWater)
-                DripPressureLoss_Rate(CenterBnd)=
-     !          DripPressureLoss_Rate(CenterBnd)+
-     !          RemainingWater/(Step*Width(CenterBnd))
+c Source capacity loss is reported separately as DripSourceLoss.
+c Do not also count it as pressure loss.
               Endif
             Endif
             If(DripSpreadMode(jj).eq.1.or.
@@ -901,6 +930,10 @@ c remaining water after source saturation is reported as capacity loss.
      !                TotalMeasure/Width(DripSurfBnd(k))
                     LossRate=(SourceDemandFlux-SourceFlux)*
      !                CoverMeasure/TotalMeasure/Width(DripSurfBnd(k))
+                    If(DripMode(jj).ne.3) then
+                      DripRate(DripSurfBnd(k))=
+     !                  DripRate(DripSurfBnd(k))+AddRate
+                    Endif
                     DripInput_Rate(DripSurfBnd(k))=
      !                DripInput_Rate(DripSurfBnd(k))+AddRate
                     DripDemand_Rate(DripSurfBnd(k))=
@@ -968,6 +1001,10 @@ c remaining water after source saturation is reported as capacity loss.
      !              NodeWeight*CoverMeasure/WeightSum/
      !              Width(DripSurfBnd(k))
                   If(CoverWidth.gt.DripTol) then
+                    If(DripMode(jj).ne.3) then
+                      DripRate(DripSurfBnd(k))=
+     !                  DripRate(DripSurfBnd(k))+AddRate
+                    Endif
                     DripInput_Rate(DripSurfBnd(k))=
      !                DripInput_Rate(DripSurfBnd(k))+AddRate
                     DripDemand_Rate(DripSurfBnd(k))=

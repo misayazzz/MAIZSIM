@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -74,6 +75,7 @@ class HydrusOfficialProject:
     mesh: HydrusMesh
     theta_output: HydrusThetaOutput
     selector_metadata: dict
+    stream_audit: dict | None = None
 
 
 def read_hydrus_dimensions_text(text):
@@ -273,6 +275,7 @@ def read_official_project(project_dir=None, project_file=None):
         mesh=mesh,
         theta_output=theta_output,
         selector_metadata=selector_metadata,
+        stream_audit=_stream_audit(streams),
     )
 
 
@@ -372,6 +375,7 @@ def write_official_project_outputs(
     summary_path = output_path / f"{prefix}_summary.csv"
     figure_path = output_path / f"{prefix}_hydrus_fields.png"
     manifest_path = output_path / f"{prefix}_hydrus_manifest.json"
+    audit_path = output_path / f"{prefix}_official_export_audit.json"
     index_path = output_path / f"{prefix}_outputs.json"
 
     baseline.to_csv(baseline_path, index=False)
@@ -412,8 +416,102 @@ def write_official_project_outputs(
         "figure": str(figure_path),
         "hydrus_manifest_json": str(manifest_path),
     }
+    audit = _official_export_audit(
+        project,
+        outputs,
+        baseline_time_h=float(baseline["time_h"].iloc[0]),
+        output_time_h=float(output["time_h"].iloc[0]),
+        wet_delta_threshold=wet_delta_threshold,
+        drip_x_cm=drip_x_cm,
+    )
+    audit_path.write_text(
+        json.dumps(audit, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    outputs["audit_json"] = str(audit_path)
     index_path.write_text(json.dumps(outputs, indent=2), encoding="utf-8")
     return outputs
+
+
+def _official_export_audit(
+    project,
+    outputs,
+    *,
+    baseline_time_h,
+    output_time_h,
+    wet_delta_threshold,
+    drip_x_cm,
+):
+    artifact_audits = {
+        name: _file_audit(path)
+        for name, path in outputs.items()
+        if name != "audit_json"
+    }
+    figure_path = outputs.get("figure")
+    if figure_path:
+        artifact_audits["figure"].update(_figure_audit(figure_path))
+    return {
+        "project_name": project.selector_metadata.get("project_name"),
+        "stream_audit": project.stream_audit or {},
+        "selected_times": {
+            "baseline_time_h": baseline_time_h,
+            "output_time_h": output_time_h,
+        },
+        "mesh": {
+            "node_count": int(project.dimensions.node_count),
+            "element_count": int(project.dimensions.element_count),
+            "boundary_node_count": int(project.dimensions.boundary_node_count),
+        },
+        "parameters": {
+            "wet_delta_threshold": float(wet_delta_threshold),
+            "drip_x_cm": float(drip_x_cm),
+        },
+        "artifacts": artifact_audits,
+    }
+
+
+def _stream_audit(streams):
+    return {
+        name: {
+            "size_bytes": int(len(data)),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+        for name, data in sorted(streams.items())
+    }
+
+
+def _file_audit(path):
+    file_path = Path(path)
+    return {
+        "path": str(file_path),
+        "size_bytes": int(file_path.stat().st_size),
+        "sha256": _sha256(file_path),
+    }
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _figure_audit(path):
+    try:
+        image = plt.imread(path)
+        return {
+            "pixel_height": int(image.shape[0]),
+            "pixel_width": int(image.shape[1]),
+            "nonblank": bool(float(np.nanstd(image[..., :3])) > 0.0),
+        }
+    except Exception as exc:
+        return {
+            "pixel_height": 0,
+            "pixel_width": 0,
+            "nonblank": False,
+            "error": str(exc),
+        }
 
 
 def plot_hydrus_field_plate(

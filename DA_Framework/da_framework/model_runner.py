@@ -7,6 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+MODEL_FAILURE_MARKERS = (
+    "ORTHOMIN TERMINATES",
+    "Traceback",
+    "forrtl: severe",
+    "Invalid drip",
+    "Drip data error",
+    "WaterMover non-finite head",
+    "Sowing date cannot be earlier",
+)
+
+
 @dataclass
 class ModelRunResult:
     """Result metadata for one external model run."""
@@ -109,9 +120,12 @@ def run_model(
             message,
         )
 
-    success = completed.returncode == 0
+    marker = _failure_marker(stdout_path, stderr_path)
+    success = completed.returncode == 0 and marker is None
     if success:
         message = "Model run completed successfully"
+    elif marker is not None:
+        message = f"Model run completed with failure marker: {marker}"
     else:
         message = f"Model run failed with return code {completed.returncode}"
 
@@ -168,6 +182,22 @@ def _write_failure_logs(
 def _append_stderr(stderr_path: Path, message: str) -> None:
     with stderr_path.open("a", encoding="utf-8") as stderr_file:
         stderr_file.write(f"{message}\n")
+
+
+def _failure_marker(stdout_path: Path, stderr_path: Path) -> str | None:
+    text = (
+        stdout_path.read_text(encoding="utf-8", errors="replace")
+        + stderr_path.read_text(encoding="utf-8", errors="replace")
+    )
+    text_lower = text.casefold()
+    return next(
+        (
+            marker
+            for marker in MODEL_FAILURE_MARKERS
+            if marker.casefold() in text_lower
+        ),
+        None,
+    )
 
 
 def _normalise_suffixes(required_suffixes) -> tuple[str, ...]:

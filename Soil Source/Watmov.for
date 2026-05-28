@@ -20,7 +20,7 @@
       real ATG,HSP
 cccz move it to "PuSurface.ins" for public use 
 cccz  Double precision CriticalH, CriticalH_R
-      Logical Explic,ItCrit,FreeD
+      Logical Explic,ItCrit,FreeD,BadHead
       Real  hOld_1(NumNPD)
       Real Dif(NumNPD)
       Real BaseQ(NumNPD),BaseHOld(NumNPD),DripLowKsBypassLimit,
@@ -529,14 +529,29 @@ cdt  conventional solver ends here
             if(lOrt) B(i)=B1(i)
           hNew(i) =sngl(B(i))
  613   Continue
-      Iter =Iter+1
-      If (Explic) goto 619
-
       hMax=0.0
+      BadHead=.false.
       do i=1,NumNP
-         hAbs=Abs(hNew(i))
-         if (hAbs.gt.hMax) hMax = hAbs
+         If(hNew(i).ne.hNew(i)) then
+            BadHead=.true.
+            hMax=1.0E30
+         Else
+            hAbs=Abs(hNew(i))
+            if (hAbs.gt.hMax) hMax = hAbs
+            If(hAbs.gt.1.0E30) BadHead=.true.
+         Endif
       enddo
+      Iter =Iter+1
+      If(BadHead) then
+        If(Explic) Stop 'WaterMover non-finite head'
+        Explic=.true.
+        Do 614 i=1,NumNP
+          hNew(i)=hOld(i)
+          hTemp(i)=hOld(i)
+ 614    Continue
+        Goto 12
+      Endif
+      If (Explic) goto 619
 C
 C    Test for convergence
 C
@@ -721,16 +736,22 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
             DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
      !        DripLoss*Step
           Endif
-        ElseIf(DripInput_Rate(k).gt.0.0.and.Q(i).gt.1.0E-5) then
+        ElseIf(DripInput_Rate(k).gt.0.0) then
           DripPotential=dble(DripInput_Rate(k)*Width(k))
-          DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
-          DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
-          DripExcess=dmin1(DripExcess,DripPotential)
-          If(DripPressureLimit_Rate(k).gt.0.0) then
-            RO(i)=amax1(RO(i),sngl(DripExcess))
+          If(Q(i).gt.1.0E-5) then
+            DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
+            DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
+            DripExcess=dmin1(DripExcess,DripPotential)
+          Else
+            DripExcess=DripPotential
           Endif
-          DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
-     !      DripExcess*Step
+          DripActual=dmax1(DripPotential-DripExcess,0.0D0)
+          DripActualInfil_Flux=DripActualInfil_Flux+
+     !      DripActual*Step
+          If(DripExcess.gt.0.0D0) then
+            DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
+     !        DripExcess*Step
+          Endif
         Endif
        Enddo         
 cccz turn this on for Ex_4 plastic mulching

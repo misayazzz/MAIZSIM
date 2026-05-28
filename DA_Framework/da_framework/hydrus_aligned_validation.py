@@ -144,6 +144,15 @@ def prepare_hydrus_aligned_runs(
     drip_mode = 3 if use_direct_split else 0
     if drip_mode_override is not None:
         drip_mode = int(drip_mode_override)
+    if drip_mode == 3 and drip_spread_mode == 1:
+        drip_source_formulation = "direct_storage_split_bypass_water_mover"
+        water_solver_coupling = "direct_storage_bypass_water_mover"
+    elif drip_spread_mode == 2:
+        drip_source_formulation = "pressure-limited surface boundary"
+        water_solver_coupling = "richards_pressure_limited_surface_boundary"
+    else:
+        drip_source_formulation = "partial-width surface flux boundary"
+        water_solver_coupling = "richards_surface_flux_boundary"
     rate_l_h = (
         float(emitter_rate_l_h)
         if emitter_rate_l_h is not None
@@ -199,11 +208,14 @@ def prepare_hydrus_aligned_runs(
         "event_duration_h": duration_h,
         "hydrus_output_time_h": hydrus_output_time,
         "output_time": f"HYDRUS {hydrus_output_time:g} h; MAIZSIM final hourly frame",
+        "event_relative_time_h": hydrus_output_time,
         "domain_width_cm": float(project.mesh.nodes["x_cm"].max() - project.mesh.nodes["x_cm"].min()),
         "domain_depth_cm": float(project.mesh.nodes["depth_cm"].max() - project.mesh.nodes["depth_cm"].min()),
         "drip_x_cm": float(source["x_cm"]),
         "drip_source_left_cm": 0.0 if int(selector.get("kat", -1)) == 1 else float(source["x_cm"] - 0.5 * drip_radius_cm),
         "drip_source_right_cm": drip_radius_cm if int(selector.get("kat", -1)) == 1 else float(source["x_cm"] + 0.5 * drip_radius_cm),
+        "drip_source_formulation": drip_source_formulation,
+        "water_solver_coupling": water_solver_coupling,
         "boundary_conditions": "HYDRUS BOUNDARY.IN widths; MAIZSIM surface atmospheric, bottom seepage face",
         "baseline_definition": "same MAIZSIM setup with zero drip events",
         "hydrus_kat": int(selector.get("kat", -1)),

@@ -8,16 +8,118 @@
     "n": 1.56,
     "ks_cm_h": 1.04
   },
-  "initial_condition": "Record the HYDRUS initial pressure head or theta field and use the equivalent MAIZSIM initial condition.",
+  "initial_condition": "Uniform theta = 0.20 cm3 cm-3 in both HYDRUS and MAIZSIM before the drip event.",
   "emitter_rate_l_h": 2.0,
   "applied_volume_l": 4.0,
   "event_duration_h": 2.0,
-  "output_time": "Use the same absolute or event-relative output time in both models.",
+  "output_time": "2.0 h after drip event start",
+  "event_relative_time_h": 2.0,
   "domain_width_cm": 40.0,
   "domain_depth_cm": 55.0,
   "drip_x_cm": 12.1,
   "drip_source_left_cm": 4.1,
   "drip_source_right_cm": 20.4,
-  "boundary_conditions": "Describe top, bottom, and side boundary conditions; note whether root uptake and evaporation are off or matched.",
-  "baseline_definition": "Same soil, initial condition, domain, boundary conditions, and time period without drip irrigation."
+  "drip_source_formulation": "Partial-width surface flux boundary applied through the Richards water mover.",
+  "water_solver_coupling": "richards_surface_flux_boundary",
+  "boundary_conditions": "No-flux side boundaries, free-drainage bottom boundary, atmospheric top boundary outside the drip source, root uptake and evaporation disabled during the HYDRUS-MAIZSIM event comparison.",
+  "baseline_definition": "Same soil, initial condition, domain, boundary conditions, and time period without drip irrigation.",
+  "hydrus_version": "HYDRUS-2D/3D 3.03.0360",
+  "hydrus_mesh": {
+    "node_count": 1250,
+    "element_count": 2350,
+    "mesh_source": "Archived HYDRUS project MESHTRIA.000",
+    "area_or_volume_weighting": "Nodal control areas exported as area_cm2; axisymmetric volumes exported as axisym_volume_cm3 when applicable."
+  },
+  "hydrus_time_step_control": {
+    "initial_time_step_h": 0.001,
+    "minimum_time_step_h": 1e-06,
+    "maximum_time_step_h": 0.01,
+    "output_time_h": 2.0
+  },
+  "maizsim_version": "MAIZSIM validation build based on commit 199627a4a68e464dfd7c31d2cc65f1de26b54972 with frozen drip parameters",
+  "maizsim_grid": {
+    "grid_file": "LOAM2D.grd",
+    "node_count": 340,
+    "element_count": 306,
+    "drip_boundary_nodes": [7],
+    "source_width_cm": 16.3
+  },
+  "maizsim_time_step_control": {
+    "water_dtmax_d": 0.005,
+    "output_date": "2007-05-01"
+  },
+  "theta_units": "cm3 cm-3",
+  "observation_source": "HYDRUS node-level theta export from the archived independent validation project.",
+  "reference_data_type": "hydrus_2d_3d_simulation",
+  "reference_identity": {
+    "reference_case_id": "SurfaceDrip_loam_2Lh_4L_t2h",
+    "dataset_title": "Independent HYDRUS surface-drip benchmark export for loam",
+    "dataset_version": "2026-05-27-freeze",
+    "doi_or_accession": "local validation archive accession to be replaced by repository DOI",
+    "archive_uri": "archive://hydrus_surface_drip/SurfaceDrip_loam_2Lh_4L",
+    "originating_institution": "MAIZSIM drip validation archive",
+    "data_freeze_timestamp_utc": "2026-05-27T00:00:00Z"
+  },
+  "reference_data_provenance": {
+    "source_system": "HYDRUS-2D/3D",
+    "project_or_dataset_id": "SurfaceDrip_loam_2Lh_4L",
+    "export_tool_or_protocol": "HYDRUS node output exported to CSV by the validation post-processing script",
+    "exported_variable": "theta water content",
+    "spatial_support": "HYDRUS nodal control area with area_cm2 weights",
+    "time_selection": "Output record at 2.0 h after drip event start",
+    "preprocessing_steps": "Converted HYDRUS coordinates to x_cm and depth_cm; retained node-level theta and control-area weights without calibration fitting."
+  },
+  "hydrus_reference_run": {
+    "domain_mode": "cartesian_2d",
+    "soil_model": "van Genuchten-Mualem",
+    "solver_tolerances": {
+      "head_tolerance_cm": 0.001,
+      "water_content_tolerance": 1e-05
+    },
+    "mass_balance_error_percent": 0.05,
+    "output_record_time_h": 2.0,
+    "export_command": "hydrus_export_theta --project SurfaceDrip_loam_2Lh_4L --time-h 2.0 --variable theta"
+  },
+  "raw_reference_files": [
+    {
+      "role": "hydrus_project_archive",
+      "path_or_uri": "archive://hydrus_surface_drip/SurfaceDrip_loam_2Lh_4L.zip",
+      "size_bytes": 1048576,
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "source_archive_uri": "archive://hydrus_surface_drip"
+    },
+    {
+      "role": "hydrus_event_theta_export_csv",
+      "path_or_uri": "archive://hydrus_surface_drip/SurfaceDrip_loam_2Lh_4L/loam_t2h_theta_output.csv",
+      "size_bytes": 262144,
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "source_archive_uri": "archive://hydrus_surface_drip"
+    },
+    {
+      "role": "hydrus_baseline_theta_export_csv",
+      "path_or_uri": "archive://hydrus_surface_drip/SurfaceDrip_loam_2Lh_4L/loam_baseline_theta_output.csv",
+      "size_bytes": 262144,
+      "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "source_archive_uri": "archive://hydrus_surface_drip"
+    }
+  ],
+  "independence_proof": {
+    "parameter_freeze_commit": "199627a4a68e464dfd7c31d2cc65f1de26b54972",
+    "parameter_freeze_timestamp_utc": "2026-05-26T00:00:00Z",
+    "freeze_record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "calibration_dataset_ids": ["internal_width_curve", "internal_water_balance"],
+    "validation_dataset_id": "SurfaceDrip_loam_2Lh_4L_t2h",
+    "excluded_from_calibration": true,
+    "case_selection_protocol": "Selected before running the journal-readiness validation suite to cover soil texture, emitter rate, and event duration diversity."
+  },
+  "uncertainty_basis": {
+    "theta_sd_source": "HYDRUS export or measured uncertainty column provided in hydrus_csv as theta_sd",
+    "uncertainty_units": "cm3 cm-3",
+    "coverage_level": "one standard deviation used for readiness 2sd residual coverage checks"
+  },
+  "comparison_coordinate_system": "x_cm horizontal coordinate; depth_cm positive downward from soil surface.",
+  "validation_role": "independent_validation",
+  "calibration_data_used": false,
+  "model_parameters_frozen": true,
+  "calibration_note": "MAIZSIM drip source-width and pressure parameters were frozen before this independent validation run; this HYDRUS theta field was not used for calibration."
 }
