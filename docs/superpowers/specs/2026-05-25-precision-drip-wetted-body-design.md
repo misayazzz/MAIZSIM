@@ -24,18 +24,21 @@
 
 ## 输入格式
 
-旧6字段、11字段和12字段`.drp`继续有效。新增精细模式采用向后兼容扩展：
+旧6字段、11字段和12字段`.drp`继续有效。当前扩展格式为：
 
 ```text
-Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode
+Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth
 ```
 
 字段含义：
 
-- `DripSpreadMode=0`：兼容模式。沿用当前`RO`触发扩展逻辑。
-- `DripSpreadMode=1`：HYDRUS-style动态湿润源区模式。
+- `DripSpreadMode=0`：旧格式兼容模式。旧输入没有`DripSpreadMode`字段时默认取`0`，沿用原来的`RO`触发扩展逻辑；它不是新研究推荐模式。
+- `DripSpreadMode=1`：HYDRUS-style动态湿润源区模式，保留为历史/实验路径。
+- `DripSpreadMode=2`：压力限流地表边界模式，保留为HYDRUS对齐遗留路径。
+- `DripSpreadMode=3`：地表暂存/释放模式，保留为历史/实验路径。
+- `DripSpreadMode=4`：现实地表滴头主线模式。必须提供正的`DripSourceWidth`作为真实出水宽度，不再用中心网格边界宽度作为推荐回退。
 
-如果旧输入没有`DripSpreadMode`，默认取`0`。
+新输入若填写`DripSourceWidth`但省略`DripSpreadMode`，Python输入生成器按`Mode4`写出。`Mode1-3`不删除、不阻断旧算例，但不再建议用于新研究。
 
 ## HYDRUS-style动态宽度
 
@@ -142,7 +145,8 @@ sum(DripRate(k) * Width(k)) = SourceFlux
 
 1. 单元测试：
    - `.drp`旧格式仍可解析。
-   - 第13字段`DripSpreadMode`可解析并写出。
+   - 第13字段`DripSpreadMode`和第14字段`DripSourceWidth`可解析并写出。
+   - `DripSpreadMode=4`缺少正的`DripSourceWidth`时应拒绝。
    - HYDRUS宽度曲线插值单调、不越上限。
    - 加权通量归一化守恒。
 

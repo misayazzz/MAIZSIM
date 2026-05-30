@@ -39,6 +39,12 @@ SPREAD_MODE_FIELDS = (
     "spreadmode",
     "wettingmode",
 )
+SOURCE_WIDTH_FIELDS = (
+    "dripsourcewidth",
+    "dripsourcewidthcm",
+    "sourcewidth",
+    "sourcewidthcm",
+)
 
 
 def is_blank(value):
@@ -220,11 +226,18 @@ def normalize_drip_record(run_id, record, require_distance):
     pressure_pc_min = parse_optional_float(record, PRESSURE_PC_MIN_FIELDS, context, "DripPcMin", 0.0)
     pressure_pc_max = parse_optional_float(record, PRESSURE_PC_MAX_FIELDS, context, "DripPcMax", 0.0)
     wet_width_max = parse_optional_float(record, WET_WIDTH_MAX_FIELDS, context, "DripWetWidthMax", 0.0)
-    spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
+    source_width = parse_optional_float(record, SOURCE_WIDTH_FIELDS, context, "DripSourceWidth", 0.0)
+    spread_mode_value = get_optional_cell(record, SPREAD_MODE_FIELDS)
+    if spread_mode_value is None and source_width > 0.0:
+        spread_mode = 4
+    elif spread_mode_value is None:
+        spread_mode = 0
+    else:
+        spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
     if pressure_mode not in (0, 1, 2, 3):
         raise ConfigError(f"{context} 的 DripMode 必须是 0、1、2 或 3: {pressure_mode}")
-    if spread_mode not in (0, 1, 2):
-        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、1 或 2: {spread_mode}")
+    if spread_mode not in (0, 1, 2, 3, 4):
+        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、1、2、3 或 4: {spread_mode}")
     if pressure_mode in (1, 2) and pressure_head <= 0:
         raise ConfigError(f"{context} 的 DripHIn 在 DripMode=1/2 时必须大于 0.")
     if pressure_exp <= 0:
@@ -233,6 +246,10 @@ def normalize_drip_record(run_id, record, require_distance):
         raise ConfigError(f"{context} 的 DripPcMin/DripPcMax 不能为负数.")
     if wet_width_max < 0:
         raise ConfigError(f"{context} 的 DripWetWidthMax 不能为负数.")
+    if source_width < 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 不能为负数.")
+    if spread_mode == 4 and source_width <= 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=4 时必须大于 0.")
 
     event = {
         "date": event_date,
@@ -249,6 +266,7 @@ def normalize_drip_record(run_id, record, require_distance):
         "pressure_pc_max": pressure_pc_max,
         "wet_width_max": wet_width_max,
         "spread_mode": spread_mode,
+        "source_width": source_width,
     }
     if require_distance:
         event["distance"] = parse_float(get_cell(record, "distance", context, "Distance"), context, "Distance")
@@ -366,7 +384,7 @@ def write_drip_file(path, events):
         (
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes "
             "DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax "
-            "DripSpreadMode"
+            "DripSpreadMode DripSourceWidth"
         ),
     ]
     for event in events:
@@ -383,6 +401,7 @@ def write_drip_file(path, events):
             event.get("pressure_mode", 0) != 0
             or event.get("wet_width_max", 0.0) > 0.0
             or event.get("spread_mode", 0) != 0
+            or event.get("source_width", 0.0) > 0.0
         ):
             fields.extend(
                 [
@@ -393,10 +412,16 @@ def write_drip_file(path, events):
                     format_number(event["pressure_pc_max"]),
                 ]
             )
-            if event.get("wet_width_max", 0.0) > 0.0 or event.get("spread_mode", 0) != 0:
+            if (
+                event.get("wet_width_max", 0.0) > 0.0
+                or event.get("spread_mode", 0) != 0
+                or event.get("source_width", 0.0) > 0.0
+            ):
                 fields.append(format_number(event["wet_width_max"]))
-            if event.get("spread_mode", 0) != 0:
+            if event.get("spread_mode", 0) != 0 or event.get("source_width", 0.0) > 0.0:
                 fields.append(str(event["spread_mode"]))
+            if event.get("source_width", 0.0) > 0.0:
+                fields.append(format_number(event["source_width"]))
         lines.append(
             " ".join(fields)
         )

@@ -94,6 +94,9 @@ class CaseMetrics:
     drip_actual_infil_sum_mm: float
     drip_source_input_sum_mm: float
     drip_source_loss_sum_mm: float
+    drip_surface_storage_change_sum_mm: float
+    drip_surface_runoff_sum_mm: float
+    drip_surface_storage_max_mm: float
     demand_input_pressure_residual_mm: float
     input_source_residual_mm: float
     input_acceptance_residual_mm: float
@@ -521,6 +524,21 @@ def validate_case_output(case):
         for name, column in columns.items()
         if name != "Date"
     }
+    optional_numeric = {}
+    for name in (
+        "DripStorageChange",
+        "DripSurfaceRunoff",
+        "DripSurfaceStorage",
+    ):
+        column = _find_column(data, name)
+        if column is None:
+            optional_numeric[name] = pd.Series([0.0] * len(data), index=data.index)
+        else:
+            optional_numeric[name] = pd.to_numeric(
+                data[column],
+                errors="raise",
+            ).astype(float)
+    numeric.update(optional_numeric)
     for name, values in numeric.items():
         if not bool(values.map(math.isfinite).all()):
             raise ValueError(f"G05 column {name} contains non-finite values")
@@ -533,6 +551,8 @@ def validate_case_output(case):
         "DripActualInfil",
         "DripSourceInput",
         "DripSourceLoss",
+        "DripSurfaceRunoff",
+        "DripSurfaceStorage",
         "DripWetNodesMean",
         "DripWetNodesMax",
         "DripWetWidthMean",
@@ -604,6 +624,11 @@ def validate_case_output(case):
     drip_actual_infil_sum = float(numeric["DripActualInfil"].sum())
     drip_source_input_sum = float(numeric["DripSourceInput"].sum())
     drip_source_loss_sum = float(numeric["DripSourceLoss"].sum())
+    drip_surface_storage_change_sum = float(
+        numeric["DripStorageChange"].sum()
+    )
+    drip_surface_runoff_sum = float(numeric["DripSurfaceRunoff"].sum())
+    drip_surface_storage_max = float(numeric["DripSurfaceStorage"].max())
 
     return CaseMetrics(
         name=case.name,
@@ -621,6 +646,9 @@ def validate_case_output(case):
         drip_actual_infil_sum_mm=drip_actual_infil_sum,
         drip_source_input_sum_mm=drip_source_input_sum,
         drip_source_loss_sum_mm=drip_source_loss_sum,
+        drip_surface_storage_change_sum_mm=drip_surface_storage_change_sum,
+        drip_surface_runoff_sum_mm=drip_surface_runoff_sum,
+        drip_surface_storage_max_mm=drip_surface_storage_max,
         demand_input_pressure_residual_mm=(
             drip_demand_sum - drip_sum - drip_pressure_loss_sum
         ),
@@ -628,7 +656,11 @@ def validate_case_output(case):
             drip_sum - drip_source_input_sum - drip_source_loss_sum
         ),
         input_acceptance_residual_mm=(
-            drip_sum - drip_actual_infil_sum - drip_hydraulic_excess_sum
+            drip_sum
+            - drip_actual_infil_sum
+            - drip_hydraulic_excess_sum
+            - drip_surface_storage_change_sum
+            - drip_surface_runoff_sum
         ),
         drip_wet_nodes_mean=drip_wet_nodes_mean,
         drip_wet_nodes_max=float(numeric["DripWetNodesMax"].max()),
@@ -697,6 +729,17 @@ def _summary(repo, workspace, cases, metrics):
         ),
         "drip_source_loss_mm": round(
             sum(metrics[case.name].drip_source_loss_sum_mm for case in drip_cases),
+            6,
+        ),
+        "drip_surface_storage_change_mm": round(
+            sum(
+                metrics[case.name].drip_surface_storage_change_sum_mm
+                for case in drip_cases
+            ),
+            6,
+        ),
+        "drip_surface_runoff_mm": round(
+            sum(metrics[case.name].drip_surface_runoff_sum_mm for case in drip_cases),
             6,
         ),
         "demand_input_pressure_residual_mm": round(
@@ -773,6 +816,18 @@ def _summary(repo, workspace, cases, metrics):
                 ),
                 "drip_source_loss_sum_mm": round(
                     metric.drip_source_loss_sum_mm,
+                    6,
+                ),
+                "drip_surface_storage_change_sum_mm": round(
+                    metric.drip_surface_storage_change_sum_mm,
+                    6,
+                ),
+                "drip_surface_runoff_sum_mm": round(
+                    metric.drip_surface_runoff_sum_mm,
+                    6,
+                ),
+                "drip_surface_storage_max_mm": round(
+                    metric.drip_surface_storage_max_mm,
                     6,
                 ),
                 "demand_input_pressure_residual_mm": round(
@@ -934,6 +989,14 @@ def _require_column(data, required_name, path):
         if _normalize_column(column) == normalized:
             return column
     raise ValueError(f"Missing G05 column {required_name!r} in {path}")
+
+
+def _find_column(data, required_name):
+    normalized = _normalize_column(required_name)
+    for column in data.columns:
+        if _normalize_column(column) == normalized:
+            return column
+    return None
 
 
 def _normalize_column(column):

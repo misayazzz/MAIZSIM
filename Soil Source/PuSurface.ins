@@ -7,34 +7,42 @@ c Drip water and diagnostics since the last surface output print.
        Double Precision DripInput_Flux,DripDemand_Flux,
      !        DripPressureLoss_Flux,DripHydraulicExcess_Flux,
      !        DripActualInfil_Flux,
-     !        DripSourceInput_Flux,DripSourceLoss_Flux
+     !        DripSourceInput_Flux,DripSourceLoss_Flux,
+     !        DripStorageChange_Flux,DripSurfaceRunoff_Flux
        Double Precision DripWetNodes_Sum,DripWetNodes_Max,
      !        DripWetWidth_Sum,DripWetWidth_Max,
      !        DripPressureFactor_Sum,DripPressureFactor_Min,
      !        DripDiag_Time
+       Double Precision DripSurfaceStorage(NumBPD)
        Double Precision DripWetNodes_StepSum,DripWetNodes_StepMax,
      !        DripWetWidth_StepSum,DripWetWidth_StepMax,
      !        DripPressureFactor_StepSum,
      !        DripPressureFactor_StepMin,DripDiag_StepCount
        Real DripInput_Rate(NumBPD),DripDemand_Rate(NumBPD),
      !      DripPressureLoss_Rate(NumBPD),
-     !      DripPressureLimit_Rate(NumBPD),DripSource_Rate(NumNPD)
-       Integer DripBypassRunoff,DripBypassWaterMover
+     !      DripPressureLimit_Rate(NumBPD),
+     !      DripStorageRelease_Rate(NumBPD),DripSource_Rate(NumNPD)
+       Integer DripBypassRunoff,DripBypassWaterMover,
+     !         DripStorageActive(NumBPD),DripStorageBoundary(NumBPD)
        Common /DripOutput/ DripInput_Flux,DripDemand_Flux,
      !        DripPressureLoss_Flux,DripHydraulicExcess_Flux,
      !        DripActualInfil_Flux,
      !        DripSourceInput_Flux,DripSourceLoss_Flux,
+     !        DripStorageChange_Flux,DripSurfaceRunoff_Flux,
      !        DripWetNodes_Sum,DripWetNodes_Max,
      !        DripWetWidth_Sum,DripWetWidth_Max,
      !        DripPressureFactor_Sum,DripPressureFactor_Min,
      !        DripDiag_Time,
+     !        DripSurfaceStorage,
      !        DripWetNodes_StepSum,DripWetNodes_StepMax,
      !        DripWetWidth_StepSum,DripWetWidth_StepMax,
      !        DripPressureFactor_StepSum,
      !        DripPressureFactor_StepMin,DripDiag_StepCount,
      !        DripInput_Rate,DripDemand_Rate,DripPressureLoss_Rate,
-     !        DripPressureLimit_Rate,DripSource_Rate,
-     !        DripBypassRunoff,DripBypassWaterMover
+     !        DripPressureLimit_Rate,DripStorageRelease_Rate,
+     !        DripSource_Rate,
+     !        DripBypassRunoff,DripBypassWaterMover,
+     !        DripStorageActive,DripStorageBoundary
 
 
 cccz the following blocks are used for surface runoff

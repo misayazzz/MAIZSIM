@@ -416,6 +416,9 @@ def _build_case_matrix():
         drip_actual_infil = float(g05["DripActualInfil"].sum())
         drip_source_input = float(g05["DripSourceInput"].sum())
         drip_source_loss = float(g05["DripSourceLoss"].sum())
+        drip_surface_storage_change = float(g05["DripStorageChange"].sum())
+        drip_surface_runoff = float(g05["DripSurfaceRunoff"].sum())
+        drip_surface_storage = float(g05["DripSurfaceStorage"].max())
         width_max = float(g05["DripWetWidthMax"].max())
         rows.append(
             {
@@ -432,6 +435,9 @@ def _build_case_matrix():
                 "drip_actual_infil_mm": drip_actual_infil,
                 "drip_source_input_mm": drip_source_input,
                 "drip_source_loss_mm": drip_source_loss,
+                "drip_surface_storage_change_mm": drip_surface_storage_change,
+                "drip_surface_runoff_mm": drip_surface_runoff,
+                "drip_surface_storage_max_mm": drip_surface_storage,
                 "runoff_mm": float(g05["Runoff"].sum()),
                 "wet_nodes_max": float(g05["DripWetNodesMax"].max()),
                 "wet_width_mean_cm": float(active["DripWetWidthMean"].mean()) if not active.empty else 0.0,
@@ -445,7 +451,11 @@ def _build_case_matrix():
                     drip_input - drip_source_input - drip_source_loss
                 ),
                 "input_acceptance_residual_mm": (
-                    drip_input - drip_actual_infil - drip_hydraulic_excess
+                    drip_input
+                    - drip_actual_infil
+                    - drip_hydraulic_excess
+                    - drip_surface_storage_change
+                    - drip_surface_runoff
                 ),
             }
         )
@@ -1501,7 +1511,8 @@ def _build_checks(
             else "fail",
             "detail": (
                 "Checks DripInput = DripActualInfil + DripHydraulicExcess "
-                "for boundary-flow accounting; tolerance includes G05 daily "
+                "+ DripStorageChange + DripSurfaceRunoff for "
+                "boundary-flow accounting; tolerance includes G05 daily "
                 f"0.001 mm reporting roundoff ({boundary_residual_tolerance:.3g} mm)."
             ),
         },
@@ -2966,12 +2977,18 @@ def _read_g05(path):
         "DripActualInfil",
         "DripSourceInput",
         "DripSourceLoss",
+        "DripStorageChange",
+        "DripSurfaceRunoff",
+        "DripSurfaceStorage",
         "Runoff",
         "DripWetNodesMax",
         "DripWetWidthMean",
         "DripWetWidthMax",
     ):
-        frame[column] = pd.to_numeric(frame[column], errors="raise")
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="raise")
+        else:
+            frame[column] = 0.0
     return frame
 
 

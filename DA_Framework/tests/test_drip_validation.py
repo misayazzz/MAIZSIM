@@ -36,6 +36,7 @@ class DripValidationTests(unittest.TestCase):
         self.assertEqual(schedule.events[0].nodes, (7,))
         self.assertEqual(schedule.events[0].duration_hours, 2.0)
         self.assertEqual(schedule.events[0].applied_depth_cm, 4.0)
+        self.assertEqual(schedule.events[0].spread_mode, 0)
         self.assertEqual(schedule.total_event_node_depth_cm, 4.0)
         self.assertAlmostEqual(
             schedule.expected_grid_depth_mm({7: 15.0}, grid_width_cm=120.0),
@@ -108,6 +109,42 @@ class DripValidationTests(unittest.TestCase):
             schedule.expected_grid_depth_mm({7: 15.0}, grid_width_cm=120.0),
             10.0 / 120.0 * 4.0 * 10.0,
         )
+
+    def test_parse_storage_spread_mode(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_storage_spread_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "storage_spread.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 18.5 3",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        self.assertEqual(schedule.events[0].spread_mode, 3)
+
+    def test_parse_point_source_spread_mode(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_point_source_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "point_source.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 4 2.5",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        event = schedule.events[0]
+        self.assertEqual(event.spread_mode, 4)
+        self.assertAlmostEqual(event.source_width_cm, 2.5)
 
     def test_parse_direct_source_pressure_limited_spread_mode(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_direct_spread_") as tmp_dir:
@@ -234,13 +271,19 @@ class DripValidationTests(unittest.TestCase):
             ),
             "invalid_spread_mode": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 3",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 5",
                     "7",
                 ]
             ),
             "negative_source_width": _drip_text(
                 [
                     "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 1 -1",
+                    "7",
+                ]
+            ),
+            "mode4_missing_source_width": _drip_text(
+                [
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 4",
                     "7",
                 ]
             ),
@@ -308,11 +351,13 @@ class DripValidationTests(unittest.TestCase):
                             "DripPressureFactorMin,CumRain,infil,"
                             "DripDemand,DripPressureLoss,"
                             "DripHydraulicExcess,DripActualInfil,"
-                            "DripSourceInput,DripSourceLoss,DripWetNodesMean,"
+                            "DripSourceInput,DripSourceLoss,"
+                            "DripStorageChange,DripSurfaceRunoff,"
+                            "DripSurfaceStorage,DripWetNodesMean,"
                             "DripWetNodesMax,DripWetWidthMean,"
                             "DripPressureFactorMean"
                         ),
-                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,2.0,3.0,30.0,0.88",
+                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,0.3,0.4,0.5,2.0,3.0,30.0,0.88",
                     ]
                 )
                 + "\n",
@@ -327,10 +372,21 @@ class DripValidationTests(unittest.TestCase):
         self.assertAlmostEqual(frame["drip_actual_infil_mm"].iloc[0], 4.7)
         self.assertAlmostEqual(frame["drip_source_input_mm"].iloc[0], 4.8)
         self.assertAlmostEqual(frame["drip_source_loss_mm"].iloc[0], 0.2)
+        self.assertAlmostEqual(frame["drip_surface_storage_change_mm"].iloc[0], 0.3)
+        self.assertAlmostEqual(frame["drip_surface_runoff_mm"].iloc[0], 0.4)
+        self.assertAlmostEqual(frame["drip_surface_storage_mm"].iloc[0], 0.5)
         self.assertAlmostEqual(frame["drip_wet_nodes_mean"].iloc[0], 2.0)
         self.assertAlmostEqual(frame["drip_wet_nodes_max"].iloc[0], 3.0)
         self.assertAlmostEqual(frame["drip_wet_width_mean_cm"].iloc[0], 30.0)
         self.assertAlmostEqual(frame["drip_wet_width_max_cm"].iloc[0], 45.0)
+        self.assertAlmostEqual(
+            frame["drip_surface_application_width_mean_cm"].iloc[0],
+            30.0,
+        )
+        self.assertAlmostEqual(
+            frame["drip_surface_application_width_max_cm"].iloc[0],
+            45.0,
+        )
         self.assertAlmostEqual(frame["drip_pressure_factor_mean"].iloc[0], 0.88)
         self.assertAlmostEqual(frame["drip_pressure_factor_min"].iloc[0], 0.75)
 

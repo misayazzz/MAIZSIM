@@ -266,6 +266,86 @@ class MaizsimDripInputTests(unittest.TestCase):
             lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
             self.assertTrue(lines[4].endswith("0 0 1 0 0 0 2"))
 
+    def test_surface_storage_spread_mode_is_written(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_spread3_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            record = _drip_record(distance=10)
+            record["dripwetwidthmax"] = 18.5
+            record["dripspreadmode"] = 3
+
+            write_run_drip_file(
+                {
+                    "id": "TEST",
+                    "drip_records": [record],
+                    "drip_node_records": [],
+                },
+                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+            )
+
+            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(lines[4].endswith("18.5 3"))
+
+    def test_point_source_spread_mode_and_source_width_are_written(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_spread4_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            record = _drip_record(distance=10)
+            record["dripspreadmode"] = 4
+            record["dripsourcewidth"] = 2.5
+
+            write_run_drip_file(
+                {
+                    "id": "TEST",
+                    "drip_records": [record],
+                    "drip_node_records": [],
+                },
+                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+            )
+
+            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
+            self.assertIn("DripSourceWidth", lines[3])
+            self.assertTrue(lines[4].endswith("0 4 2.5"))
+
+    def test_source_width_without_spread_mode_defaults_to_point_source(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_source_width_mode4_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            record = _drip_record(distance=10)
+            record["dripsourcewidth"] = 2.5
+
+            write_run_drip_file(
+                {
+                    "id": "TEST",
+                    "drip_records": [record],
+                    "drip_node_records": [],
+                },
+                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+            )
+
+            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(lines[4].endswith("0 4 2.5"))
+
+    def test_point_source_spread_mode_requires_source_width(self):
+        record = _drip_record()
+        record["dripspreadmode"] = 4
+
+        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
+            validate_drip_records_for_run("TEST", [record], [])
+
+    def test_source_width_cannot_be_negative(self):
+        record = _drip_record()
+        record["dripsourcewidth"] = -1
+
+        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
+            validate_drip_records_for_run("TEST", [record], [])
+
 
 if __name__ == "__main__":
     unittest.main()

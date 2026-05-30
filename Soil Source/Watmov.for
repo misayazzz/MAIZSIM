@@ -16,7 +16,10 @@
       Double precision A,B,C, B_1, A_1
       Double precision dt,dtOld,t,tOld,PI,DPI,F2
       Double precision DripShare,DripExcess,DripPotential,
-     !                 DripDemand,DripActual,DripLoss,DripSatLimit
+     !                 DripDemand,DripActual,DripLoss,DripSatLimit,
+     !                 DripNew,DripStored,DripNewExcess,
+     !                 DripStoredExcess,DripStorageDelta,
+     !                 DripOverflow,DripStorageLimit
       real ATG,HSP
 cccz move it to "PuSurface.ins" for public use 
 cccz  Double precision CriticalH, CriticalH_R
@@ -736,8 +739,11 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
             DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
      !        DripLoss*Step
           Endif
-        ElseIf(DripInput_Rate(k).gt.0.0) then
-          DripPotential=dble(DripInput_Rate(k)*Width(k))
+        ElseIf(DripInput_Rate(k).gt.0.0.or.
+     !    DripStorageRelease_Rate(k).gt.0.0) then
+          DripNew=dble(DripInput_Rate(k)*Width(k))
+          DripStored=dble(DripStorageRelease_Rate(k)*Width(k))
+          DripPotential=DripNew+DripStored
           If(Q(i).gt.1.0E-5) then
             DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
             DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
@@ -748,7 +754,34 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           DripActual=dmax1(DripPotential-DripExcess,0.0D0)
           DripActualInfil_Flux=DripActualInfil_Flux+
      !      DripActual*Step
-          If(DripExcess.gt.0.0D0) then
+          If(DripStorageActive(k).eq.1) then
+            If(DripPotential.gt.0.0D0) then
+              DripNewExcess=DripExcess*DripNew/DripPotential
+              DripStoredExcess=DripExcess-DripNewExcess
+            Else
+              DripNewExcess=0.0D0
+              DripStoredExcess=0.0D0
+            Endif
+            DripStorageDelta=DripNewExcess-
+     !        dmax1(DripStored-DripStoredExcess,0.0D0)
+            DripSurfaceStorage(k)=dmax1(0.0D0,
+     !        DripSurfaceStorage(k)+DripStorageDelta*Step)
+            DripStorageChange_Flux=DripStorageChange_Flux+
+     !        DripStorageDelta*Step
+            DripStorageLimit=dble(Width(k))*dble(CriticalH)
+            If(DripStorageLimit.gt.0.0D0.and.
+     !        DripSurfaceStorage(k).gt.DripStorageLimit) then
+              DripOverflow=DripSurfaceStorage(k)-DripStorageLimit
+              DripSurfaceStorage(k)=DripStorageLimit
+              DripStorageChange_Flux=DripStorageChange_Flux-
+     !          DripOverflow
+              DripSurfaceRunoff_Flux=DripSurfaceRunoff_Flux+
+     !          DripOverflow
+              If(Step.gt.0.0D0) then
+                RO(i)=amax1(RO(i),sngl(DripOverflow/Step))
+              Endif
+            Endif
+          ElseIf(DripExcess.gt.0.0D0) then
             DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
      !        DripExcess*Step
           Endif

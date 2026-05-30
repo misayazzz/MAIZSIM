@@ -29,10 +29,15 @@ G05_DRIP_DIAGNOSTIC_COLUMNS = {
     "drip_actual_infil_mm": "DripActualInfil",
     "drip_source_input_mm": "DripSourceInput",
     "drip_source_loss_mm": "DripSourceLoss",
+    "drip_surface_storage_change_mm": "DripStorageChange",
+    "drip_surface_runoff_mm": "DripSurfaceRunoff",
+    "drip_surface_storage_mm": "DripSurfaceStorage",
     "drip_wet_nodes_mean": "DripWetNodesMean",
     "drip_wet_nodes_max": "DripWetNodesMax",
     "drip_wet_width_mean_cm": "DripWetWidthMean",
     "drip_wet_width_max_cm": "DripWetWidthMax",
+    "drip_surface_application_width_mean_cm": "DripWetWidthMean",
+    "drip_surface_application_width_max_cm": "DripWetWidthMax",
     "drip_pressure_factor_mean": "DripPressureFactorMean",
     "drip_pressure_factor_min": "DripPressureFactorMin",
 }
@@ -422,13 +427,18 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
-    if spread_mode not in (0, 1, 2):
+    if spread_mode not in (0, 1, 2, 3, 4):
         raise ValueError(
-            f"Drip event {event_index + 1} spread_mode must be 0, 1, or 2"
+            f"Drip event {event_index + 1} spread_mode must be 0, 1, 2, 3, or 4"
         )
     if source_width_cm < 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be non-negative"
+        )
+    if spread_mode == 4 and source_width_cm <= 0.0:
+        raise ValueError(
+            f"Drip event {event_index + 1} source_width_cm must be positive "
+            "when spread_mode is 4"
         )
 
     return {

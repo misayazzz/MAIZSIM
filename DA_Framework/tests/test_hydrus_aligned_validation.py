@@ -83,7 +83,13 @@ class HydrusAlignedValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.drp"
 
-            write_maizsim_drip_file(path, source, 123.45, 21.9)
+            write_maizsim_drip_file(
+                path,
+                source,
+                123.45,
+                21.9,
+                drip_spread_mode=1,
+            )
 
             text = path.read_text(encoding="utf-8")
 
@@ -105,6 +111,7 @@ class HydrusAlignedValidationTests(unittest.TestCase):
                 28.0,
                 drip_source_depth_cm=18.5,
                 drip_mode=3,
+                drip_spread_mode=1,
             )
 
             text = path.read_text(encoding="utf-8")
@@ -127,6 +134,39 @@ class HydrusAlignedValidationTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
 
         self.assertIn("123.45 1 0 0 1 0 0 0 2", text)
+
+    def test_write_maizsim_drip_file_can_request_point_source_mode(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            write_maizsim_drip_file(
+                path,
+                source,
+                123.45,
+                0.0,
+                drip_spread_mode=4,
+                drip_source_width_cm=2.5,
+            )
+
+            text = path.read_text(encoding="utf-8")
+
+        self.assertIn("DripSourceWidth", text)
+        self.assertIn("123.45 1 0 0 1 0 0 0 4 2.5", text)
+
+    def test_write_maizsim_drip_file_rejects_point_source_without_width(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            with self.assertRaisesRegex(ValueError, "drip_source_width_cm"):
+                write_maizsim_drip_file(
+                    path,
+                    source,
+                    123.45,
+                    0.0,
+                    drip_spread_mode=4,
+                )
 
     def test_write_zero_weather_file_uses_saturated_air_for_no_evaporation(self):
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_weather_") as tmp_dir:
