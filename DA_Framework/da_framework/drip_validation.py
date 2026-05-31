@@ -303,7 +303,7 @@ def build_public_comparison_report_skeleton(
             "- Water amount: rate * duration * active-node width / grid width.",
             "- bounded dynamic wetted-radius expansion: surface source can expand to neighboring surface nodes when local infiltration is limited, while a physical wetted-width cap prevents whole-boundary spreading.",
             "- Pressure correction: optional event fields support back-pressure and pressure-compensating surface-source approximations.",
-            "- Refined diagnostics: G05 can report drip demand, pressure loss, hydraulic excess, wetted width, wetted node count, and pressure factors.",
+            "- Refined diagnostics: G05 can report drip demand, pressure loss, hydraulic excess, surface application width, wet node count, and pressure factors.",
             "- Water balance: G05 CumRain, infiltration, runoff, and drainage deltas.",
             "- Drip accounting: G05 DripInput and SeasDrip report drip-only water input when available.",
             "- Wetting pattern: G03 theta changes by depth and lateral position.",
