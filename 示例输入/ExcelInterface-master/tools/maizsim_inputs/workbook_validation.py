@@ -100,7 +100,7 @@ def build_index(records, field_names, sheet_name):
     for record in records:
         key = get_record_value(record, field_names, sheet_name)
         if not key:
-            raise ConfigError(f"{sheet_name} 第 {record['__row_number__']} 行索引字段为空.")
+            continue
         if key in index:
             first_row = index[key]["__row_number__"]
             current_row = record["__row_number__"]

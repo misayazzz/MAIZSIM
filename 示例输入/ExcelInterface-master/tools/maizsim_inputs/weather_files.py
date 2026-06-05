@@ -143,7 +143,7 @@ def read_filtered_weather(paths, run):
     filtered["_parsed_date"] = parsed_dates.loc[mask]
     sort_columns = ["_parsed_date"]
     hour_column = columns.get(normalize_column_name("Hour"))
-    if hour_column is not None:
+    if run["weather_time"].strip().lower() == "hourly" and hour_column is not None:
         filtered["_hour_number"] = pd.to_numeric(filtered[hour_column], errors="coerce")
         if filtered["_hour_number"].isna().any():
             raise ConfigError(f"{run['id']} 天气 CSV 的 Hour 字段存在无法解析的值: {source_path}")

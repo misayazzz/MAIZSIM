@@ -4,6 +4,7 @@ import shutil
 
 from .errors import ConfigError
 from .path_utils import PROJECT_DIR
+from .path_utils import WORKSPACE_DIR
 from .path_utils import resolve_run_dir
 
 
@@ -14,13 +15,25 @@ MODEL_FILE_NAMES = [
 
 
 def find_model_file_sources():
-    """查找 Models 目录下的模型运行文件, 找不到或为空时抛出配置错误."""
-    models_dir = PROJECT_DIR / "Models"
+    """查找模型运行文件, 找不到或为空时抛出配置错误."""
+    repository_dir = WORKSPACE_DIR.parent
+    candidate_dirs = [
+        PROJECT_DIR / "Models",
+        repository_dir / "build" / "maizsim" / "x64" / "Release",
+        repository_dir / "DA_Framework" / "base_runs" / "SingleLayerLoam2D",
+    ]
     sources = []
     missing = []
     empty = []
     for file_name in MODEL_FILE_NAMES:
-        source = models_dir / file_name
+        source = next(
+            (
+                candidate / file_name
+                for candidate in candidate_dirs
+                if (candidate / file_name).is_file()
+            ),
+            candidate_dirs[0] / file_name,
+        )
         if not source.is_file():
             missing.append(source)
             continue

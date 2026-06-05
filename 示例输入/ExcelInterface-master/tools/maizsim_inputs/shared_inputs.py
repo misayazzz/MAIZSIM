@@ -64,7 +64,7 @@ def read_text_with_encoding(path):
 def rewrite_water_bound_reference(run_file, target):
     """把 run.dat 中的 WaterBound.DAT 引用改写到指定目标文件."""
     text_info = read_text_with_encoding(run_file)
-    lines = text_info["text"].splitlines(keepends=True)
+    lines = [line.lstrip("\ufeff") for line in text_info["text"].splitlines()]
     matched_indexes = [
         index
         for index, line in enumerate(lines)
@@ -76,10 +76,8 @@ def rewrite_water_bound_reference(run_file, target):
         raise ConfigError(f"run 文件中存在多个 {WATER_BOUND_NAME} 引用, 已停止改写: {run_file}")
 
     index = matched_indexes[0]
-    original_line = lines[index]
-    newline = "\r\n" if original_line.endswith("\r\n") else "\n" if original_line.endswith("\n") else ""
-    lines[index] = f"{target}{newline}"
-    run_file.write_text("".join(lines), encoding=text_info["encoding"], newline="")
+    lines[index] = f"{target}"
+    run_file.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8", newline="")
     return {
         "run_file": run_file,
         "target": target,
@@ -107,7 +105,7 @@ def copy_water_bound_to_run_dirs(paths, runs):
         if not run_file.is_file():
             raise ConfigError(f"{run_id} 的 {RUN_FILE_NAME} 不存在, 无法改写 {WATER_BOUND_NAME} 引用: {run_file}")
 
-        rewrite_result = rewrite_water_bound_reference(run_file, target)
+        rewrite_result = rewrite_water_bound_reference(run_file, target.name)
         results.append(
             {
                 "id": run_id,
