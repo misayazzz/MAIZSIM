@@ -19,7 +19,8 @@
      !                 DripDemand,DripActual,DripLoss,DripSatLimit,
      !                 DripNew,DripStored,DripNewExcess,
      !                 DripStoredExcess,DripStorageDelta,
-     !                 DripOverflow,DripStorageLimit
+     !                 DripOverflow,DripStorageLimit,
+     !                 DripStorageMeasure
       real ATG,HSP
 cccz move it to "PuSurface.ins" for public use 
 cccz  Double precision CriticalH, CriticalH_R
@@ -768,7 +769,11 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
      !        DripSurfaceStorage(k)+DripStorageDelta*Step)
             DripStorageChange_Flux=DripStorageChange_Flux+
      !        DripStorageDelta*Step
-            DripStorageLimit=dble(Width(k))*dble(CriticalH)
+            DripStorageMeasure=DripCoveredMeasure(k)
+            If(DripStorageMeasure.le.1.0D-12) then
+              DripStorageMeasure=dble(Width(k))
+            Endif
+            DripStorageLimit=DripStorageMeasure*dble(CriticalH)
             If(DripStorageLimit.gt.0.0D0.and.
      !        DripSurfaceStorage(k).gt.DripStorageLimit) then
               DripOverflow=DripSurfaceStorage(k)-DripStorageLimit

@@ -267,3 +267,10 @@ maizsim.dll
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Local/generated analysis and run artifacts
+.playwright-cli/
+codex_outputs/
+DA_Framework/case_matrices/
+DA_Framework/base_runs/*/logs/
+DA_Framework/base_runs/*/grid*.bat
