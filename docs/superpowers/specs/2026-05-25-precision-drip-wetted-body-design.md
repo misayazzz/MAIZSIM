@@ -36,9 +36,30 @@ Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripE
 - `DripSpreadMode=1`：HYDRUS-style动态湿润源区模式，保留为历史/实验路径。
 - `DripSpreadMode=2`：压力限流地表边界模式，保留为HYDRUS对齐遗留路径。
 - `DripSpreadMode=3`：地表暂存/释放模式，保留为历史/实验路径。
-- `DripSpreadMode=4`：现实地表滴头主线模式。必须提供正的`DripSourceWidth`作为真实出水宽度，不再用中心网格边界宽度作为推荐回退。
+- `DripSpreadMode=4`：固定地表源宽模式。必须提供正的`DripSourceWidth`定义目标地表源区间；水量按目标区间覆盖到的边界measure计量，不再用中心网格边界宽度作为推荐回退。
 
-新输入若填写`DripSourceWidth`但省略`DripSpreadMode`，Python输入生成器按`Mode4`写出。`Mode1-3`不删除、不阻断旧算例，但不再建议用于新研究。
+新输入若填写`DripSourceWidth`但省略`DripSpreadMode`，Python输入生成器按`Mode4`写出并给出警告。`Mode4`同时填写`DripWetWidthMax`时也会警告，因为Mode4不使用该字段扩展湿润宽度。`Mode1-3`不删除、不阻断旧算例，但不再建议用于新研究。
+
+## Mode4固定源宽契约
+
+`Mode4`的输入、几何和水量含义分开定义：
+
+- 输入语义：`wAppl`仍是`cm/h`，表示施加在Mode4源measure上的水深速率。
+- 几何语义：非轴对称二维slab中，`DripSourceWidth`定义以源节点为中心的地表目标区间；若`KAT=1`且源节点在`x=0`轴线，则定义从轴线向外的单侧目标区间。
+- 水量语义：Fortran先计算目标区间与实际地表边界控制段的交集，再用`DripCoverMeasure()`得到`TotalMeasure`。Mode4需求通量为`wAppl / PERIOD * TotalMeasure`。
+- 轴对称语义：`KAT=1`不得把`DripSourceWidth`简单解释为完整物理直径。它必须和轴对称边界积分measure一起解释，并在HYDRUS对照中保留原始体积/流量换算。
+- 网格语义：如果`DripSourceWidth`明显小于所在边界段`Width(k)`，当前实现仍会把等效Neumann通量施加到完整边界段上；水量可闭合，但局部通量峰值会被摊薄。
+
+Mode4新增诊断残差：
+
+```text
+DripBoundaryInClosure = DripDemand - DripPressureLoss - DripInput
+DripBoundaryAccClosure = DripInput - DripActualInfil
+                       - DripHydraulicExcess - DripStorageChange
+                       - DripSurfaceRunoff
+```
+
+`DripSourceInput`和`DripSourceLoss`主要服务于旧direct-source路径，不应作为Mode4 source closure的首选判据。
 
 ## HYDRUS-style动态宽度
 

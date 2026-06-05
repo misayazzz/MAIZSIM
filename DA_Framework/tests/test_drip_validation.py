@@ -146,6 +146,26 @@ class DripValidationTests(unittest.TestCase):
         self.assertEqual(event.spread_mode, 4)
         self.assertAlmostEqual(event.source_width_cm, 2.5)
 
+    def test_parse_dynamic_surface_spread_mode5(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_dynamic_surface_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "dynamic_surface.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 18.5 5 2.5",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        event = schedule.events[0]
+        self.assertEqual(event.spread_mode, 5)
+        self.assertAlmostEqual(event.wet_width_max_cm, 18.5)
+        self.assertAlmostEqual(event.source_width_cm, 2.5)
+
     def test_parse_direct_source_pressure_limited_spread_mode(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_direct_spread_") as tmp_dir:
             drip_path = Path(tmp_dir) / "direct_spread.drp"
@@ -271,7 +291,7 @@ class DripValidationTests(unittest.TestCase):
             ),
             "invalid_spread_mode": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 5",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 6",
                     "7",
                 ]
             ),
@@ -353,11 +373,12 @@ class DripValidationTests(unittest.TestCase):
                             "DripHydraulicExcess,DripActualInfil,"
                             "DripSourceInput,DripSourceLoss,"
                             "DripStorageChange,DripSurfaceRunoff,"
-                            "DripSurfaceStorage,DripWetNodesMean,"
+                            "DripSurfaceStorage,DripBoundaryInClosure,"
+                            "DripBoundaryAccClosure,DripWetNodesMean,"
                             "DripWetNodesMax,DripWetWidthMean,"
                             "DripPressureFactorMean"
                         ),
-                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,0.3,0.4,0.5,2.0,3.0,30.0,0.88",
+                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,0.3,0.4,0.5,0.01,-0.02,2.0,3.0,30.0,0.88",
                     ]
                 )
                 + "\n",
@@ -375,6 +396,11 @@ class DripValidationTests(unittest.TestCase):
         self.assertAlmostEqual(frame["drip_surface_storage_change_mm"].iloc[0], 0.3)
         self.assertAlmostEqual(frame["drip_surface_runoff_mm"].iloc[0], 0.4)
         self.assertAlmostEqual(frame["drip_surface_storage_mm"].iloc[0], 0.5)
+        self.assertAlmostEqual(frame["drip_boundary_input_closure_mm"].iloc[0], 0.01)
+        self.assertAlmostEqual(
+            frame["drip_boundary_acceptance_closure_mm"].iloc[0],
+            -0.02,
+        )
         self.assertAlmostEqual(frame["drip_wet_nodes_mean"].iloc[0], 2.0)
         self.assertAlmostEqual(frame["drip_wet_nodes_max"].iloc[0], 3.0)
         self.assertAlmostEqual(frame["drip_wet_width_mean_cm"].iloc[0], 30.0)
@@ -448,7 +474,7 @@ class DripValidationTests(unittest.TestCase):
         )
 
         self.assertIn("surface point-source Neumann flux", report)
-        self.assertIn("bounded dynamic wetted-radius expansion", report)
+        self.assertIn("Mode4 uses a fixed local surface source interval", report)
         self.assertIn("Pressure correction", report)
         self.assertIn("G05 DripInput", report)
         self.assertIn("Skaggs et al. 2004", report)

@@ -50,6 +50,23 @@ class SoilCase:
 
 
 @dataclass(frozen=True)
+class DripEventSpec:
+    start_elapsed_h: float = 0.0
+    duration_h: float = 24.0
+    drip_rate_cm_h: float = DRIP_RATE_CM_H
+    source_width_cm: float = SOURCE_WIDTH_CM
+    source_nodes: tuple[int, ...] = (SOURCE_NODE,)
+
+    @property
+    def stop_elapsed_h(self):
+        return self.start_elapsed_h + self.duration_h
+
+    @property
+    def local_applied_depth_cm(self):
+        return self.drip_rate_cm_h * self.duration_h
+
+
+@dataclass(frozen=True)
 class DripScenario:
     name: str
     scenario_group: str = "current"
@@ -61,10 +78,27 @@ class DripScenario:
     delta_levels: tuple[float, ...] = DELTA_LEVELS
     target_grid_input_mm: float | None = None
     grid_refinement_factor: int = 1
+    source_nodes: tuple[int, ...] = (SOURCE_NODE,)
+    grid_kat: int | None = None
+    events: tuple[DripEventSpec, ...] = ()
+
+    @property
+    def event_specs(self):
+        if self.events:
+            return self.events
+        return (
+            DripEventSpec(
+                duration_h=self.drip_duration_h,
+                drip_rate_cm_h=self.drip_rate_cm_h,
+                source_width_cm=self.source_width_cm,
+                source_nodes=self.source_nodes,
+            ),
+        )
 
     @property
     def drip_stop(self):
-        return DRIP_START + timedelta(hours=self.drip_duration_h)
+        stop_elapsed = max(event.stop_elapsed_h for event in self.event_specs)
+        return DRIP_START + timedelta(hours=stop_elapsed)
 
     @property
     def final_date(self):
@@ -72,15 +106,20 @@ class DripScenario:
 
     @property
     def local_applied_depth_cm(self):
-        return self.drip_rate_cm_h * self.drip_duration_h
+        return sum(event.local_applied_depth_cm for event in self.event_specs)
 
     @property
     def source_area_cm2_per_cm_row(self):
-        return self.local_applied_depth_cm * self.source_width_cm
+        return sum(
+            event.local_applied_depth_cm
+            * event.source_width_cm
+            * len(event.source_nodes)
+            for event in self.event_specs
+        )
 
     @property
     def applied_water_cross_section_cm2_per_cm_row(self):
-        return self.local_applied_depth_cm * self.source_width_cm
+        return self.source_area_cm2_per_cm_row
 
 
 def _rate_for_grid_input(target_mm, source_width_cm, duration_h=24.0, grid_width_cm=GRID_WIDTH_CM):
@@ -276,6 +315,128 @@ SYSTEMATIC_SCENARIOS = (
     + GRID_REFINEMENT_SCENARIOS
 )
 ENHANCED_SCENARIOS = HIGH_TOTAL_SOURCE_WIDTH_SCENARIOS + REDISTRIBUTION_SCENARIOS
+CONTRACT_SCENARIOS = (
+    DripScenario(
+        "contract_kat2_x0_width0p095cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.095,
+        source_nodes=(1,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_x0_width0p19cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.19,
+        source_nodes=(1,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_x0_width0p38cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.38,
+        source_nodes=(1,),
+        target_grid_input_mm=1.2,
+    ),
+    DripScenario(
+        "contract_kat2_x0_width0p76cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.76,
+        source_nodes=(1,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_interior_node4_width0p44cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.44,
+        source_nodes=(4,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_interior_node4_width0p88cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.88,
+        source_nodes=(4,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_interior_node4_width1p76cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=1.76,
+        source_nodes=(4,),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "contract_kat2_interior_node4_width3p52cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=3.52,
+        source_nodes=(4,),
+        target_grid_input_mm=None,
+    ),
+)
+AXISYMMETRIC_STATIC_CONTRACT_SCENARIOS = (
+    DripScenario(
+        "contract_kat1_axis_x0_width0p38cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.38,
+        source_nodes=(1,),
+        target_grid_input_mm=1.2,
+        grid_kat=1,
+    ),
+    DripScenario(
+        "contract_kat1_axis_x0_width0p76cm",
+        scenario_group="contract",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.76,
+        source_nodes=(1,),
+        target_grid_input_mm=None,
+        grid_kat=1,
+    ),
+)
+MULTI_SOURCE_EVENT_SCENARIOS = (
+    DripScenario(
+        "multi_source_nodes1_2_width0p38cm",
+        scenario_group="multi_source_event",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.38,
+        source_nodes=(1, 2),
+        target_grid_input_mm=None,
+    ),
+    DripScenario(
+        "multi_event_width0p38_then2cm_48h",
+        scenario_group="multi_source_event",
+        drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+        source_width_cm=0.38,
+        drip_duration_h=24.0,
+        final_elapsed_h=48.0,
+        figure_elapsed_hours=(12.0, 24.0, 48.0),
+        events=(
+            DripEventSpec(
+                start_elapsed_h=0.0,
+                duration_h=12.0,
+                drip_rate_cm_h=_rate_for_grid_input(1.2, 0.38),
+                source_width_cm=0.38,
+                source_nodes=(1,),
+            ),
+            DripEventSpec(
+                start_elapsed_h=12.0,
+                duration_h=12.0,
+                drip_rate_cm_h=_rate_for_grid_input(1.2, 2.0),
+                source_width_cm=2.0,
+                source_nodes=(1,),
+            ),
+        ),
+    ),
+)
+PRO_REVIEW_SCENARIOS = CONTRACT_SCENARIOS + MULTI_SOURCE_EVENT_SCENARIOS + ENHANCED_SCENARIOS
 
 
 SOILS = (
@@ -318,6 +479,7 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
         baseline_g05 = read_g05_surface_water(_find_output_file(baseline_dir, ".G05"))
         g05 = read_g05_surface_water(_find_output_file(drip_dir, ".G05"))
         grid_info = _grid_case_info(drip_dir / "LOAM2D.grd")
+        geometry = _mode4_geometry_diagnostics(drip_dir / "LOAM2D.grd", scenario)
 
         balance = _drip_balance(g05)
         runoff_fraction = _safe_fraction(balance["surface_runoff"], balance["input"])
@@ -353,6 +515,11 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
                 "drip_surface_runoff_mm": balance["surface_runoff"],
                 "drip_hydraulic_excess_mm": balance["hydraulic_excess"],
                 "acceptance_residual_mm": balance["residual"],
+                "acceptance_residual_recomputed_mm": balance["residual_recomputed"],
+                "acceptance_residual_direct_mm": balance["residual_direct"],
+                "input_closure_direct_mm": balance["input_closure_direct"],
+                "drip_demand_mm": balance["demand"],
+                "drip_pressure_loss_mm": balance["pressure_loss"],
                 "drip_actual_infiltration_fraction": actual_fraction,
                 "drip_runoff_fraction": runoff_fraction,
                 "minor_runoff_warning": runoff_fraction > 0.05,
@@ -371,11 +538,14 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
                 "drip_duration_h": scenario.drip_duration_h,
                 "final_elapsed_h": scenario.final_elapsed_h,
                 "target_grid_input_mm": scenario.target_grid_input_mm,
-                "expected_grid_input_mm": _grid_input_mm(
-                    scenario.drip_rate_cm_h,
-                    scenario.source_width_cm,
-                    scenario.drip_duration_h,
-                    grid_info["grid_width_cm"],
+                "expected_grid_input_mm": geometry.get(
+                    "expected_grid_input_by_covered_measure_mm",
+                    _grid_input_mm(
+                        scenario.drip_rate_cm_h,
+                        scenario.source_width_cm,
+                        scenario.drip_duration_h,
+                        grid_info["grid_width_cm"],
+                    ),
                 ),
                 "local_applied_depth_cm": scenario.local_applied_depth_cm,
                 "applied_water_cross_section_cm2_per_cm_row": (
@@ -387,6 +557,14 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
                 "soil_ks_cm_h": soil_ks_cm_h,
                 "source_flux_to_ks_ratio": _safe_fraction(
                     scenario.drip_rate_cm_h,
+                    soil_ks_cm_h,
+                ),
+                "applied_segment_flux_to_ks_ratio": _safe_fraction(
+                    geometry.get("applied_segment_flux_mean_cm_h", 0.0),
+                    soil_ks_cm_h,
+                ),
+                "applied_segment_flux_max_to_ks_ratio": _safe_fraction(
+                    geometry.get("applied_segment_flux_max_cm_h", 0.0),
                     soil_ks_cm_h,
                 ),
                 "actual_local_flux_to_ks_ratio": _safe_fraction(
@@ -411,7 +589,8 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
                 ),
                 "grid_refinement_factor": scenario.grid_refinement_factor,
                 **grid_info,
-                "source_node": SOURCE_NODE,
+                **geometry,
+                "source_node": scenario.event_specs[0].source_nodes[0],
                 "drip_spread_mode": 4,
             }
         )
@@ -460,11 +639,26 @@ def run_validation(workspace, executable_dir=None, timeout_seconds=180, scenario
                     "drip_rate_cm_h": scenario.drip_rate_cm_h,
                     "source_width_cm": scenario.source_width_cm,
                     "target_grid_input_mm": scenario.target_grid_input_mm,
-                    "expected_grid_input_mm": _grid_input_mm(
-                        scenario.drip_rate_cm_h,
-                        scenario.source_width_cm,
-                        scenario.drip_duration_h,
-                        grid_info["grid_width_cm"],
+                    "expected_grid_input_mm": geometry.get(
+                        "expected_grid_input_by_covered_measure_mm",
+                        _grid_input_mm(
+                            scenario.drip_rate_cm_h,
+                            scenario.source_width_cm,
+                            scenario.drip_duration_h,
+                            grid_info["grid_width_cm"],
+                        ),
+                    ),
+                    "expected_grid_input_by_covered_measure_mm": geometry.get(
+                        "expected_grid_input_by_covered_measure_mm",
+                        np.nan,
+                    ),
+                    "expected_grid_input_by_target_width_mm": geometry.get(
+                        "expected_grid_input_by_target_width_mm",
+                        np.nan,
+                    ),
+                    "mode4_coverage_fraction_by_width": geometry.get(
+                        "mode4_coverage_fraction_by_width",
+                        np.nan,
                     ),
                     "grid_refinement_factor": scenario.grid_refinement_factor,
                     **grid_info,
@@ -545,6 +739,28 @@ def run_enhanced_validation(workspace, executable_dir=None, timeout_seconds=180)
         workspace,
         ENHANCED_SCENARIOS,
         matrix_name="enhanced",
+        executable_dir=executable_dir,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def run_contract_validation(workspace, executable_dir=None, timeout_seconds=180):
+    """Run Mode4 geometry-contract checks for KAT/source-node/source-width cases."""
+    return run_scenario_matrix(
+        workspace,
+        CONTRACT_SCENARIOS,
+        matrix_name="contract",
+        executable_dir=executable_dir,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def run_pro_review_validation(workspace, executable_dir=None, timeout_seconds=180):
+    """Run the full non-HYDRUS matrix requested for GPT Pro follow-up review."""
+    return run_scenario_matrix(
+        workspace,
+        PRO_REVIEW_SCENARIOS,
+        matrix_name="pro_review",
         executable_dir=executable_dir,
         timeout_seconds=timeout_seconds,
     )
@@ -642,6 +858,7 @@ def _prepare_case(run_dir, soil, executable_root, drip, scenario):
     else:
         _write_no_drip(run_dir / "LOAM2D.drp")
     _apply_grid_refinement(run_dir, scenario)
+    _apply_grid_kat(run_dir, scenario)
 
 
 def _apply_grid_refinement(run_dir, scenario):
@@ -653,10 +870,17 @@ def _apply_grid_refinement(run_dir, scenario):
     _refine_grid_fixed_domain(run_dir / "LOAM2D.grd", factor)
 
 
+def _apply_grid_kat(run_dir, scenario):
+    if scenario.grid_kat is None:
+        return
+    _set_grid_kat(run_dir / "LOAM2D.grd", scenario.grid_kat)
+
+
 def _grid_case_info(path):
     profile = _structured_grid_profile(path)
     surface_widths = _surface_widths_from_x(profile["x_values"])
     return {
+        "grid_kat": profile["kat"],
         "grid_x_node_count": profile["x_count"],
         "grid_y_node_count": profile["y_count"],
         "grid_node_count": profile["node_count"],
@@ -664,6 +888,217 @@ def _grid_case_info(path):
         "grid_width_cm": float(sum(surface_widths)),
         "first_surface_width_cm": float(surface_widths[0]),
     }
+
+
+def _mode4_geometry_diagnostics(path, scenario):
+    profile = _structured_grid_profile(path)
+    grid_width_cm = _grid_case_info(path)["grid_width_cm"]
+    rows = []
+    for event_index, event in enumerate(scenario.event_specs, start=1):
+        for source_node in event.source_nodes:
+            rows.append(
+                _mode4_event_node_geometry(
+                    profile,
+                    event,
+                    event_index,
+                    int(source_node),
+                    grid_width_cm,
+                )
+            )
+    if not rows:
+        return {}
+
+    target_width = sum(row["target_width_cm"] for row in rows)
+    covered_width = sum(row["covered_width_cm"] for row in rows)
+    covered_measure = sum(row["covered_measure_cm"] for row in rows)
+    active_measure = sum(row["active_boundary_measure_cm"] for row in rows)
+    target_input = sum(row["target_grid_input_mm"] for row in rows)
+    covered_input = sum(row["covered_grid_input_mm"] for row in rows)
+    segment_flux_values = [
+        row["applied_segment_flux_mean_cm_h"]
+        for row in rows
+        if row["applied_segment_flux_mean_cm_h"] > 0.0
+    ]
+    max_segment_flux_values = [
+        row["applied_segment_flux_max_cm_h"]
+        for row in rows
+        if row["applied_segment_flux_max_cm_h"] > 0.0
+    ]
+    return {
+        "source_nodes": ";".join(str(node) for event in scenario.event_specs for node in event.source_nodes),
+        "event_count": len(scenario.event_specs),
+        "mode4_target_width_cm_sum": target_width,
+        "mode4_covered_width_cm_sum": covered_width,
+        "mode4_covered_measure_cm_sum": covered_measure,
+        "mode4_active_boundary_measure_cm_sum": active_measure,
+        "mode4_coverage_fraction_by_width": _safe_fraction(covered_width, target_width),
+        "mode4_boundary_coverage_fraction_by_measure": _safe_fraction(covered_measure, active_measure),
+        "expected_grid_input_by_target_width_mm": target_input,
+        "expected_grid_input_by_covered_measure_mm": covered_input,
+        "target_minus_covered_grid_input_mm": target_input - covered_input,
+        "mode4_source_interval_clipped": covered_width + 1.0e-8 < target_width,
+        "applied_segment_flux_mean_cm_h": (
+            float(np.mean(segment_flux_values)) if segment_flux_values else 0.0
+        ),
+        "applied_segment_flux_max_cm_h": (
+            max(max_segment_flux_values) if max_segment_flux_values else 0.0
+        ),
+        "mode4_geometry_rows_json": json.dumps(rows, ensure_ascii=False),
+    }
+
+
+def _mode4_event_node_geometry(profile, event, event_index, source_node, grid_width_cm):
+    surface = _surface_boundary_records(profile)
+    by_node = {record["node"]: record for record in surface}
+    if source_node not in by_node:
+        raise ValueError(f"Mode4 source node {source_node} is not a surface boundary node")
+    center = by_node[source_node]
+    target_left, target_right = _mode4_target_interval(
+        profile["kat"],
+        center["x"],
+        event.source_width_cm,
+    )
+
+    covers = []
+    for record in surface:
+        cover_left = max(record["segment_left"], target_left)
+        cover_right = min(record["segment_right"], target_right)
+        cover_width = max(0.0, cover_right - cover_left)
+        cover_measure = _drip_cover_measure(
+            profile["kat"],
+            record["segment_left"],
+            record["segment_right"],
+            cover_left,
+            cover_right,
+            record["width"],
+        )
+        if cover_width > 1.0e-8 and cover_measure > 1.0e-12:
+            covers.append(
+                {
+                    "node": record["node"],
+                    "x_cm": record["x"],
+                    "segment_left_cm": record["segment_left"],
+                    "segment_right_cm": record["segment_right"],
+                    "boundary_width_cm": record["width"],
+                    "cover_width_cm": cover_width,
+                    "cover_measure_cm": cover_measure,
+                    "applied_segment_flux_cm_h": event.drip_rate_cm_h
+                    * cover_measure
+                    / record["width"],
+                }
+            )
+    covered_width = sum(item["cover_width_cm"] for item in covers)
+    covered_measure = sum(item["cover_measure_cm"] for item in covers)
+    active_measure = sum(item["boundary_width_cm"] for item in covers)
+    return {
+        "event_index": event_index,
+        "source_node": source_node,
+        "source_x_cm": center["x"],
+        "grid_kat": profile["kat"],
+        "start_elapsed_h": event.start_elapsed_h,
+        "duration_h": event.duration_h,
+        "rate_cm_h": event.drip_rate_cm_h,
+        "target_width_cm": event.source_width_cm,
+        "target_left_cm": target_left,
+        "target_right_cm": target_right,
+        "covered_width_cm": covered_width,
+        "covered_measure_cm": covered_measure,
+        "active_boundary_measure_cm": active_measure,
+        "coverage_fraction_by_width": _safe_fraction(covered_width, event.source_width_cm),
+        "boundary_coverage_fraction_by_measure": _safe_fraction(covered_measure, active_measure),
+        "target_grid_input_mm": (
+            event.drip_rate_cm_h
+            * event.duration_h
+            * event.source_width_cm
+            / grid_width_cm
+            * 10.0
+        ),
+        "covered_grid_input_mm": (
+            event.drip_rate_cm_h
+            * event.duration_h
+            * covered_measure
+            / grid_width_cm
+            * 10.0
+        ),
+        "applied_segment_flux_mean_cm_h": (
+            event.drip_rate_cm_h * covered_measure / active_measure
+            if active_measure > 0.0
+            else 0.0
+        ),
+        "applied_segment_flux_max_cm_h": (
+            max(item["applied_segment_flux_cm_h"] for item in covers)
+            if covers
+            else 0.0
+        ),
+        "covered_nodes": ";".join(str(item["node"]) for item in covers),
+    }
+
+
+def _surface_boundary_records(profile):
+    surface = [
+        record
+        for record in profile["boundary_records"]
+        if abs(record["code_w"]) == 4 and record["node"] <= profile["x_count"]
+    ]
+    surface = sorted(surface, key=lambda record: record["x"])
+    for index, record in enumerate(surface):
+        if len(surface) == 1:
+            if profile["kat"] == 1:
+                segment_left = 0.0
+                segment_right = record["x"]
+            else:
+                segment_left = record["x"] - 0.5 * record["width"]
+                segment_right = record["x"] + 0.5 * record["width"]
+        elif index == 0:
+            segment_right = 0.5 * (record["x"] + surface[index + 1]["x"])
+            segment_left = 0.0 if profile["kat"] == 1 else segment_right - record["width"]
+        elif index == len(surface) - 1:
+            segment_left = 0.5 * (surface[index - 1]["x"] + record["x"])
+            segment_right = record["x"] if profile["kat"] == 1 else segment_left + record["width"]
+        else:
+            segment_left = 0.5 * (surface[index - 1]["x"] + record["x"])
+            segment_right = 0.5 * (record["x"] + surface[index + 1]["x"])
+        enriched = dict(record)
+        enriched["segment_left"] = float(segment_left)
+        enriched["segment_right"] = float(segment_right)
+        surface[index] = enriched
+    return surface
+
+
+def _mode4_target_interval(kat, source_x_cm, source_width_cm):
+    if int(kat) == 1 and abs(float(source_x_cm)) <= 1.0e-6:
+        return 0.0, float(source_width_cm)
+    half_width = 0.5 * float(source_width_cm)
+    return float(source_x_cm) - half_width, float(source_x_cm) + half_width
+
+
+def _drip_cover_measure(kat, segment_left, segment_right, cover_left, cover_right, full_measure):
+    cover_length = max(0.0, float(cover_right) - float(cover_left))
+    if cover_length <= 0.0 or float(full_measure) <= 0.0:
+        return 0.0
+    segment_length = max(0.0, float(segment_right) - float(segment_left))
+    if segment_length <= 0.0:
+        return 0.0
+    if int(kat) == 1:
+        denom = float(segment_right) ** 2 - float(segment_left) ** 2
+        numer = float(cover_right) ** 2 - float(cover_left) ** 2
+        fraction = numer / denom if denom > 1.0e-6 else cover_length / segment_length
+    else:
+        fraction = cover_length / segment_length
+    fraction = max(0.0, min(1.0, fraction))
+    return float(full_measure) * fraction
+
+
+def _set_grid_kat(path, kat):
+    grid_path = Path(path)
+    lines = grid_path.read_text(encoding="utf-8").splitlines()
+    header_index = next(index for index, line in enumerate(lines) if "KAT" in line and "NumNP" in line)
+    counts = lines[header_index + 1].split()
+    if len(counts) < 6:
+        raise ValueError(f"Invalid KAT/counts line in {grid_path}")
+    counts[0] = str(int(kat))
+    lines[header_index + 1] = "  " + "     ".join(counts)
+    grid_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _refine_grid_fixed_domain(path, refinement_factor):
@@ -787,6 +1222,28 @@ def _structured_grid_profile(path):
         if item["node"] != expected_node:
             raise ValueError(f"Grid nodes must be sequential in {path}")
 
+    node_by_id = {item["node"]: item for item in nodes}
+    boundary_records = []
+    for line in lines[layout["boundary_start"] : layout["boundary_start"] + boundary_count]:
+        parts = line.split()
+        if len(parts) < 6:
+            raise ValueError(f"Invalid grid boundary line in {path}: {line}")
+        node = int(parts[0])
+        if node not in node_by_id:
+            raise ValueError(f"Grid boundary references unknown node {node} in {path}")
+        boundary_records.append(
+            {
+                "node": node,
+                "x": float(node_by_id[node]["x"]),
+                "y": float(node_by_id[node]["y"]),
+                "code_w": int(parts[1]),
+                "code_c": int(parts[2]),
+                "code_h": int(parts[3]),
+                "code_g": int(parts[4]),
+                "width": float(parts[5]),
+            }
+        )
+
     x_values = [nodes[index]["x"] for index in range(x_count)]
     y_values = []
     for row_index in range(y_count):
@@ -806,6 +1263,7 @@ def _structured_grid_profile(path):
         "y_count": y_count,
         "node_count": node_count,
         "boundary_count": boundary_count,
+        "boundary_records": boundary_records,
         "x_values": x_values,
         "y_values": y_values,
     }
@@ -1020,7 +1478,7 @@ def _write_no_irrigation(path):
 
 def _write_no_drip(path):
     lines = [
-        "*****Script for Drip application module  ******* wAppl is cm water per hour at each source boundary",
+        "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
         "Number of Drip irrigations(max=75)",
         " 0 ",
         "No drip irrigation",
@@ -1030,18 +1488,26 @@ def _write_no_drip(path):
 
 def _write_mode4_drip(path, scenario):
     lines = [
-        "*****Script for Drip application module  ******* wAppl is cm water per hour at each source boundary",
+        "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
         "Number of Drip irrigations(max=75)",
-        " 1 ",
+        f" {len(scenario.event_specs)} ",
         "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth",
-        (
-            f"'{_fmt_date(DRIP_START.date())}' {DRIP_START.hour:g} "
-            f"'{_fmt_date(scenario.drip_stop.date())}' {scenario.drip_stop.hour:g} "
-            f"{scenario.drip_rate_cm_h:g} 1 0 0 1 0 0 0 4 {scenario.source_width_cm:g}"
-        ),
-        "Drip application nodes",
-        f" {SOURCE_NODE}",
     ]
+    for event in scenario.event_specs:
+        start = DRIP_START + timedelta(hours=event.start_elapsed_h)
+        stop = DRIP_START + timedelta(hours=event.stop_elapsed_h)
+        lines.extend(
+            [
+                (
+                    f"'{_fmt_date(start.date())}' {start.hour:g} "
+                    f"'{_fmt_date(stop.date())}' {stop.hour:g} "
+                    f"{event.drip_rate_cm_h:g} {len(event.source_nodes)} "
+                    f"0 0 1 0 0 0 4 {event.source_width_cm:g}"
+                ),
+                "Drip application nodes",
+                " " + " ".join(str(node) for node in event.source_nodes),
+            ]
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -1094,18 +1560,32 @@ def _active_application_width_mean(g05):
 
 def _drip_balance(g05):
     input_mm = _column_sum(g05, "drip_input_mm")
+    demand = _column_sum(g05, "drip_demand_mm")
+    pressure_loss = _column_sum(g05, "drip_pressure_loss_mm")
     actual = _column_sum(g05, "drip_actual_infil_mm")
     storage_change = _column_sum(g05, "drip_surface_storage_change_mm")
     surface_runoff = _column_sum(g05, "drip_surface_runoff_mm")
     hydraulic_excess = _column_sum(g05, "drip_hydraulic_excess_mm")
-    residual = input_mm - actual - storage_change - surface_runoff - hydraulic_excess
+    residual_recomputed = input_mm - actual - storage_change - surface_runoff - hydraulic_excess
+    residual_direct = _column_sum(g05, "drip_boundary_acceptance_closure_mm")
+    input_closure_direct = _column_sum(g05, "drip_boundary_input_closure_mm")
+    residual = (
+        residual_direct
+        if "drip_boundary_acceptance_closure_mm" in g05
+        else residual_recomputed
+    )
     return {
+        "demand": float(demand),
+        "pressure_loss": float(pressure_loss),
         "input": float(input_mm),
         "actual": float(actual),
         "storage_change": float(storage_change),
         "surface_runoff": float(surface_runoff),
         "hydraulic_excess": float(hydraulic_excess),
         "residual": float(residual),
+        "residual_recomputed": float(residual_recomputed),
+        "residual_direct": float(residual_direct),
+        "input_closure_direct": float(input_closure_direct),
         "storage_max": float(g05.get("drip_surface_storage_mm", pd.Series([0.0])).max()),
     }
 
@@ -1188,9 +1668,18 @@ def _assert_g05_is_physical(g05, soil_name):
     for column in nonnegative:
         if column in g05 and float(g05[column].min()) < -1.0e-6:
             raise ValueError(f"{soil_name}: G05 {column} has nonphysical negative values")
-    residual = abs(_drip_balance(g05)["residual"])
+    balance = _drip_balance(g05)
+    residual = abs(balance["residual"])
     if residual > 0.02:
         raise ValueError(f"{soil_name}: drip boundary balance residual is {residual:.6g} mm")
+    if (
+        "drip_boundary_acceptance_closure_mm" in g05
+        and abs(balance["residual"] - balance["residual_recomputed"]) > 0.02
+    ):
+        raise ValueError(
+            f"{soil_name}: direct and recomputed drip residuals differ by "
+            f"{balance['residual'] - balance['residual_recomputed']:.6g} mm"
+        )
 
 
 def _assert_theta_is_finite(g03, soil):
@@ -1621,12 +2110,13 @@ def _mirror_frame(frame):
 def _write_manifest(path, output_root, summary_path, shapes_path, storage_path, figure_paths, scenario):
     manifest = {
         "workspace": str(output_root),
-        "mode": "DripSpreadMode=4 surface point source",
-        "half_domain": True,
+        "mode": "DripSpreadMode=4 fixed surface source interval / covered-measure mode",
+        "half_domain": "depends on grid KAT and source-node convention; see summary coverage diagnostics",
         "symmetry_axis_x_cm": 0.0,
         "flow_conversion": {
             "grid_input_mm": (
-                "rate_cm_h * drip_duration_h * source_width_cm / grid_width_cm * 10"
+                "For Mode4, G05 demand follows rate_cm_h * duration_h * "
+                "covered_boundary_measure_cm / grid_width_cm * 10."
             ),
             "line_source_flux_l_h_m_half_domain": "rate_cm_h * source_width_cm / 10",
             "line_source_flux_l_h_m_mirrored": (
@@ -1673,8 +2163,8 @@ def _write_manifest(path, output_root, summary_path, shapes_path, storage_path, 
         ),
         "field_notes": {
             "DripSourceWidth": (
-                "MAIZSIM half-domain source width for x=0 symmetry-axis runs; "
-                "mirrored physical contact width is 2 * DripSourceWidth."
+                "Mode4 target source interval; it may be clipped by the domain "
+                "or represented by only part of a boundary segment."
             ),
             "drip_surface_application_width_max_cm": (
                 "G05 surface application width, not the G03 wetted-body width."
@@ -1716,8 +2206,9 @@ def _write_matrix_manifest(
         "scenario_outputs": scenario_outputs,
         "field_notes": {
             "DripSourceWidth": (
-                "MAIZSIM half-domain source width for x=0 symmetry-axis runs; "
-                "mirrored physical contact width is 2 * DripSourceWidth."
+                "Mode4 target source interval. Use the summary CSV coverage "
+                "diagnostics to distinguish target width from boundary-covered "
+                "measure and clipped demand."
             ),
             "drip_surface_application_width_mean_cm": (
                 "Mean G05 application width over active drip-input rows only."
@@ -1730,6 +2221,13 @@ def _write_matrix_manifest(
             ),
             "wet_width_interpolated_cm": (
                 "G03 delta-theta wetted-body width estimated by linear threshold interpolation."
+            ),
+            "expected_grid_input_by_covered_measure_mm": (
+                "Best expected G05 demand for the current grid because Mode4 demand "
+                "uses the actually covered boundary measure."
+            ),
+            "expected_grid_input_by_target_width_mm": (
+                "User-intended source-width demand before domain or boundary-segment clipping."
             ),
             "touches_lateral_boundary": (
                 "True when thresholded G03 wetted nodes reach the mirrored lateral domain edge."
@@ -1779,6 +2277,18 @@ def _scenario_manifest_row(scenario):
             mirrored=True,
         ),
         "grid_refinement_factor": scenario.grid_refinement_factor,
+        "grid_kat": scenario.grid_kat,
+        "source_nodes": [list(event.source_nodes) for event in scenario.event_specs],
+        "events": [
+            {
+                "start_elapsed_h": event.start_elapsed_h,
+                "duration_h": event.duration_h,
+                "drip_rate_cm_h": event.drip_rate_cm_h,
+                "source_width_cm": event.source_width_cm,
+                "source_nodes": list(event.source_nodes),
+            }
+            for event in scenario.event_specs
+        ],
         "figure_elapsed_hours": list(scenario.figure_elapsed_hours),
         "delta_levels": list(scenario.delta_levels),
     }
@@ -1831,16 +2341,28 @@ def main(argv=None):
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument(
         "--scenario-set",
-        choices=("current", "supplemental", "systematic", "enhanced"),
+        choices=("current", "supplemental", "systematic", "enhanced", "contract", "pro-review"),
         default="current",
         help=(
             "Run only the current smoke-test scenario, the supplemental diagnostic "
             "matrix, the non-HYDRUS systematic validation matrix, or the "
-            "Pro-review enhanced follow-up matrix."
+            "Pro-review enhanced, contract, or full follow-up matrix."
         ),
     )
     args = parser.parse_args(argv)
-    if args.scenario_set == "enhanced":
+    if args.scenario_set == "pro-review":
+        result = run_pro_review_validation(
+            args.workspace,
+            executable_dir=args.executable_dir,
+            timeout_seconds=args.timeout_seconds,
+        )
+    elif args.scenario_set == "contract":
+        result = run_contract_validation(
+            args.workspace,
+            executable_dir=args.executable_dir,
+            timeout_seconds=args.timeout_seconds,
+        )
+    elif args.scenario_set == "enhanced":
         result = run_enhanced_validation(
             args.workspace,
             executable_dir=args.executable_dir,

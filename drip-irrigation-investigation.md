@@ -4,17 +4,31 @@
 
 ## 最新结论
 
-2026-05-30修订：新研究和新输入应以`DripSpreadMode=4`作为现实地表滴头主线。`Mode4`把滴头表示为局部地表点源，必须显式给出正的`DripSourceWidth`，避免用网格边界宽度代替真实出水宽度。
+2026-05-31修订：`DripSpreadMode=4`现在定位为固定地表源宽模式，而不是已经充分验证的“现实地表滴头主线”。`Mode4`必须显式给出正的`DripSourceWidth`；该字段定义目标地表源区间，水量按实际覆盖边界measure计量。非轴对称二维slab中，当源区完全落在模型地表内时，这通常等价于`wAppl * DripSourceWidth`；`KAT=1`轴对称算例必须按轴对称边界积分measure解释，不能直接把它当作无条件物理直径。
 
 `DripSpreadMode=0`只表示旧格式兼容：早期`.drp`没有`DripSpreadMode`字段时，模型默认进入原来的`RO`触发扩展逻辑。它不是推荐的物理滴灌模式。
 
-`DripSpreadMode=1-3`保留为历史、实验或HYDRUS对齐遗留路径，不删除、不阻断旧算例，但不再建议用于新研究。前一轮`Mode2`在官方Drip1壤土和Drip2砂壤土算例上通过目标3接受门，这一结果仍可作为历史验证记录，但不改变`Mode4`作为现实滴头主线的定位。
+`DripSpreadMode=1-3`保留为历史、实验或HYDRUS对齐遗留路径，不删除、不阻断旧算例，但不再建议作为新研究默认路线。前一轮`Mode2`在官方Drip1壤土和Drip2砂壤土算例上通过目标3接受门，这一结果仍可作为历史验证记录；`Mode4`仍需端到端水量闭合、轴对称单位换算、局部暂存/径流和作物耦合验证后，才能升级为主线物理模式。
 
-如果目标是精细模拟滴灌湿润体形态，尤其要和HYDRUS二维`theta(x,z,t)`图对比，仍必须同时看二维水分增量图、湿润宽度、湿润深度、储水增量、峰值位置和水量闭合。只看`.drp`输入量或G05闭合不够。
+如果目标是精细模拟滴灌湿润体形态，尤其要和HYDRUS二维`theta(x,z,t)`图对比，仍必须同时看二维水分增量图、湿润宽度、湿润深度、储水增量、峰值位置和水量闭合。只看`.drp`输入量或G05闭合不够。Mode4新增的G05闭合列应优先用于两条边界闭合式：`DripDemand = DripPressureLoss + DripInput`，以及`DripInput = DripActualInfil + DripHydraulicExcess + DripStorageChange + DripSurfaceRunoff`。
 
 需要特别说明：现有官方二维对照算例通过，不等价于所有滴头流量、坡度、初始含水量、多滴头、地下滴灌、作物根系吸水场景都已经物理泛化。
 
 ## 本轮保留的代码改动
+
+### Mode4单位契约和局部暂存修订
+
+文件：`Soil Source/Drip.FOR`、`Soil Source/Watmov.for`、`Soil Source/OUTPUT.FOR`、`Soil Source/PuSurface.ins`
+
+`DripSpreadMode=4`的当前契约是：
+
+- `DripSourceWidth`定义固定目标地表源区间；`DripWetWidthMax`不参与扩展。
+- Mode4供水需求使用目标区间与实际边界控制段相交后的`TotalMeasure`，而不是无条件线性乘`DripSourceWidth`。
+- 只有`KAT=1`且源节点在`x=0`轴线时，Mode4才使用`[0, DripSourceWidth]`单侧区间；非轴对称`x=0`源点按中心源区间处理。
+- Mode4记录每个活动边界段的`DripCoveredMeasure`，用于约束地表暂存容量和释放上限，避免用完整`Width(k)`高估局部滴头接触斑块的暂存空间。
+- G05新增`DripBoundaryInClosure`和`DripBoundaryAccClosure`，分别对应供给闭合和边界接纳闭合残差。
+
+仍需注意：Mode4目前仍通过完整边界段施加等效Neumann通量。如果`DripSourceWidth`远小于滴头所在边界段`Width(k)`，水量可以守恒，但局部通量峰值会被摊薄；此时应加密滴头附近地表网格或拆分边界段。
 
 ### 地表湿润宽度按土壤导水能力限制
 

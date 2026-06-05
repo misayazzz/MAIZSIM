@@ -9,6 +9,7 @@ from pathlib import Path
 
 MODEL_FAILURE_MARKERS = (
     "ORTHOMIN TERMINATES",
+    "Error #",
     "Traceback",
     "forrtl: severe",
     "Invalid drip",
@@ -16,6 +17,7 @@ MODEL_FAILURE_MARKERS = (
     "WaterMover non-finite head",
     "Sowing date cannot be earlier",
 )
+MODEL_LOG_NAME = "2DSOIL03.LOG"
 
 
 @dataclass
@@ -61,6 +63,7 @@ def run_model(
     run_file_input = Path(run_file)
     executable_path = _path_in_run_dir(run_path, executable_input)
     run_file_path = _path_in_run_dir(run_path, run_file_input)
+    model_log_path = run_path / MODEL_LOG_NAME
 
     for required_path, label in (
         (executable_path, "Executable"),
@@ -78,6 +81,21 @@ def run_model(
                 False,
                 message,
             )
+
+    try:
+        _remove_stale_model_log(model_log_path)
+    except OSError as exc:
+        message = f"Failed to clear stale model log: {exc}"
+        _write_failure_logs(stdout_path, stderr_path, message)
+        return ModelRunResult(
+            member_id,
+            run_path,
+            -1,
+            stdout_path,
+            stderr_path,
+            False,
+            message,
+        )
 
     command = [
         str(executable_path),
@@ -120,7 +138,7 @@ def run_model(
             message,
         )
 
-    marker = _failure_marker(stdout_path, stderr_path)
+    marker = _failure_marker(stdout_path, stderr_path, model_log_path)
     success = completed.returncode == 0 and marker is None
     if success:
         message = "Model run completed successfully"
@@ -184,11 +202,24 @@ def _append_stderr(stderr_path: Path, message: str) -> None:
         stderr_file.write(f"{message}\n")
 
 
-def _failure_marker(stdout_path: Path, stderr_path: Path) -> str | None:
+def _remove_stale_model_log(model_log_path: Path) -> None:
+    try:
+        model_log_path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _failure_marker(
+    stdout_path: Path,
+    stderr_path: Path,
+    model_log_path: Path,
+) -> str | None:
     text = (
         stdout_path.read_text(encoding="utf-8", errors="replace")
         + stderr_path.read_text(encoding="utf-8", errors="replace")
     )
+    if model_log_path.is_file():
+        text += model_log_path.read_text(encoding="utf-8", errors="replace")
     text_lower = text.casefold()
     return next(
         (

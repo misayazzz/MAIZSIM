@@ -228,18 +228,19 @@ class HydrusAlignedValidationTests(unittest.TestCase):
             header = (
                 "Date_time,Date,CumRain,infil,DripInput,DripDemand,"
                 "DripPressureLoss,DripHydraulicExcess,DripActualInfil,"
-                "DripSourceInput,DripSourceLoss\n"
+                "DripSourceInput,DripSourceLoss,"
+                "DripBoundaryInClosure,DripBoundaryAccClosure\n"
             )
             baseline.write_text(
-                header + "1.0,04/28/2007,0,0,0,0,0,0,0,0,0\n",
+                header + "1.0,04/28/2007,0,0,0,0,0,0,0,0,0,0,0\n",
                 encoding="utf-8",
             )
             drip.write_text(
                 header
                 + "\n".join(
                     [
-                        "1.0,04/28/2007,0,0,1.9,2.0,0.1,0.2,1.7,1.7,0.2",
-                        "2.0,04/28/2007,0,0,3.0,3.0,0.0,0.1,2.9,2.8,0.2",
+                        "1.0,04/28/2007,0,0,1.9,2.0,0.1,0.2,1.7,1.7,0.2,0.01,-0.01",
+                        "2.0,04/28/2007,0,0,3.0,3.0,0.0,0.1,2.9,2.8,0.2,0.02,-0.03",
                     ]
                 )
                 + "\n",
@@ -256,8 +257,9 @@ class HydrusAlignedValidationTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["g05_drip_source_input_mm_sum"], 4.5)
         self.assertAlmostEqual(metrics["g05_drip_source_loss_mm_sum"], 0.4)
         self.assertAlmostEqual(metrics["g05_source_closure_residual_mm"], 0.1)
-        self.assertAlmostEqual(metrics["g05_boundary_input_closure_residual_mm"], 0.0)
-        self.assertAlmostEqual(metrics["g05_boundary_acceptance_residual_mm"], 0.0)
+        self.assertAlmostEqual(metrics["g05_direct_source_closure_residual_mm"], 0.1)
+        self.assertAlmostEqual(metrics["g05_boundary_input_closure_residual_mm"], 0.03)
+        self.assertAlmostEqual(metrics["g05_boundary_acceptance_residual_mm"], -0.04)
 
 
 def _project():

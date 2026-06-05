@@ -85,6 +85,45 @@ class ModelRunnerTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("ORTHOMIN TERMINATES", result.message)
 
+    def test_run_model_clears_stale_soil_log_before_run(self):
+        with tempfile.TemporaryDirectory(prefix="codex_model_runner_stale_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+            (run_dir / "run.dat").write_text("", encoding="utf-8")
+            soil_log = run_dir / "2DSOIL03.LOG"
+            soil_log.write_text("Error #  171,   Line #   11", encoding="utf-8")
+
+            with patch(
+                "da_framework.model_runner.subprocess.run",
+                return_value=SimpleNamespace(returncode=0),
+            ):
+                result = run_model(run_dir)
+
+        self.assertTrue(result.success)
+        self.assertFalse(soil_log.exists())
+
+    def test_run_model_treats_current_soil_log_error_as_failure(self):
+        with tempfile.TemporaryDirectory(prefix="codex_model_runner_soil_log_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+            (run_dir / "run.dat").write_text("", encoding="utf-8")
+
+            def write_soil_log(*args, **kwargs):
+                (run_dir / "2DSOIL03.LOG").write_text(
+                    "Error #  171,   Line #   11",
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0)
+
+            with patch(
+                "da_framework.model_runner.subprocess.run",
+                side_effect=write_soil_log,
+            ):
+                result = run_model(run_dir)
+
+        self.assertFalse(result.success)
+        self.assertIn("Error #", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()

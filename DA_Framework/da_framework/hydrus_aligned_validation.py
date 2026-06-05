@@ -163,8 +163,9 @@ def prepare_hydrus_aligned_runs(
     duration_h = float(selector.get("t_max_h", 2.0)) - float(selector.get("t_init_h", 0.0))
     source = _source_boundary_node(boundary.nodes)
     source_width = float(source["width"])
-    # KAT=1 uses the HYDRUS axisymmetric boundary integration weight; Drip.FOR
-    # multiplies wAppl by Width, so this recovers the original L/h emitter rate.
+    # KAT=1 uses the HYDRUS axisymmetric boundary integration weight. Mode4
+    # applies wAppl over the covered source measure, so this keeps the original
+    # L/h emitter rate when the source measure is the HYDRUS source width.
     w_appl_cm_h = rate_l_h * 1000.0 / source_width
 
     base_run = repo / BASE_RUN_RELATIVE
@@ -378,6 +379,8 @@ def _g05_drip_diagnostics(baseline_g05, drip_g05):
         "drip_surface_storage_change_mm",
         "drip_surface_runoff_mm",
         "drip_surface_storage_mm",
+        "drip_boundary_input_closure_mm",
+        "drip_boundary_acceptance_closure_mm",
     )
     result = {}
     for column in columns:
@@ -392,6 +395,9 @@ def _g05_drip_diagnostics(baseline_g05, drip_g05):
         result["g05_source_closure_residual_mm"] = float(
             demand - source_input - source_loss
         )
+        result["g05_direct_source_closure_residual_mm"] = result[
+            "g05_source_closure_residual_mm"
+        ]
     drip_input = result.get("g05_drip_input_mm_sum")
     pressure_loss = result.get("g05_drip_pressure_loss_mm_sum")
     actual_infil = result.get("g05_drip_actual_infil_mm_sum")
@@ -403,21 +409,25 @@ def _g05_drip_diagnostics(baseline_g05, drip_g05):
         and pressure_loss is not None
         and drip_input is not None
     ):
-        result["g05_boundary_input_closure_residual_mm"] = float(
-            demand - pressure_loss - drip_input
-        )
+        direct_residual = result.get("g05_drip_boundary_input_closure_mm_sum")
+        if direct_residual is None:
+            direct_residual = float(demand - pressure_loss - drip_input)
+        result["g05_boundary_input_closure_residual_mm"] = direct_residual
     if (
         drip_input is not None
         and actual_infil is not None
         and hydraulic_excess is not None
     ):
-        result["g05_boundary_acceptance_residual_mm"] = float(
-            drip_input
-            - actual_infil
-            - hydraulic_excess
-            - storage_change
-            - surface_runoff
-        )
+        direct_residual = result.get("g05_drip_boundary_acceptance_closure_mm_sum")
+        if direct_residual is None:
+            direct_residual = float(
+                drip_input
+                - actual_infil
+                - hydraulic_excess
+                - storage_change
+                - surface_runoff
+            )
+        result["g05_boundary_acceptance_residual_mm"] = direct_residual
     return result
 
 
@@ -812,7 +822,7 @@ def write_maizsim_drip_file(
     """Write one precision drip event or a zero-event baseline."""
     if w_appl_cm_h <= 0.0:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour at each source boundary",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)",
             " 0 ",
             "No drip irrigation",
@@ -821,7 +831,7 @@ def write_maizsim_drip_file(
         if int(drip_spread_mode) == 4 and float(drip_source_width_cm) <= 0.0:
             raise ValueError("drip_source_width_cm must be positive when drip_spread_mode is 4")
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour at each source boundary",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)",
             " 1 ",
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth",

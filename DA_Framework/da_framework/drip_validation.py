@@ -32,6 +32,8 @@ G05_DRIP_DIAGNOSTIC_COLUMNS = {
     "drip_surface_storage_change_mm": "DripStorageChange",
     "drip_surface_runoff_mm": "DripSurfaceRunoff",
     "drip_surface_storage_mm": "DripSurfaceStorage",
+    "drip_boundary_input_closure_mm": "DripBoundaryInClosure",
+    "drip_boundary_acceptance_closure_mm": "DripBoundaryAccClosure",
     "drip_wet_nodes_mean": "DripWetNodesMean",
     "drip_wet_nodes_max": "DripWetNodesMax",
     "drip_wet_width_mean_cm": "DripWetWidthMean",
@@ -300,8 +302,8 @@ def build_public_comparison_report_skeleton(
             "",
             "- Boundary type: surface point-source Neumann flux at fixed nodes.",
             "- Scheduling: event start/stop time, duration, node count, and rate.",
-            "- Water amount: rate * duration * active-node width / grid width.",
-            "- bounded dynamic wetted-radius expansion: surface source can expand to neighboring surface nodes when local infiltration is limited, while a physical wetted-width cap prevents whole-boundary spreading.",
+            "- Water amount: rate * duration * source measure / grid width for Mode4/5, with older modes retaining their legacy active-node-width accounting.",
+            "- Mode4 uses a fixed local surface source interval; Mode5 uses a dynamic local surface interval bounded by DripWetWidthMax.",
             "- Pressure correction: optional event fields support back-pressure and pressure-compensating surface-source approximations.",
             "- Refined diagnostics: G05 can report drip demand, pressure loss, hydraulic excess, surface application width, wet node count, and pressure factors.",
             "- Water balance: G05 CumRain, infiltration, runoff, and drainage deltas.",
@@ -427,18 +429,18 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
-    if spread_mode not in (0, 1, 2, 3, 4):
+    if spread_mode not in (0, 1, 2, 3, 4, 5):
         raise ValueError(
-            f"Drip event {event_index + 1} spread_mode must be 0, 1, 2, 3, or 4"
+            f"Drip event {event_index + 1} spread_mode must be 0, 1, 2, 3, 4, or 5"
         )
     if source_width_cm < 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be non-negative"
         )
-    if spread_mode == 4 and source_width_cm <= 0.0:
+    if spread_mode in (4, 5) and source_width_cm <= 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be positive "
-            "when spread_mode is 4"
+            "when spread_mode is 4 or 5"
         )
 
     return {
