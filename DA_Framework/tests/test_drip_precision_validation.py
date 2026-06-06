@@ -57,7 +57,7 @@ class DripPrecisionValidationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (drip / "LOAM2D.drp").write_text(
-                _drip_text("05/01/2007 0.0 05/02/2007 0.0 0.1 1 3 0 1 0 0 20 2"),
+                _drip_text("05/01/2007 0.0 05/02/2007 0.0 0.1 1 0 0 1 0 0 20 5 2.5"),
                 encoding="utf-8",
             )
             try:
@@ -72,7 +72,7 @@ class DripPrecisionValidationTests(unittest.TestCase):
         self.assertAlmostEqual(row["input_source_residual_mm"], 0.5)
         self.assertAlmostEqual(row["input_acceptance_residual_mm"], 1.5)
         self.assertEqual(row["active_output_rows"], 1)
-        self.assertEqual(row["spread_modes"], "2")
+        self.assertEqual(row["spread_modes"], "5")
 
     def test_g05_roundoff_tolerance_scales_with_output_rows(self):
         frame = pd.DataFrame({"active_output_rows": [46]})
@@ -223,34 +223,6 @@ class DripPrecisionValidationTests(unittest.TestCase):
         self.assertEqual(set(selected["case"]), set(frame["case"].iloc[:6]))
         self.assertIn("selection_reason", selected.columns)
         self.assertTrue((selected["selection_metric_count"] >= 1).all())
-
-    def test_direct_source_bypass_cases_flags_journal_unsafe_mode(self):
-        original_root = precision.REGRESSION_ROOT
-        with tempfile.TemporaryDirectory(prefix="codex_precision_bypass_") as tmp_dir:
-            root = Path(tmp_dir)
-            baseline = root / "loam__base_x100__baseline"
-            bypass = root / "loam__base_x100__long_low_single"
-            coupled = root / "loam__base_x100__long_high_single"
-            baseline.mkdir()
-            bypass.mkdir()
-            coupled.mkdir()
-            (bypass / "LOAM2D.drp").write_text(
-                _drip_text("05/01/2007 0.0 05/02/2007 0.0 0.1 1 3 0 1 0 0 20 1"),
-                encoding="utf-8",
-            )
-            (coupled / "LOAM2D.drp").write_text(
-                _drip_text("05/01/2007 0.0 05/02/2007 0.0 0.1 1 3 0 1 0 0 20 2"),
-                encoding="utf-8",
-            )
-            try:
-                precision.REGRESSION_ROOT = root
-
-                cases = precision._direct_source_bypass_cases()
-            finally:
-                precision.REGRESSION_ROOT = original_root
-
-        self.assertEqual(cases, ["loam__base_x100__long_low_single"])
-
 
 def _g05_text(
     drip_input=0.0,

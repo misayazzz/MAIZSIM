@@ -1447,7 +1447,6 @@ def _build_checks(
         else 0.0
     )
     boundary_residual_tolerance = _g05_sum_roundoff_tolerance(boundary_active)
-    direct_bypass_cases = _direct_source_bypass_cases()
     temporal_case_count = int(temporal["case"].astype(str).nunique())
     temporal_date_count_min = (
         int(temporal.groupby("case")["date"].nunique().min())
@@ -1514,22 +1513,6 @@ def _build_checks(
                 "+ DripStorageChange + DripSurfaceRunoff for "
                 "boundary-flow accounting; tolerance includes G05 daily "
                 f"0.001 mm reporting roundoff ({boundary_residual_tolerance:.3g} mm)."
-            ),
-        },
-        {
-            "check": "direct_source_bypass_case_count",
-            "value": float(len(direct_bypass_cases)),
-            "status": "pass" if not direct_bypass_cases else "fail",
-            "detail": (
-                "Journal-readiness precision evidence must not rely on "
-                "DripMode=3 with DripSpreadMode=1 because that path bypasses "
-                f"WaterMover; cases: {', '.join(direct_bypass_cases)}."
-                if direct_bypass_cases
-                else (
-                    "Journal-readiness precision evidence must not rely on "
-                    "DripMode=3 with DripSpreadMode=1 because that path bypasses "
-                    "WaterMover."
-                )
             ),
         },
         {
@@ -1896,25 +1879,6 @@ def _build_checks(
         },
     ]
     return pd.DataFrame.from_records(rows)
-
-
-def _direct_source_bypass_cases():
-    cases = []
-    for case_dir in sorted(REGRESSION_ROOT.iterdir()):
-        if not case_dir.is_dir() or "__" not in case_dir.name:
-            continue
-        soil, grid, scenario = _split_case(case_dir.name)
-        if scenario == "baseline":
-            continue
-        drip_path = case_dir / "LOAM2D.drp"
-        if not drip_path.is_file():
-            continue
-        schedule = parse_drip_file(drip_path)
-        for event in schedule.events:
-            if event.pressure_mode == 3 and event.spread_mode == 1:
-                cases.append(f"{soil}__{grid}__{scenario}")
-                break
-    return cases
 
 
 def _g05_sum_roundoff_tolerance(frame):

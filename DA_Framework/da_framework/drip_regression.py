@@ -380,14 +380,14 @@ def write_drip_file(path, scenario, soil=None):
     """Write the drip schedule for one matrix case."""
     if scenario is None:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)  ",
             " 0 ",
             "No drip irrigation",
         ]
     else:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)  ",
             " 1 ",
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes",

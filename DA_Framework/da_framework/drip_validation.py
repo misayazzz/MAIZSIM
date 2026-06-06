@@ -94,8 +94,8 @@ class DripSchedule:
         MAIZSIM G05 reports surface water terms as grid-averaged mm.
         For a fixed-node surface drip event, the expected increment is:
         rate_cm_hr * duration_hr * sum(node_width_cm) / grid_width_cm * 10.
-        If an event defines source_width_cm, that width overrides the grid
-        node width to keep physical emitter flow independent of mesh spacing.
+        In Mode5, source_width_cm overrides the grid node width to keep
+        physical emitter flow independent of mesh spacing.
         """
         grid_width = _positive_float(grid_width_cm, "grid_width_cm")
         width_by_node = {
@@ -302,8 +302,8 @@ def build_public_comparison_report_skeleton(
             "",
             "- Boundary type: surface point-source Neumann flux at fixed nodes.",
             "- Scheduling: event start/stop time, duration, node count, and rate.",
-            "- Water amount: rate * duration * source measure / grid width for Mode4/5, with older modes retaining their legacy active-node-width accounting.",
-            "- Mode4 uses a fixed local surface source interval; Mode5 uses a dynamic local surface interval bounded by DripWetWidthMax.",
+            "- Water amount: rate * duration * source measure / grid width for Mode5.",
+            "- Mode5 uses a dynamic local surface interval bounded by DripWetWidthMax.",
             "- Pressure correction: optional event fields support back-pressure and pressure-compensating surface-source approximations.",
             "- Refined diagnostics: G05 can report drip demand, pressure loss, hydraulic excess, surface application width, wet node count, and pressure factors.",
             "- Water balance: G05 CumRain, infiltration, runoff, and drainage deltas.",
@@ -429,18 +429,22 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
-    if spread_mode not in (0, 1, 2, 3, 4, 5):
+    if spread_mode not in (0, 5):
         raise ValueError(
-            f"Drip event {event_index + 1} spread_mode must be 0, 1, 2, 3, 4, or 5"
+            f"Drip event {event_index + 1} spread_mode must be 0 or 5"
         )
     if source_width_cm < 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be non-negative"
         )
-    if spread_mode in (4, 5) and source_width_cm <= 0.0:
+    if spread_mode != 5 and source_width_cm > 0.0:
+        raise ValueError(
+            f"Drip event {event_index + 1} source_width_cm requires spread_mode 5"
+        )
+    if spread_mode == 5 and source_width_cm <= 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be positive "
-            "when spread_mode is 4 or 5"
+            "when spread_mode is 5"
         )
 
     return {

@@ -18,21 +18,7 @@ def _compact(text):
     return re.sub(r"\s+", "", text.lower())
 
 
-def test_mode4_axis_branch_is_limited_to_kat1():
-    source = _compact(_source(DRIP_SOURCE))
-
-    assert "(dripspreadmode(jj).eq.4.or.!dripspreadmode(jj).eq.5).and.kat.eq.1.and." in source
-    assert "if(abs(x(sourcenode)).le.driptol)" not in source
-
-
-def test_mode4_demand_uses_covered_measure_contract():
-    source = _compact(_source(DRIP_SOURCE))
-
-    assert "if(dripspreadmode(jj).eq.4)thensourcedemandflux=sourcerate*totalmeasure" in source
-    assert "elseif(dripsourcewidth(jj).gt.0.0)thensourcedemandflux=sourcerate*dripsourcewidth(jj)" in source
-
-
-def test_mode4_surface_storage_uses_covered_measure():
+def test_mode5_surface_storage_uses_covered_measure():
     include = _compact(_source(SURFACE_INCLUDE))
     drip = _compact(_source(DRIP_SOURCE))
     water_mover = _compact(_source(WATER_MOVER_SOURCE))
@@ -46,15 +32,18 @@ def test_mode4_surface_storage_uses_covered_measure():
 def test_mode5_dynamic_surface_source_contract():
     source = _compact(_source(DRIP_SOURCE))
 
-    assert "dripspreadmode(i).lt.0.or.dripspreadmode(i).gt.5" in source
-    assert "elseif(dripspreadmode(jj).eq.5)then" in source
+    assert "dripspreadmode(i).ne.0.and." in source
+    assert "dripspreadmode(jj).eq.4" not in source
+    assert "dripspreadmode(i).ne.5)then" in source
+    assert "driptargetwidth" not in source
+    assert "dripcurvehour" not in source
     assert "sourcedemandflux=sourcerate*dripsourcewidth(jj)" in source
-    assert "dripspreadmode(jj).eq.5).and.step.gt.0.0d0" in source
+    assert "if(dripspreadmode(jj).eq.5.and.step.gt.0.0d0)then" in source
     assert "if(dripspreadmode(jj).eq.5)maxradius=edgemaxradius" in source
     assert "dripwetwidthmaxlimits" in source
 
 
-def test_g05_outputs_mode4_closure_residual_columns():
+def test_g05_outputs_drip_closure_residual_columns():
     output = _source(OUTPUT_SOURCE)
 
     assert "DripBoundaryInClosure," in output
@@ -63,7 +52,7 @@ def test_g05_outputs_mode4_closure_residual_columns():
     assert "DripInput_Flux-" in output
 
 
-def test_main_loop_keeps_mode4_crop_coupling_explicit():
+def test_main_loop_keeps_drip_crop_coupling_explicit():
     source = _compact(_source(MAIN_SOURCE))
 
     drip_pos = source.index("calldrip()")

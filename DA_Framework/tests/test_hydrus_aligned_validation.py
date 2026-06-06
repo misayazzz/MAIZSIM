@@ -78,7 +78,23 @@ class HydrusAlignedValidationTests(unittest.TestCase):
         self.assertIn("0.5", text)
         self.assertIn("2.5", text)
 
-    def test_write_maizsim_drip_file_uses_precision_mode_and_source_node(self):
+    def test_write_maizsim_drip_file_rejects_removed_spread_modes(self):
+        source = pd.Series({"node": 7})
+        for spread_mode in (1, 2, 3, 4):
+            with self.subTest(spread_mode=spread_mode):
+                with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+                    path = Path(tmp_dir) / "LOAM2D.drp"
+
+                    with self.assertRaisesRegex(ValueError, "drip_spread_mode"):
+                        write_maizsim_drip_file(
+                            path,
+                            source,
+                            123.45,
+                            0.0,
+                            drip_spread_mode=spread_mode,
+                        )
+
+    def test_write_maizsim_drip_file_can_request_dynamic_source_mode(self):
         source = pd.Series({"node": 7})
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.drp"
@@ -87,74 +103,31 @@ class HydrusAlignedValidationTests(unittest.TestCase):
                 path,
                 source,
                 123.45,
-                21.9,
-                drip_spread_mode=1,
-            )
-
-            text = path.read_text(encoding="utf-8")
-
-        self.assertIn("DripSpreadMode", text)
-        self.assertIn("123.45", text)
-        self.assertIn(" 0 0 1 0 0 ", text)
-        self.assertIn("21.9 1", text)
-        self.assertTrue(text.rstrip().endswith("7"))
-
-    def test_write_maizsim_drip_file_can_request_direct_split(self):
-        source = pd.Series({"node": 7})
-        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
-            path = Path(tmp_dir) / "LOAM2D.drp"
-
-            write_maizsim_drip_file(
-                path,
-                source,
-                123.45,
-                28.0,
-                drip_source_depth_cm=18.5,
-                drip_mode=3,
-                drip_spread_mode=1,
-            )
-
-            text = path.read_text(encoding="utf-8")
-
-        self.assertIn("123.45 1 3 0 1 0 18.5 28", text)
-
-    def test_write_maizsim_drip_file_can_request_pressure_spread_mode(self):
-        source = pd.Series({"node": 7})
-        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
-            path = Path(tmp_dir) / "LOAM2D.drp"
-
-            write_maizsim_drip_file(
-                path,
-                source,
-                123.45,
-                0.0,
-                drip_spread_mode=2,
-            )
-
-            text = path.read_text(encoding="utf-8")
-
-        self.assertIn("123.45 1 0 0 1 0 0 0 2", text)
-
-    def test_write_maizsim_drip_file_can_request_point_source_mode(self):
-        source = pd.Series({"node": 7})
-        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
-            path = Path(tmp_dir) / "LOAM2D.drp"
-
-            write_maizsim_drip_file(
-                path,
-                source,
-                123.45,
-                0.0,
-                drip_spread_mode=4,
+                18.5,
+                drip_spread_mode=5,
                 drip_source_width_cm=2.5,
             )
 
             text = path.read_text(encoding="utf-8")
 
         self.assertIn("DripSourceWidth", text)
-        self.assertIn("123.45 1 0 0 1 0 0 0 4 2.5", text)
+        self.assertIn("123.45 1 0 0 1 0 0 18.5 5 2.5", text)
 
-    def test_write_maizsim_drip_file_rejects_point_source_without_width(self):
+    def test_write_maizsim_drip_file_rejects_dynamic_source_without_width(self):
+        source = pd.Series({"node": 7})
+        with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
+            path = Path(tmp_dir) / "LOAM2D.drp"
+
+            with self.assertRaisesRegex(ValueError, "drip_source_width_cm"):
+                write_maizsim_drip_file(
+                    path,
+                    source,
+                    123.45,
+                    18.5,
+                    drip_spread_mode=5,
+                )
+
+    def test_write_maizsim_drip_file_rejects_source_width_without_mode5(self):
         source = pd.Series({"node": 7})
         with tempfile.TemporaryDirectory(prefix="codex_hydrus_drip_") as tmp_dir:
             path = Path(tmp_dir) / "LOAM2D.drp"
@@ -165,7 +138,8 @@ class HydrusAlignedValidationTests(unittest.TestCase):
                     source,
                     123.45,
                     0.0,
-                    drip_spread_mode=4,
+                    drip_spread_mode=0,
+                    drip_source_width_cm=2.5,
                 )
 
     def test_write_zero_weather_file_uses_saturated_air_for_no_evaporation(self):

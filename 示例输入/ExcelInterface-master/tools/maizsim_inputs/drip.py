@@ -13,7 +13,7 @@ from .run_files import RUN_FILE_NAME
 from .shared_inputs import read_text_with_encoding
 
 
-DRIP_HEADER = "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4/5 use DripSourceWidth measure"
+DRIP_HEADER = "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses DripSourceWidth measure"
 DRIP_COUNT_HEADER = "Number of Drip irrigations(max=75)  "
 NO_DRIP_LINES = [
     DRIP_HEADER,
@@ -23,7 +23,6 @@ NO_DRIP_LINES = [
 ]
 MAX_DRIP_EVENTS = 75
 MAX_DRIP_NODES = 150
-MODE4_SMALL_SOURCE_WIDTH_RATIO = 0.5
 DRIP_FILE_LINE_INDEX = 11
 PRESSURE_MODE_FIELDS = ("dripmode", "pressuremode")
 PRESSURE_HEAD_FIELDS = ("driphin", "inlethead", "inletpressurehead")
@@ -231,9 +230,9 @@ def normalize_drip_record(run_id, record, require_distance):
     source_width = parse_optional_float(record, SOURCE_WIDTH_FIELDS, context, "DripSourceWidth", 0.0)
     spread_mode_value = get_optional_cell(record, SPREAD_MODE_FIELDS)
     if spread_mode_value is None and source_width > 0.0:
-        spread_mode = 4
+        spread_mode = 5
         warnings.warn(
-            f"{context} 填写了 DripSourceWidth 但未填写 DripSpreadMode，已按 DripSpreadMode=4 写出.",
+            f"{context} 填写了 DripSourceWidth 但未填写 DripSpreadMode，已按 DripSpreadMode=5 写出.",
             UserWarning,
             stacklevel=2,
         )
@@ -243,8 +242,8 @@ def normalize_drip_record(run_id, record, require_distance):
         spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
     if pressure_mode not in (0, 1, 2, 3):
         raise ConfigError(f"{context} 的 DripMode 必须是 0、1、2 或 3: {pressure_mode}")
-    if spread_mode not in (0, 1, 2, 3, 4, 5):
-        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、1、2、3、4 或 5: {spread_mode}")
+    if spread_mode not in (0, 5):
+        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0 或 5: {spread_mode}")
     if pressure_mode in (1, 2) and pressure_head <= 0:
         raise ConfigError(f"{context} 的 DripHIn 在 DripMode=1/2 时必须大于 0.")
     if pressure_exp <= 0:
@@ -255,14 +254,10 @@ def normalize_drip_record(run_id, record, require_distance):
         raise ConfigError(f"{context} 的 DripWetWidthMax 不能为负数.")
     if source_width < 0:
         raise ConfigError(f"{context} 的 DripSourceWidth 不能为负数.")
-    if spread_mode in (4, 5) and source_width <= 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=4/5 时必须大于 0.")
-    if spread_mode == 4 and wet_width_max > 0:
-        warnings.warn(
-            f"{context} 的 DripSpreadMode=4 会忽略 DripWetWidthMax；请用 DripSourceWidth 表示固定地表源宽.",
-            UserWarning,
-            stacklevel=2,
-        )
+    if spread_mode != 5 and source_width > 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 只能在 DripSpreadMode=5 时填写.")
+    if spread_mode == 5 and source_width <= 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=5 时必须大于 0.")
     if spread_mode == 5 and 0 < wet_width_max <= source_width:
         warnings.warn(
             (
@@ -371,31 +366,6 @@ def map_distance_to_surface_node(distance, surface_nodes):
     return min(surface_nodes, key=lambda node: (abs(node["x"] - distance), node["node"]))["node"]
 
 
-def warn_on_mode4_grid_scale(run_id, event, grid_data):
-    """Warn when a Mode4 source is much narrower than its boundary segment."""
-    if event.get("spread_mode") != 4:
-        return
-    source_width = float(event.get("source_width", 0.0))
-    for node in event["nodes"]:
-        boundary = grid_data["boundaries"].get(node)
-        if boundary is None:
-            continue
-        boundary_width = float(boundary["width"])
-        if boundary_width <= 0.0:
-            continue
-        if source_width < MODE4_SMALL_SOURCE_WIDTH_RATIO * boundary_width:
-            warnings.warn(
-                (
-                    f"Drip.ID={run_id} 节点 {node} 的 DripSourceWidth={source_width:g} cm "
-                    f"小于边界 Width={boundary_width:g} cm 的 "
-                    f"{MODE4_SMALL_SOURCE_WIDTH_RATIO:g} 倍；Mode4水量守恒但局部通量会被摊到完整边界段，"
-                    "建议加密滴头附近地表网格或拆分边界段."
-                ),
-                UserWarning,
-                stacklevel=2,
-            )
-
-
 def format_date(value):
     """Format date for MAIZSIM's mm/dd/yyyy parser."""
     return f"{value.month}/{value.day}/{value.year}"
@@ -496,11 +466,9 @@ def build_drip_events(run, grid_file):
         validate_explicit_nodes(run_id, explicit_nodes, grid_data)
         for event in normalized_events:
             event["nodes"] = list(explicit_nodes)
-            warn_on_mode4_grid_scale(run_id, event, grid_data)
     else:
         for event in normalized_events:
             event["nodes"] = [map_distance_to_surface_node(event["distance"], grid_data["surface_nodes"])]
-            warn_on_mode4_grid_scale(run_id, event, grid_data)
     return normalized_events
 
 

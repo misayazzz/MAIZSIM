@@ -67,33 +67,34 @@ class DripValidationTests(unittest.TestCase):
         self.assertEqual(event.wet_width_max_cm, 20.0)
         self.assertEqual(event.spread_mode, 0)
 
-    def test_parse_precision_spread_mode(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drip_spread_") as tmp_dir:
-            drip_path = Path(tmp_dir) / "spread.drp"
-            drip_path.write_text(
-                _drip_text(
-                    [
-                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 16.3 1",
-                        "7",
-                    ]
-                ),
-                encoding="utf-8",
-            )
+    def test_parse_removed_spread_modes_rejected(self):
+        for spread_mode in (1, 2, 3, 4):
+            with self.subTest(spread_mode=spread_mode):
+                with tempfile.TemporaryDirectory(prefix="codex_drip_removed_spread_") as tmp_dir:
+                    drip_path = Path(tmp_dir) / "spread.drp"
+                    drip_path.write_text(
+                        _drip_text(
+                            [
+                                (
+                                    "05/20/2007 6.0 05/20/2007 8.0 "
+                                    f"2.0 1 0 0 1 0 0 16.3 {spread_mode}"
+                                ),
+                                "7",
+                            ]
+                        ),
+                        encoding="utf-8",
+                    )
 
-            schedule = parse_drip_file(drip_path)
+                    with self.assertRaisesRegex(ValueError, "spread_mode"):
+                        parse_drip_file(drip_path)
 
-        event = schedule.events[0]
-        self.assertEqual(event.pressure_mode, 0)
-        self.assertAlmostEqual(event.wet_width_max_cm, 16.3)
-        self.assertEqual(event.spread_mode, 1)
-
-    def test_parse_source_width_override_for_fixed_emitter_flow(self):
+    def test_parse_source_width_override_for_dynamic_emitter_flow(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_source_width_") as tmp_dir:
             drip_path = Path(tmp_dir) / "source_width.drp"
             drip_path.write_text(
                 _drip_text(
                     [
-                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 16.3 1 10.0",
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 16.3 5 10.0",
                         "7",
                     ]
                 ),
@@ -103,48 +104,12 @@ class DripValidationTests(unittest.TestCase):
             schedule = parse_drip_file(drip_path)
 
         event = schedule.events[0]
-        self.assertEqual(event.spread_mode, 1)
+        self.assertEqual(event.spread_mode, 5)
         self.assertAlmostEqual(event.source_width_cm, 10.0)
         self.assertAlmostEqual(
             schedule.expected_grid_depth_mm({7: 15.0}, grid_width_cm=120.0),
             10.0 / 120.0 * 4.0 * 10.0,
         )
-
-    def test_parse_storage_spread_mode(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drip_storage_spread_") as tmp_dir:
-            drip_path = Path(tmp_dir) / "storage_spread.drp"
-            drip_path.write_text(
-                _drip_text(
-                    [
-                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 18.5 3",
-                        "7",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            schedule = parse_drip_file(drip_path)
-
-        self.assertEqual(schedule.events[0].spread_mode, 3)
-
-    def test_parse_point_source_spread_mode(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drip_point_source_") as tmp_dir:
-            drip_path = Path(tmp_dir) / "point_source.drp"
-            drip_path.write_text(
-                _drip_text(
-                    [
-                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 4 2.5",
-                        "7",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            schedule = parse_drip_file(drip_path)
-
-        event = schedule.events[0]
-        self.assertEqual(event.spread_mode, 4)
-        self.assertAlmostEqual(event.source_width_cm, 2.5)
 
     def test_parse_dynamic_surface_spread_mode5(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_dynamic_surface_") as tmp_dir:
@@ -165,27 +130,6 @@ class DripValidationTests(unittest.TestCase):
         self.assertEqual(event.spread_mode, 5)
         self.assertAlmostEqual(event.wet_width_max_cm, 18.5)
         self.assertAlmostEqual(event.source_width_cm, 2.5)
-
-    def test_parse_direct_source_pressure_limited_spread_mode(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drip_direct_spread_") as tmp_dir:
-            drip_path = Path(tmp_dir) / "direct_spread.drp"
-            drip_path.write_text(
-                _drip_text(
-                    [
-                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 3 0 1 0 0 20 2",
-                        "7",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            schedule = parse_drip_file(drip_path)
-
-        event = schedule.events[0]
-        self.assertEqual(event.pressure_mode, 3)
-        self.assertEqual(event.pressure_head_cm, 0.0)
-        self.assertEqual(event.wet_width_max_cm, 20.0)
-        self.assertEqual(event.spread_mode, 2)
 
     def test_parse_optional_wet_width_without_pressure_fields(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_wet_width_") as tmp_dir:
@@ -295,15 +239,21 @@ class DripValidationTests(unittest.TestCase):
                     "7",
                 ]
             ),
-            "negative_source_width": _drip_text(
+            "source_width_without_mode5": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 1 -1",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 0 2.5",
                     "7",
                 ]
             ),
-            "mode4_missing_source_width": _drip_text(
+            "negative_source_width": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 4",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 5 -1",
+                    "7",
+                ]
+            ),
+            "mode5_missing_source_width": _drip_text(
+                [
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 5",
                     "7",
                 ]
             ),
@@ -474,7 +424,7 @@ class DripValidationTests(unittest.TestCase):
         )
 
         self.assertIn("surface point-source Neumann flux", report)
-        self.assertIn("Mode4 uses a fixed local surface source interval", report)
+        self.assertIn("Mode5 uses a dynamic local surface interval", report)
         self.assertIn("Pressure correction", report)
         self.assertIn("G05 DripInput", report)
         self.assertIn("Skaggs et al. 2004", report)

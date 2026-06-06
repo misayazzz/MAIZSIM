@@ -20,7 +20,6 @@ REQUIRED_PRECISION_CHECKS = (
     "demand_input_pressure_residual_abs_max_mm",
     "source_input_loss_residual_abs_max_mm",
     "boundary_acceptance_residual_abs_max_mm",
-    "direct_source_bypass_case_count",
     "wet_width_limit_violations",
     "short_width_error_abs_max_cm",
     "centered_hydrus_curve_width_error_abs_max_cm",

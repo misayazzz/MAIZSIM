@@ -1,4 +1,4 @@
-*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure
+*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure
 Number of Drip irrigations(max=75)  
  0 
 No drip irrigation

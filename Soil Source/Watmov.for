@@ -16,8 +16,7 @@
       Double precision A,B,C, B_1, A_1
       Double precision dt,dtOld,t,tOld,PI,DPI,F2
       Double precision DripShare,DripExcess,DripPotential,
-     !                 DripDemand,DripActual,DripLoss,DripSatLimit,
-     !                 DripNew,DripStored,DripNewExcess,
+     !                 DripActual,DripNew,DripStored,DripNewExcess,
      !                 DripStoredExcess,DripStorageDelta,
      !                 DripOverflow,DripStorageLimit,
      !                 DripStorageMeasure
@@ -27,11 +26,9 @@ cccz  Double precision CriticalH, CriticalH_R
       Logical Explic,ItCrit,FreeD,BadHead
       Real  hOld_1(NumNPD)
       Real Dif(NumNPD)
-      Real BaseQ(NumNPD),BaseHOld(NumNPD),DripLowKsBypassLimit,
-     !     DripLowKsHead
+      Real BaseQ(NumNPD),BaseHOld(NumNPD)
       Integer trigger_Runoff, p_Runoff
       Integer BaseCodeW(NumNPD)
-      Logical DripPressureNode(NumNPD)
       Dimension A(MBandD,NumNPD),B(NumNPD),F(NumNPD),DS(NumNPD),
      !    Cap(NumNPD),ListE(NumElD),E(3,3),iLoc(3),Fc(NumNPD),
      !    Sc(NumNPD),B_1(NumNPD),ThOld_1(NumNPD),A_1(MBandD,NumNPD)
@@ -106,12 +103,9 @@ C   Routine calculations
 C       
 
 11    continue 
-      If(DripBypassWaterMover.eq.1) Return
       tOld = Time
       t=Time
       dt=Step
-      DripLowKsBypassLimit=48.0
-      DripLowKsHead=0.01
       Do i=1,NumNP
         BaseQ(i)=Q(i)
         BaseCodeW(i)=CodeW(i)
@@ -127,7 +121,6 @@ c
       Do i=1,NumNP
         Q(i)=BaseQ(i)
         CodeW(i)=BaseCodeW(i)
-        DripPressureNode(i)=.false.
       Enddo
 
 cccz set the auto irrgation part before the iteration
@@ -136,22 +129,6 @@ cccz set the auto irrgation part before the iteration
         if(abs(CodeW(i)).eq.4) then
            Q(i)=Q(i)+Qautoirrig(i)
            if (Q(i).gt.0.0) CodeW(i)=-4  !cccz make sure bc changes if Qn goes > 0 (infiltration) after adding the autoirrigation
-        endif
-      enddo
-
-      do k=1, NumBp
-        i=KXB(k)
-        if((abs(CodeW(i)).eq.4).and.
-     &     (DripPressureLimit_Rate(k).gt.0.0)) then
-          CodeW(i)=1
-c Keep pressure-limited surface drip near zero head. Low-Ks HYDRUS
-c cases need a small nonzero head to match delivery without widening.
-          If(ConSat(MatNumN(i)).le.DripLowKsBypassLimit) then
-            hNew(i)=DripLowKsHead
-          Else
-            hNew(i)=0.0
-          Endif
-          DripPressureNode(i)=.true.
         endif
       enddo
 
@@ -419,8 +396,7 @@ cMK-----------------------------------------------------------------------------
  
 
 
-		if ((CodeW(n).eq.-4).and.(q(n).gt.0).and.
-     &      (DripPressureLimit_Rate(i).le.0.0)) then
+		if ((CodeW(n).eq.-4).and.(q(n).gt.0)) then
 c Ponded infiltration measurement is from Misha Kouznetzov
 			HSP=0.009D0 !EMPIRICAL PARAMETER, HSP~=dz/3 - was 0.03
 			PI=3.141592653589793238D0
@@ -597,8 +573,7 @@ C
 C   Save new boundary conditions If any
 C
           Do i=1,NumNP
-            If (CodeW(i).gt.0.and.(.not.DripPressureNode(i)))
-     !        hOld(i)=hNew(i)
+            If (CodeW(i).gt.0) hOld(i)=hNew(i)
           Enddo
 
           Do 618 i=1,NumNP
@@ -722,25 +697,12 @@ cccz this is the water source part, i.e., the exfiltration from soil surface
 c only calculate this when the surface nodes are atmospheric boundary nodes
       do k=1, NumBp
         i=KXB(k)
-        if (((hnew(i).ge.CriticalH)).and.(abs(codeW(i)).eq.4).and.
-     &      (DripPressureLimit_Rate(k).le.0.0)) then
+        if (((hnew(i).ge.CriticalH)).and.(abs(codeW(i)).eq.4)) then
           RO(i)=max(Q(i)-Qact(i),0.0D0)
           hNew(i)=CriticalH+h_Pond(k)         ! cccz could be CriticalH_R, but we force it to 
           hOld(i)=hNew(i)
         endif
-        If(DripPressureLimit_Rate(k).gt.0.0) then
-          DripDemand=dble(DripPressureLimit_Rate(k)*Width(k))
-          DripActual=dmax1(0.0D0,dble(QAct(i)))
-          DripActual=dmin1(DripActual,DripDemand)
-          DripLoss=dmax1(DripDemand-DripActual,0.0D0)
-          DripActualInfil_Flux=DripActualInfil_Flux+
-     !      DripActual*Step
-          If(DripLoss.gt.0.0D0) then
-            RO(i)=amax1(RO(i),sngl(DripLoss))
-            DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
-     !        DripLoss*Step
-          Endif
-        ElseIf(DripInput_Rate(k).gt.0.0.or.
+        If(DripInput_Rate(k).gt.0.0.or.
      !    DripStorageRelease_Rate(k).gt.0.0) then
           DripNew=dble(DripInput_Rate(k)*Width(k))
           DripStored=dble(DripStorageRelease_Rate(k)*Width(k))

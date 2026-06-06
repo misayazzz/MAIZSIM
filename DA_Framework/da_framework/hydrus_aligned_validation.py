@@ -90,7 +90,7 @@ def prepare_hydrus_aligned_runs(
     output_time_h=None,
     emitter_rate_l_h=None,
     drip_mode_override=None,
-    drip_spread_mode=4,
+    drip_spread_mode=5,
     drip_wet_width_max_cm=None,
 ):
     """Create baseline and drip MAIZSIM runs aligned to one official HYDRUS project."""
@@ -120,41 +120,24 @@ def prepare_hydrus_aligned_runs(
         baseline_time_h=0.0,
         wet_delta_threshold=wet_delta_threshold,
     )
-    ks_cm_h = float(selector.get("soil_hydraulic_parameters", {}).get("ks_cm_h", 1.0))
     drip_spread_mode = int(drip_spread_mode)
-    use_direct_split = ks_cm_h < 2.0 and drip_spread_mode == 1
+    if drip_spread_mode not in (0, 5):
+        raise ValueError("drip_spread_mode must be 0 or 5")
     if drip_wet_width_max_cm is not None:
         drip_radius_cm = float(drip_wet_width_max_cm)
-    elif drip_spread_mode == 4:
+    elif drip_spread_mode == 5:
         drip_radius_cm = 0.0
-    elif drip_spread_mode == 2:
-        drip_radius_cm = 0.0
-    elif use_direct_split:
-        drip_radius_cm = float(hydrus_metrics["wet_width_cm"])
     else:
         drip_radius_cm = _hydrus_calibrated_drip_radius_cm(
             case_prefix,
             fallback=float(hydrus_metrics["wet_width_cm"]),
         )
-    # Direct split applies water to a control volume; subsequent redistribution
-    # reaches the final HYDRUS wet depth, so the source depth is shallower.
-    drip_source_depth_cm = (
-        0.75 * float(hydrus_metrics["wet_depth_cm"])
-        if use_direct_split
-        else 0.0
-    )
-    drip_mode = 3 if use_direct_split else 0
+    drip_source_depth_cm = 0.0
+    drip_mode = 0
     if drip_mode_override is not None:
         drip_mode = int(drip_mode_override)
-    if drip_mode == 3 and drip_spread_mode == 1:
-        drip_source_formulation = "direct_storage_split_bypass_water_mover"
-        water_solver_coupling = "direct_storage_bypass_water_mover"
-    elif drip_spread_mode == 2:
-        drip_source_formulation = "pressure-limited surface boundary"
-        water_solver_coupling = "richards_pressure_limited_surface_boundary"
-    else:
-        drip_source_formulation = "partial-width surface flux boundary"
-        water_solver_coupling = "richards_surface_flux_boundary"
+    drip_source_formulation = "partial-width surface flux boundary"
+    water_solver_coupling = "richards_surface_flux_boundary"
     rate_l_h = (
         float(emitter_rate_l_h)
         if emitter_rate_l_h is not None
@@ -163,7 +146,7 @@ def prepare_hydrus_aligned_runs(
     duration_h = float(selector.get("t_max_h", 2.0)) - float(selector.get("t_init_h", 0.0))
     source = _source_boundary_node(boundary.nodes)
     source_width = float(source["width"])
-    # KAT=1 uses the HYDRUS axisymmetric boundary integration weight. Mode4
+    # KAT=1 uses the HYDRUS axisymmetric boundary integration weight. Mode5
     # applies wAppl over the covered source measure, so this keeps the original
     # L/h emitter rate when the source measure is the HYDRUS source width.
     w_appl_cm_h = rate_l_h * 1000.0 / source_width
@@ -190,7 +173,7 @@ def prepare_hydrus_aligned_runs(
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
         drip_spread_mode=drip_spread_mode,
-        drip_source_width_cm=source_width if drip_spread_mode == 4 else 0.0,
+        drip_source_width_cm=source_width if drip_spread_mode == 5 else 0.0,
     )
     write_maizsim_drip_file(
         baseline_dir / "LOAM2D.drp",
@@ -200,7 +183,7 @@ def prepare_hydrus_aligned_runs(
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
         drip_spread_mode=drip_spread_mode,
-        drip_source_width_cm=source_width if drip_spread_mode == 4 else 0.0,
+        drip_source_width_cm=source_width if drip_spread_mode == 5 else 0.0,
     )
 
     manifest = {
@@ -256,7 +239,7 @@ def run_hydrus_aligned_validation(
     wet_delta_threshold=0.005,
     emitter_rate_l_h=None,
     drip_mode_override=None,
-    drip_spread_mode=4,
+    drip_spread_mode=5,
     drip_wet_width_max_cm=None,
     timeout_seconds=180,
 ):
@@ -816,22 +799,27 @@ def write_maizsim_drip_file(
     *,
     drip_source_depth_cm=0.0,
     drip_mode=0,
-    drip_spread_mode=4,
+    drip_spread_mode=5,
     drip_source_width_cm=0.0,
 ):
     """Write one precision drip event or a zero-event baseline."""
     if w_appl_cm_h <= 0.0:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)",
             " 0 ",
             "No drip irrigation",
         ]
     else:
-        if int(drip_spread_mode) == 4 and float(drip_source_width_cm) <= 0.0:
-            raise ValueError("drip_source_width_cm must be positive when drip_spread_mode is 4")
+        drip_spread_mode = int(drip_spread_mode)
+        if drip_spread_mode not in (0, 5):
+            raise ValueError("drip_spread_mode must be 0 or 5")
+        if drip_spread_mode != 5 and float(drip_source_width_cm) > 0.0:
+            raise ValueError("drip_source_width_cm requires drip_spread_mode 5")
+        if drip_spread_mode == 5 and float(drip_source_width_cm) <= 0.0:
+            raise ValueError("drip_source_width_cm must be positive when drip_spread_mode is 5")
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode4 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
             "Number of Drip irrigations(max=75)",
             " 1 ",
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth",
@@ -1003,7 +991,7 @@ def _parse_args(arguments):
     parser.add_argument("--wet-delta-threshold", type=float, default=0.005)
     parser.add_argument("--emitter-rate-l-h", type=float)
     parser.add_argument("--drip-mode", type=int)
-    parser.add_argument("--drip-spread-mode", type=int, default=4)
+    parser.add_argument("--drip-spread-mode", type=int, default=5)
     parser.add_argument("--drip-wet-width-max-cm", type=float)
     parser.add_argument("--timeout-seconds", type=float, default=180)
     return parser.parse_args(arguments)

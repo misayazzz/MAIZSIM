@@ -24,32 +24,22 @@
      !     DripSourceWidth,
      !     SurfaceWidth,MaxWetWidth,CandidateWidth,NodeExcess,
      !     ExcessFlux,PrevDripFlux,DripExcessFrac,
-     !     DripDefaultWetWidth,TargetWetWidth,EffectiveHours,
-     !     HalfWidth,WeightSum,NodeWeight,DistX,
-     !     CurveTime,DripTargetWidth,DripCurveHour,DeltaHours,
-     !     MaxEventHours,DripEffHours,DripLastTime,
-     !     DripLastPressure,StepHours,TargetLeft,TargetRight,
+     !     DripDefaultWetWidth,TargetWetWidth,TargetLeft,TargetRight,
      !     SegmentLeft,SegmentRight,CoverLeft,CoverRight,
      !     CoverWidth,CoverMeasure,TotalMeasure,DripCoverMeasure,
-     !     SourceDepth,SourceVolume,NodeDepth,WaterDepth,
-     !     ThetaCur,ThetaTry,ThetaRel,VgM,AlphaVG,NVG,
-     !     ThetaR,ThetaS,RemainingWater,AppliedWater,
-     !     CapacityDepth,AddDepth,MaxTheta,RadialWeight,
-     !     DepthWeight,SourceWeight,CapSum,LocalCap,
-     !     LocalCapFactor,CandidateMin,CandidateMax,
+     !     CapSum,LocalCap,LocalCapFactor,CandidateMin,CandidateMax,
      !     StorageFlux,SourceInputFlux,ReleaseCap,LocalMeasure,
      !     ReleaseMeasure
       Double Precision StorageAdd,StorageLimit,StorageOverflow,
      !                 ReleaseVolume,DripBaseDtMx
-      Real DripLowKsBypassLimit
       Real Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
       Real DripThOld(NumNPD),DripHTemp(NumNPD),DripHOld(NumNPD)
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
      !        LeftPos,RightPos,NeedExpand,CanShrink,MaxRadius,
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
      !        CandidateRight,ActiveNodes,TestNode,ios,
-     !        DesiredRadius,FieldCount,DripFieldCount,m,MatId,
-     !        DirectIter,DripBaseDtMxSet,DripActive
+     !        DesiredRadius,FieldCount,DripFieldCount,m,
+     !        DripBaseDtMxSet,DripActive
       Character*256 EventLine
 
       Character*10 Start_Date(Max_times),Stop_Date(Max_times)
@@ -67,9 +57,6 @@
      !     DripPcMin(Max_times),DripPcMax(Max_times),
      !     DripWetWidthMax(Max_times),DripSpreadMode(Max_times),
      !     DripSourceWidth(Max_times),
-     !     DripEffHours(Max_times,Max_nodes),
-     !     DripLastTime(Max_times,Max_nodes),
-     !     DripLastPressure(Max_times,Max_nodes),
      !     applied,ModNum
       Common /HydPar/ Par(NPar,NMatD),
      !                hTab(NTabD),ConTab(NTabD,NMatD),
@@ -82,9 +69,6 @@
       DripTol=1.0E-5
       DripExcessFrac=0.05
       DripDefaultWetWidth=20.0
-c 48 cm/day = 2 cm/hour; this protects low-Ks mode-2 drip cases
-c from repeated redistribution by the generic surface runoff module.
-      DripLowKsBypassLimit=48.0
       If(lInput.eq.1) then
         DripInput_Flux=0.0D0
         DripDemand_Flux=0.0D0
@@ -128,7 +112,6 @@ c from repeated redistribution by the generic surface runoff module.
           DripInput_Rate(i)=0.0
           DripDemand_Rate(i)=0.0
           DripPressureLoss_Rate(i)=0.0
-          DripPressureLimit_Rate(i)=0.0
           DripStorageRelease_Rate(i)=0.0
           DripSurfaceStorage(i)=0.0D0
           DripCoveredMeasure(i)=0.0D0
@@ -137,11 +120,7 @@ c from repeated redistribution by the generic surface runoff module.
           DripSurfNode(i)=0
           DripSurfBnd(i)=0
         EndDo
-        Do i=1,NumNPD
-          DripSource_Rate(i)=0.0
-        EndDo
         DripBypassRunoff=0
-        DripBypassWaterMover=0
         Do i=1,Max_times
           DripMode(i)=0
           DripHIn(i)=0.0
@@ -156,9 +135,6 @@ c from repeated redistribution by the generic surface runoff module.
             SourceSurfPos(i,j)=0
             WetRadius(i,j)=0
             ShrinkCount(i,j)=0
-            DripEffHours(i,j)=0.0
-            DripLastTime(i,j)=0.0
-            DripLastPressure(i,j)=0.0
           EndDo
         EndDo
         DripSurfCount=0
@@ -248,16 +224,20 @@ c from repeated redistribution by the generic surface runoff module.
           If(DripWetWidthMax(i).lt.0.0) then
             Stop 'Invalid drip wetted width limit'
           Endif
-          If(DripSpreadMode(i).lt.0.or.DripSpreadMode(i).gt.5) then
+          If(DripSpreadMode(i).ne.0.and.
+     !      DripSpreadMode(i).ne.5) then
             Stop 'Invalid drip spread mode'
           Endif
           If(DripSourceWidth(i).lt.0.0) then
             Stop 'Invalid drip source width'
           Endif
-          If((DripSpreadMode(i).eq.4.or.
-     !      DripSpreadMode(i).eq.5).and.
+          If(DripSpreadMode(i).ne.5.and.
+     !      DripSourceWidth(i).gt.0.0) then
+            Stop 'Drip source width requires mode 5'
+          Endif
+          If(DripSpreadMode(i).eq.5.and.
      !      DripSourceWidth(i).le.0.0) then
-            Stop 'Mode 4/5 drip source width required'
+            Stop 'Mode 5 drip source width required'
           Endif
           Read(40,*,Err=20)
           Read(40,*,Err=20) (nAppl(i,j),j=1,Num_nodes(i))
@@ -318,7 +298,6 @@ c so capture it on the first routine pass and restore it outside events.
         DripInput_Rate(i)=0.0
         DripDemand_Rate(i)=0.0
         DripPressureLoss_Rate(i)=0.0
-        DripPressureLimit_Rate(i)=0.0
         DripStorageRelease_Rate(i)=0.0
         DripStorageActive(i)=0
         If(DripSurfaceStorage(i).le.1.0D-12) then
@@ -339,11 +318,7 @@ c so capture it on the first routine pass and restore it outside events.
           DripStorageActive(i)=1
         Endif
       EndDo
-      Do i=1,NumNP
-        DripSource_Rate(i)=0.0
-      EndDo
       DripBypassRunoff=0
-      DripBypassWaterMover=0
       DripWetNodes_StepSum=0.0D0
       DripWetNodes_StepMax=0.0D0
       DripWetWidth_StepSum=0.0D0
@@ -354,14 +329,7 @@ c so capture it on the first routine pass and restore it outside events.
 
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
-          If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3)
-     !      DripBypassRunoff=1
-          If(DripSpreadMode(jj).eq.2) DripBypassRunoff=1
-          If(DripSpreadMode(jj).eq.4.or.
-     !      DripSpreadMode(jj).eq.5) DripBypassRunoff=1
-          If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
-            DripBypassWaterMover=1
-          Endif
+          If(DripSpreadMode(jj).eq.5) DripBypassRunoff=1
           Do in=1,Num_nodes(jj)
             CenterPos=SourceSurfPos(jj,in)
             CenterBnd=SourceBnd(jj,in)
@@ -369,9 +337,6 @@ c so capture it on the first routine pass and restore it outside events.
               Stop 'Drip source node is invalid'
             Endif
             SourceNode=DripSurfNode(CenterPos)
-            If(DripSpreadMode(jj).eq.2.and.
-     !        ConSat(MatNumN(SourceNode)).lt.DripLowKsBypassLimit)
-     !        DripBypassRunoff=1
             NeedExpand=0
             CanShrink=1
             ActiveRadius=WetRadius(jj,in)
@@ -386,16 +351,8 @@ c so capture it on the first routine pass and restore it outside events.
             Else
               MaxWetWidth=amin1(DripDefaultWetWidth,
      !          0.5*SurfaceWidth)
-              If(DripSpreadMode(jj).eq.2.and.
-     !          ConSat(MatNumN(SourceNode)).gt.DripLowKsBypassLimit)
-     !          MaxWetWidth=amin1(MaxWetWidth,10.0)
-              If(DripSpreadMode(jj).eq.2.and.
-     !          ConSat(MatNumN(SourceNode)).le.DripLowKsBypassLimit)
-     !          MaxWetWidth=amin1(MaxWetWidth,18.5)
             Endif
-            If(DripSpreadMode(jj).eq.4) then
-              MaxWetWidth=DripSourceWidth(jj)
-            ElseIf(DripSpreadMode(jj).eq.5) then
+            If(DripSpreadMode(jj).eq.5) then
               MaxWetWidth=amax1(MaxWetWidth,DripSourceWidth(jj))
               If(SurfaceWidth.gt.DripTol) then
                 MaxWetWidth=amin1(MaxWetWidth,SurfaceWidth)
@@ -478,129 +435,7 @@ c so capture it on the first routine pass and restore it outside events.
               Endif
               PressureFactor=amax1(0.0,amin1(1.0,PressureFactor))
             Endif
-            If(DripLastTime(jj,in).lt.tAppl_start(jj).or.
-     !        DripLastTime(jj,in).gt.time) then
-              DripEffHours(jj,in)=0.0
-              DripLastTime(jj,in)=tAppl_start(jj)
-              DripLastPressure(jj,in)=PressureFactor
-            Endif
-            If(time.gt.DripLastTime(jj,in)) then
-              DeltaHours=(time-DripLastTime(jj,in))*24.0
-              MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
-              DripEffHours(jj,in)=DripEffHours(jj,in)+
-     !          DeltaHours*DripLastPressure(jj,in)
-              DripEffHours(jj,in)=amax1(0.0,
-     !          amin1(DripEffHours(jj,in),MaxEventHours))
-              DripLastTime(jj,in)=time
-            Endif
-            DripLastPressure(jj,in)=PressureFactor
-            If(DripSpreadMode(jj).eq.1) then
-              MaxEventHours=(tAppl_stop(jj)-tAppl_start(jj))*24.0
-              StepHours=amin1(sngl(Step*24.0D0),
-     !          sngl((tAppl_stop(jj)-time)*24.0D0))
-              StepHours=amax1(0.0,StepHours)
-              EffectiveHours=DripEffHours(jj,in)+
-     !          StepHours*PressureFactor
-              EffectiveHours=amax1(0.0,
-     !          amin1(EffectiveHours,MaxEventHours))
-              TargetWetWidth=DripTargetWidth(MaxWetWidth,
-     !          EffectiveHours)
-              MinEffHours=amin1(0.03,MaxEventHours)
-              If(EffectiveHours.lt.MinEffHours.and.
-     !          PressureFactor.gt.0.0) then
-                TargetWetWidth=amax1(TargetWetWidth,MaxWetWidth)
-              Endif
-              TargetWetWidth=amax1(TargetWetWidth,Width(CenterBnd))
-              TargetWetWidth=amin1(TargetWetWidth,MaxWetWidth)
-              If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                TargetLeft=0.0
-                TargetRight=TargetWetWidth
-              Else
-                TargetLeft=x(SourceNode)-0.5*TargetWetWidth
-                TargetRight=x(SourceNode)+0.5*TargetWetWidth
-              Endif
-            ElseIf(DripSpreadMode(jj).eq.2) then
-              SourceRate=wAppl(jj)/PERIOD
-              If(DripSourceWidth(jj).gt.0.0) then
-                SourceDemandFlux=SourceRate*DripSourceWidth(jj)*
-     !            PressureFactor
-              Else
-                SourceDemandFlux=SourceRate*Width(CenterBnd)*
-     !            PressureFactor
-              Endif
-              DesiredRadius=MaxRadius
-              TargetWetWidth=MaxWetWidth
-              Do CandidateRadius=0,MaxRadius
-                CandidateLeft=max(1,CenterPos-CandidateRadius)
-                CandidateRight=min(DripSurfCount,
-     !            CenterPos+CandidateRadius)
-                CapSum=0.0
-                CandidateMin=1.0E30
-                CandidateMax=-1.0E30
-                Do k=CandidateLeft,CandidateRight
-                  TestNode=DripSurfNode(k)
-                  If(DripSurfCount.eq.1) then
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentLeft=x(TestNode)-
-     !                  0.5*Width(DripSurfBnd(k))
-                      SegmentRight=x(TestNode)+
-     !                  0.5*Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.1) then
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                    Else
-                      SegmentLeft=SegmentRight-Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.DripSurfCount) then
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    If(KAT.eq.1) then
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentRight=SegmentLeft+Width(DripSurfBnd(k))
-                    Endif
-                  Else
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                  Endif
-                  CandidateMin=amin1(CandidateMin,SegmentLeft)
-                  CandidateMax=amax1(CandidateMax,SegmentRight)
-                  LocalCapFactor=1.0+amax1(0.0,-hNew(TestNode))/25.0
-                  LocalCapFactor=amax1(1.0,
-     !              amin1(5.0,LocalCapFactor))
-                  LocalCap=ConSat(MatNumN(TestNode))*LocalCapFactor
-                  CapSum=CapSum+
-     !              LocalCap*Width(DripSurfBnd(k))
-                EndDo
-                CandidateWidth=amax1(0.0,
-     !            CandidateMax-CandidateMin)
-                If(CapSum.ge.SourceDemandFlux.or.
-     !            CandidateRadius.eq.MaxRadius) then
-                  DesiredRadius=CandidateRadius
-                  TargetWetWidth=amin1(MaxWetWidth,
-     !              amax1(Width(CenterBnd),CandidateWidth))
-                  GoTo 325
-                Endif
-              EndDo
-325           Continue
-              WetRadius(jj,in)=DesiredRadius
-              ShrinkCount(jj,in)=0
-              If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                TargetLeft=0.0
-                TargetRight=TargetWetWidth
-              Else
-                TargetLeft=x(SourceNode)-0.5*TargetWetWidth
-                TargetRight=x(SourceNode)+0.5*TargetWetWidth
-              Endif
-            ElseIf(DripSpreadMode(jj).eq.5) then
+            If(DripSpreadMode(jj).eq.5) then
 c Mode 5 is a dynamic local surface source. DripSourceWidth defines
 c emitter discharge, while DripWetWidthMax limits the effective
 c surface wetting interval selected from local hydraulic acceptance.
@@ -733,24 +568,8 @@ c surface wetting interval selected from local hydraulic acceptance.
                 TargetLeft=x(SourceNode)-0.5*TargetWetWidth
                 TargetRight=x(SourceNode)+0.5*TargetWetWidth
               Endif
-            ElseIf(DripSpreadMode(jj).eq.4) then
-c Mode 4 is a fixed local surface source. DripSourceWidth defines the
-c target surface interval; water demand uses the covered boundary
-c measure so axisymmetric and slab cases use the same accounting basis.
-c DripWetWidthMax is not used to spread water.
-              TargetWetWidth=DripSourceWidth(jj)
-              TargetWetWidth=amax1(TargetWetWidth,DripTol)
-              If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                TargetLeft=0.0
-                TargetRight=TargetWetWidth
-              Else
-                TargetLeft=x(SourceNode)-0.5*TargetWetWidth
-                TargetRight=x(SourceNode)+0.5*TargetWetWidth
-              Endif
             Endif
-            If(DripSpreadMode(jj).eq.1.or.
-     !        DripSpreadMode(jj).eq.4.or.
-     !        DripSpreadMode(jj).eq.5) then
+            If(DripSpreadMode(jj).eq.5) then
               DesiredRadius=0
               Do k=1,DripSurfCount
                 If(DripSurfCount.eq.1) then
@@ -795,28 +614,18 @@ c DripWetWidthMax is not used to spread water.
               EndDo
               WetRadius(jj,in)=DesiredRadius
               ShrinkCount(jj,in)=0
-              ElseIf(DripSpreadMode(jj).eq.0.or.
-     !          DripSpreadMode(jj).eq.3) then
+              ElseIf(DripSpreadMode(jj).eq.0) then
                 ExcessFlux=0.0
                 PrevDripFlux=0.0
                 Do k=LeftPos,RightPos
                   TestNode=DripSurfNode(k)
-                  If(DripSpreadMode(jj).eq.3.and.Step.gt.0.0D0) then
-                    NodeExcess=sngl(DripSurfaceStorage(DripSurfBnd(k))/
-     !                Step)
-                  Else
-                    NodeExcess=amax1(RO(TestNode),0.0)
-                  Endif
+                  NodeExcess=amax1(RO(TestNode),0.0)
                   ExcessFlux=ExcessFlux+NodeExcess
                   PrevDripFlux=PrevDripFlux+
      !            LastRate(DripSurfBnd(k))*Width(DripSurfBnd(k))
               EndDo
               If(PrevDripFlux.le.DripTol) then
-                If(DripSourceWidth(jj).gt.0.0) then
-                  PrevDripFlux=wAppl(jj)/PERIOD*DripSourceWidth(jj)
-                Else
-                  PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
-                Endif
+                PrevDripFlux=wAppl(jj)/PERIOD*Width(CenterBnd)
               Endif
               If(ExcessFlux.gt.amax1(DripTol,
      !          DripExcessFrac*PrevDripFlux)) NeedExpand=1
@@ -840,12 +649,8 @@ c DripWetWidthMax is not used to spread water.
             TotalWidth=0.0
             TotalMeasure=0.0
             ActiveNodes=0
-            If(DripSpreadMode(jj).eq.1.or.
-     !        DripSpreadMode(jj).eq.2.or.
-     !        DripSpreadMode(jj).eq.4.or.
-     !        DripSpreadMode(jj).eq.5) then
-              If((DripSpreadMode(jj).eq.4.or.
-     !          DripSpreadMode(jj).eq.5).and.KAT.eq.1.and.
+            If(DripSpreadMode(jj).eq.5) then
+              If(DripSpreadMode(jj).eq.5.and.KAT.eq.1.and.
      !          abs(x(SourceNode)).le.DripTol) then
                 TargetLeft=0.0
                 TargetRight=TargetWetWidth
@@ -911,26 +716,19 @@ c DripWetWidthMax is not used to spread water.
             If(TotalWidth.le.0.0.or.TotalMeasure.le.0.0)
      !        Stop 'Invalid drip wetted width'
             SourceRate=wAppl(jj)/PERIOD
-            If(DripSpreadMode(jj).eq.4) then
-              SourceDemandFlux=SourceRate*TotalMeasure
-            ElseIf(DripSpreadMode(jj).eq.5) then
-              SourceDemandFlux=SourceRate*DripSourceWidth(jj)
-            ElseIf(DripSourceWidth(jj).gt.0.0) then
+            If(DripSpreadMode(jj).eq.5) then
               SourceDemandFlux=SourceRate*DripSourceWidth(jj)
             Else
               SourceDemandFlux=SourceRate*Width(CenterBnd)
             Endif
             SourceFlux=SourceDemandFlux*PressureFactor
             SourceInputFlux=SourceFlux
-            If((DripSpreadMode(jj).eq.3.or.
-     !        DripSpreadMode(jj).eq.4.or.
-     !        DripSpreadMode(jj).eq.5).and.Step.gt.0.0D0) then
+            If(DripSpreadMode(jj).eq.5.and.Step.gt.0.0D0) then
               CapSum=0.0
               Do k=LeftPos,RightPos
                 TestNode=DripSurfNode(k)
                 LocalMeasure=Width(DripSurfBnd(k))
-                If(DripSpreadMode(jj).eq.4.or.
-     !            DripSpreadMode(jj).eq.5) then
+                If(DripSpreadMode(jj).eq.5) then
                   If(DripSurfCount.eq.1) then
                     If(KAT.eq.1) then
                       SegmentLeft=0.0
@@ -989,8 +787,7 @@ c DripWetWidthMax is not used to spread water.
      !            dble(StorageFlux)*Step
                 Do k=LeftPos,RightPos
                   LocalMeasure=Width(DripSurfBnd(k))
-                  If(DripSpreadMode(jj).eq.4.or.
-     !              DripSpreadMode(jj).eq.5) then
+                  If(DripSpreadMode(jj).eq.5) then
                     TestNode=DripSurfNode(k)
                     If(DripSurfCount.eq.1) then
                       If(KAT.eq.1) then
@@ -1058,145 +855,7 @@ c DripWetWidthMax is not used to spread water.
                 EndDo
               Endif
             Endif
-            If(DripSpreadMode(jj).eq.1.and.DripMode(jj).eq.3) then
-              If(DripPcMax(jj).gt.0.0) then
-                SourceDepth=DripPcMax(jj)
-              Else
-                SourceDepth=amin1(25.0,amax1(8.0,
-     !            0.5*TargetWetWidth))
-              Endif
-c Redistribute direct drip water over unsaturated source nodes; only the
-c remaining water after source saturation is reported as capacity loss.
-              RemainingWater=SourceFlux*Step
-              DirectIter=0
-530           Continue
-              If(RemainingWater.gt.DripTol.and.
-     !        DirectIter.lt.NumNP) then
-                DirectIter=DirectIter+1
-                SourceVolume=0.0
-                Do m=1,NumNP
-                  NodeDepth=abs(y(SourceNode)-y(m))
-                  If(x(m).ge.TargetLeft-DripTol.and.
-     !              x(m).le.TargetRight+DripTol.and.
-     !              NodeDepth.le.SourceDepth+DripTol) then
-                    MatId=MatNumN(m)
-                    ThetaR=Par(1,MatId)
-                    ThetaS=Par(2,MatId)
-                    AlphaVG=Par(5,MatId)
-                    NVG=Par(6,MatId)
-                    If(ThetaS.gt.ThetaR+DripTol.and.
-     !                AlphaVG.gt.DripTol.and.NVG.gt.1.0) then
-                      VgM=1.0-1.0/NVG
-                      If(hNew(m).lt.0.0) then
-                        ThetaRel=(1.0+(AlphaVG*abs(hNew(m)))**
-     !                    NVG)**(-VgM)
-                        ThetaCur=ThetaR+(ThetaS-ThetaR)*ThetaRel
-                      Else
-                        ThetaCur=ThetaS
-                      Endif
-                      MaxTheta=ThetaS-1.0E-5
-                      If(MaxTheta.gt.ThetaCur+DripTol) then
-                        SourceWeight=1.0
-                        If(DripMode(jj).eq.3) then
-                          If(KAT.eq.1.and.
-     !                      abs(x(SourceNode)).le.DripTol) then
-                            DistX=x(m)
-                          Else
-                            DistX=abs(x(m)-x(SourceNode))
-                          Endif
-                          RadialWeight=amax1(0.05,
-     !                    1.0-DistX/amax1(TargetWetWidth,DripTol))
-                          DepthWeight=amax1(0.50,
-     !                    1.0-0.5*NodeDepth/
-     !                    amax1(SourceDepth,DripTol))
-                          SourceWeight=RadialWeight*DepthWeight
-                        Endif
-                        SourceVolume=SourceVolume+
-     !                    nodeArea(m)*SourceWeight
-                      Endif
-                    Endif
-                  Endif
-                EndDo
-                If(SourceVolume.gt.DripTol) then
-                  WaterDepth=RemainingWater/SourceVolume
-                  AppliedWater=0.0
-                  Do m=1,NumNP
-                    NodeDepth=abs(y(SourceNode)-y(m))
-                    If(x(m).ge.TargetLeft-DripTol.and.
-     !                x(m).le.TargetRight+DripTol.and.
-     !                NodeDepth.le.SourceDepth+DripTol) then
-                      MatId=MatNumN(m)
-                      ThetaR=Par(1,MatId)
-                      ThetaS=Par(2,MatId)
-                      AlphaVG=Par(5,MatId)
-                      NVG=Par(6,MatId)
-                      If(ThetaS.gt.ThetaR+DripTol.and.
-     !                  AlphaVG.gt.DripTol.and.NVG.gt.1.0) then
-                        VgM=1.0-1.0/NVG
-                        If(hNew(m).lt.0.0) then
-                          ThetaRel=(1.0+(AlphaVG*abs(hNew(m)))**
-     !                      NVG)**(-VgM)
-                          ThetaCur=ThetaR+(ThetaS-ThetaR)*ThetaRel
-                        Else
-                          ThetaCur=ThetaS
-                        Endif
-                        MaxTheta=ThetaS-1.0E-5
-                        CapacityDepth=amax1(0.0,MaxTheta-ThetaCur)
-                        SourceWeight=1.0
-                        If(DripMode(jj).eq.3) then
-                          If(KAT.eq.1.and.
-     !                      abs(x(SourceNode)).le.DripTol) then
-                            DistX=x(m)
-                          Else
-                            DistX=abs(x(m)-x(SourceNode))
-                          Endif
-                          RadialWeight=amax1(0.05,
-     !                    1.0-DistX/amax1(TargetWetWidth,DripTol))
-                          DepthWeight=amax1(0.50,
-     !                    1.0-0.5*NodeDepth/
-     !                    amax1(SourceDepth,DripTol))
-                          SourceWeight=RadialWeight*DepthWeight
-                        Endif
-                        AddDepth=amin1(WaterDepth*SourceWeight,
-     !                    CapacityDepth)
-                        If(AddDepth.gt.DripTol) then
-                          ThetaTry=ThetaCur+AddDepth
-                          ThetaTry=amax1(ThetaR+1.0E-5,
-     !                    amin1(MaxTheta,ThetaTry))
-                          ThetaRel=(ThetaTry-ThetaR)/(ThetaS-ThetaR)
-                          ThetaRel=amax1(1.0E-5,amin1(0.99999,
-     !                    ThetaRel))
-                          hNew(m)=-((ThetaRel**(-1.0/VgM)-1.0)**
-     !                    (1.0/NVG))/AlphaVG
-                          ThNew(m)=ThetaTry
-                          DripHOld(m)=hNew(m)
-                          DripHTemp(m)=hNew(m)
-                          DripThOld(m)=ThetaTry
-                          DripSource_Rate(m)=DripSource_Rate(m)+
-     !                    AddDepth/Step
-                          AppliedWater=AppliedWater+
-     !                    AddDepth*nodeArea(m)
-                        Endif
-                      Endif
-                    Endif
-                  EndDo
-                  RemainingWater=RemainingWater-AppliedWater
-                  DripSourceInput_Flux=DripSourceInput_Flux+
-     !              dble(AppliedWater)
-                  If(AppliedWater.gt.DripTol.and.
-     !              RemainingWater.gt.DripTol) Goto 530
-                Endif
-              Endif
-              If(RemainingWater.gt.DripTol.and.
-     !        Width(CenterBnd).gt.DripTol) then
-                DripSourceLoss_Flux=DripSourceLoss_Flux+
-     !          dble(RemainingWater)
-c Source capacity loss is reported separately as DripSourceLoss.
-c Do not also count it as pressure loss.
-              Endif
-            Endif
-            If(DripSpreadMode(jj).eq.4.or.
-     !        DripSpreadMode(jj).eq.5) then
+            If(DripSpreadMode(jj).eq.5) then
               Do k=LeftPos,RightPos
                 TestNode=DripSurfNode(k)
                 If(DripSurfCount.eq.1) then
@@ -1261,200 +920,6 @@ c Do not also count it as pressure loss.
                   DripStorageBoundary(DripSurfBnd(k))=1
                 Endif
               EndDo
-            ElseIf(DripSpreadMode(jj).eq.1.or.
-     !        DripSpreadMode(jj).eq.2) then
-              If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                HalfWidth=amax1(TargetWetWidth,DripTol)
-              Else
-                HalfWidth=amax1(0.5*TargetWetWidth,
-     !            0.5*Width(CenterBnd))
-              Endif
-              WeightSum=0.0
-              Do k=LeftPos,RightPos
-                TestNode=DripSurfNode(k)
-                If(DripSurfCount.eq.1) then
-                  If(KAT.eq.1) then
-                    SegmentLeft=0.0
-                    SegmentRight=x(TestNode)
-                  Else
-                    SegmentLeft=x(TestNode)-0.5*Width(DripSurfBnd(k))
-                    SegmentRight=x(TestNode)+0.5*Width(DripSurfBnd(k))
-                  Endif
-                ElseIf(k.eq.1) then
-                  SegmentRight=0.5*(x(TestNode)+
-     !              x(DripSurfNode(k+1)))
-                  If(KAT.eq.1) then
-                    SegmentLeft=0.0
-                  Else
-                    SegmentLeft=SegmentRight-Width(DripSurfBnd(k))
-                  Endif
-                ElseIf(k.eq.DripSurfCount) then
-                  SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !              x(TestNode))
-                  If(KAT.eq.1) then
-                    SegmentRight=x(TestNode)
-                  Else
-                    SegmentRight=SegmentLeft+Width(DripSurfBnd(k))
-                  Endif
-                Else
-                  SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !              x(TestNode))
-                  SegmentRight=0.5*(x(TestNode)+
-     !              x(DripSurfNode(k+1)))
-                Endif
-                CoverLeft=amax1(SegmentLeft,TargetLeft)
-                CoverRight=amin1(SegmentRight,TargetRight)
-                CoverWidth=amax1(0.0,CoverRight-CoverLeft)
-                CoverMeasure=DripCoverMeasure(KAT,SegmentLeft,
-     !            SegmentRight,CoverLeft,CoverRight,
-     !            Width(DripSurfBnd(k)))
-                If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                  DistX=x(TestNode)
-                Else
-                  DistX=abs(x(TestNode)-x(SourceNode))
-                Endif
-                NodeWeight=amax1(0.0,1.0-DistX/HalfWidth)
-                WeightSum=WeightSum+
-     !            NodeWeight*CoverMeasure
-              EndDo
-              If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol)
-     !          WeightSum=0.0
-              If(WeightSum.le.DripTol) then
-                Do k=LeftPos,RightPos
-                  TestNode=DripSurfNode(k)
-                  If(DripSurfCount.eq.1) then
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentLeft=x(TestNode)-
-     !                  0.5*Width(DripSurfBnd(k))
-                      SegmentRight=x(TestNode)+
-     !                  0.5*Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.1) then
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                    Else
-                      SegmentLeft=SegmentRight-Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.DripSurfCount) then
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    If(KAT.eq.1) then
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentRight=SegmentLeft+Width(DripSurfBnd(k))
-                    Endif
-                  Else
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                  Endif
-                  CoverLeft=amax1(SegmentLeft,TargetLeft)
-                  CoverRight=amin1(SegmentRight,TargetRight)
-                  CoverWidth=amax1(0.0,CoverRight-CoverLeft)
-                  CoverMeasure=DripCoverMeasure(KAT,SegmentLeft,
-     !              SegmentRight,CoverLeft,CoverRight,
-     !              Width(DripSurfBnd(k)))
-                  If(CoverWidth.gt.DripTol) then
-                    AddRate=SourceFlux*CoverMeasure/
-     !                TotalMeasure/Width(DripSurfBnd(k))
-                    DemandRate=SourceDemandFlux*CoverMeasure/
-     !                TotalMeasure/Width(DripSurfBnd(k))
-                    LossRate=(SourceDemandFlux-SourceInputFlux)*
-     !                CoverMeasure/TotalMeasure/Width(DripSurfBnd(k))
-                    If(DripMode(jj).ne.3) then
-                      DripRate(DripSurfBnd(k))=
-     !                  DripRate(DripSurfBnd(k))+AddRate
-                    Endif
-                    DripInput_Rate(DripSurfBnd(k))=
-     !                DripInput_Rate(DripSurfBnd(k))+AddRate
-                    DripDemand_Rate(DripSurfBnd(k))=
-     !                DripDemand_Rate(DripSurfBnd(k))+DemandRate
-                    DripPressureLoss_Rate(DripSurfBnd(k))=
-     !                DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
-                    If(DripSpreadMode(jj).eq.2) then
-                      DripPressureLimit_Rate(DripSurfBnd(k))=
-     !                  DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
-                    Endif
-                  Endif
-                EndDo
-              Else
-                Do k=LeftPos,RightPos
-                  TestNode=DripSurfNode(k)
-                  If(DripSurfCount.eq.1) then
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentLeft=x(TestNode)-
-     !                  0.5*Width(DripSurfBnd(k))
-                      SegmentRight=x(TestNode)+
-     !                  0.5*Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.1) then
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                    If(KAT.eq.1) then
-                      SegmentLeft=0.0
-                    Else
-                      SegmentLeft=SegmentRight-Width(DripSurfBnd(k))
-                    Endif
-                  ElseIf(k.eq.DripSurfCount) then
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    If(KAT.eq.1) then
-                      SegmentRight=x(TestNode)
-                    Else
-                      SegmentRight=SegmentLeft+Width(DripSurfBnd(k))
-                    Endif
-                  Else
-                    SegmentLeft=0.5*(x(DripSurfNode(k-1))+
-     !                x(TestNode))
-                    SegmentRight=0.5*(x(TestNode)+
-     !                x(DripSurfNode(k+1)))
-                  Endif
-                  CoverLeft=amax1(SegmentLeft,TargetLeft)
-                  CoverRight=amin1(SegmentRight,TargetRight)
-                  CoverWidth=amax1(0.0,CoverRight-CoverLeft)
-                  CoverMeasure=DripCoverMeasure(KAT,SegmentLeft,
-     !              SegmentRight,CoverLeft,CoverRight,
-     !              Width(DripSurfBnd(k)))
-                  If(KAT.eq.1.and.abs(x(SourceNode)).le.DripTol) then
-                    DistX=x(TestNode)
-                  Else
-                    DistX=abs(x(TestNode)-x(SourceNode))
-                  Endif
-                  NodeWeight=amax1(0.0,1.0-DistX/HalfWidth)
-                  AddRate=SourceFlux*NodeWeight*CoverMeasure/
-     !              WeightSum/Width(DripSurfBnd(k))
-                  DemandRate=SourceDemandFlux*NodeWeight*CoverMeasure/
-     !              WeightSum/Width(DripSurfBnd(k))
-                  LossRate=(SourceDemandFlux-SourceInputFlux)*
-     !              NodeWeight*CoverMeasure/WeightSum/
-     !              Width(DripSurfBnd(k))
-                  If(CoverWidth.gt.DripTol) then
-                    If(DripMode(jj).ne.3) then
-                      DripRate(DripSurfBnd(k))=
-     !                  DripRate(DripSurfBnd(k))+AddRate
-                    Endif
-                    DripInput_Rate(DripSurfBnd(k))=
-     !                DripInput_Rate(DripSurfBnd(k))+AddRate
-                    DripDemand_Rate(DripSurfBnd(k))=
-     !                DripDemand_Rate(DripSurfBnd(k))+DemandRate
-                    DripPressureLoss_Rate(DripSurfBnd(k))=
-     !                DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
-                    If(DripSpreadMode(jj).eq.2) then
-                      DripPressureLimit_Rate(DripSurfBnd(k))=
-     !                  DripPressureLimit_Rate(DripSurfBnd(k))+AddRate
-                    Endif
-                  Endif
-                EndDo
-              Endif
             Else
               AddRate=SourceFlux/TotalMeasure
               DemandRate=SourceDemandFlux/TotalMeasure
@@ -1468,10 +933,6 @@ c Do not also count it as pressure loss.
      !            DripDemand_Rate(DripSurfBnd(k))+DemandRate
                 DripPressureLoss_Rate(DripSurfBnd(k))=
      !            DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
-                If(DripSpreadMode(jj).eq.3) then
-                  DripStorageActive(DripSurfBnd(k))=1
-                  DripStorageBoundary(DripSurfBnd(k))=1
-                Endif
               EndDo
             Endif
             DripWetNodes_StepSum=DripWetNodes_StepSum+
@@ -1491,9 +952,6 @@ c Do not also count it as pressure loss.
           Do in=1,Num_nodes(jj)
             WetRadius(jj,in)=0
             ShrinkCount(jj,in)=0
-            DripEffHours(jj,in)=0.0
-            DripLastTime(jj,in)=0.0
-            DripLastPressure(jj,in)=0.0
           EndDo
         Endif
       EndDo
@@ -1542,16 +1000,6 @@ c Do not also count it as pressure loss.
         If(tAppl_stop(jj).gt.time+0.001*Step) then
           NextTime=amin1(NextTime,tAppl_stop(jj))
         Endif
-        If(DripSpreadMode(jj).eq.1.or.
-     !    DripSpreadMode(jj).eq.2) then
-          Do i=2,9
-            CurveTime=tAppl_start(jj)+DripCurveHour(i)/24.0
-            If(CurveTime.gt.time+0.001*Step.and.
-     !        CurveTime.lt.tAppl_stop(jj)) then
-              NextTime=amin1(NextTime,CurveTime)
-            Endif
-          EndDo
-        Endif
       EndDo
       tNext(ModNum)=NextTime
       Return
@@ -1576,92 +1024,6 @@ c Do not also count it as pressure loss.
           InField=.False.
         Endif
       EndDo
-      Return
-      End
-
-      Real Function DripCurveHour(Index)
-      Integer Index
-
-      DripCurveHour=0.0
-      If(Index.eq.2) DripCurveHour=0.03
-      If(Index.eq.3) DripCurveHour=0.05
-      If(Index.eq.4) DripCurveHour=0.10
-      If(Index.eq.5) DripCurveHour=0.20
-      If(Index.eq.6) DripCurveHour=0.30
-      If(Index.eq.7) DripCurveHour=0.50
-      If(Index.eq.8) DripCurveHour=1.00
-      If(Index.eq.9) DripCurveHour=2.00
-      Return
-      End
-
-      Real Function DripTargetWidth(MaxWetWidth,ElapsedHours)
-      Real MaxWetWidth,ElapsedHours,HydTime(9),HydWidth(9)
-      Real Progress
-      Integer i
-
-      DripTargetWidth=0.0
-      If(MaxWetWidth.le.0.0) Return
-      If(ElapsedHours.le.0.0) Return
-
-      If(abs(MaxWetWidth-16.3).le.0.5) then
-        HydTime(1)=0.0
-        HydWidth(1)=0.0
-        HydTime(2)=0.03
-        HydWidth(2)=8.26
-        HydTime(3)=0.05
-        HydWidth(3)=10.86
-        HydTime(4)=0.10
-        HydWidth(4)=13.46
-        HydTime(5)=0.20
-        HydWidth(5)=15.52
-        HydTime(6)=0.30
-        HydWidth(6)=16.30
-        HydTime(7)=0.50
-        HydWidth(7)=16.58
-        HydTime(8)=1.00
-        HydWidth(8)=16.30
-        HydTime(9)=2.00
-        HydWidth(9)=16.30
-      ElseIf(abs(MaxWetWidth-39.7).le.0.5) then
-        HydTime(1)=0.0
-        HydWidth(1)=0.0
-        HydTime(2)=0.03
-        HydWidth(2)=5.74
-        HydTime(3)=0.05
-        HydWidth(3)=12.34
-        HydTime(4)=0.10
-        HydWidth(4)=20.32
-        HydTime(5)=0.20
-        HydWidth(5)=25.24
-        HydTime(6)=0.30
-        HydWidth(6)=28.56
-        HydTime(7)=0.50
-        HydWidth(7)=32.16
-        HydTime(8)=1.00
-        HydWidth(8)=35.68
-        HydTime(9)=2.00
-        HydWidth(9)=39.70
-      Else
-        Progress=amin1(1.0,ElapsedHours/2.0)
-        DripTargetWidth=MaxWetWidth*sqrt(Progress)
-        Return
-      Endif
-
-      If(ElapsedHours.ge.HydTime(9)) then
-        DripTargetWidth=HydWidth(9)
-      Else
-        Do i=2,9
-          If(ElapsedHours.le.HydTime(i)) then
-            Progress=(ElapsedHours-HydTime(i-1))/
-     !        (HydTime(i)-HydTime(i-1))
-            DripTargetWidth=HydWidth(i-1)+
-     !        Progress*(HydWidth(i)-HydWidth(i-1))
-            GoTo 10
-          Endif
-        EndDo
-10      Continue
-      Endif
-      DripTargetWidth=amax1(0.0,amin1(MaxWetWidth,DripTargetWidth))
       Return
       End
 
