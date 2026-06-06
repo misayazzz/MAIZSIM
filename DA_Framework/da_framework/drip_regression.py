@@ -173,7 +173,7 @@ DEFAULT_SCENARIOS = (
         name="long_low_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.03 1 "
-            "0 0 1 0 0 {wet_width_max_cm:g} 1"
+            "0 0 1 0 0 {wet_width_max_cm:g} 5 1.0"
         ),
         node_line=" 7",
     ),
@@ -181,7 +181,7 @@ DEFAULT_SCENARIOS = (
         name="long_multi_node",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.02 3 "
-            "0 0 1 0 0 {wet_width_max_cm:g} 1"
+            "0 0 1 0 0 {wet_width_max_cm:g} 5 1.0"
         ),
         node_line=" 6 7 8",
     ),
@@ -189,7 +189,7 @@ DEFAULT_SCENARIOS = (
         name="long_high_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.08 1 "
-            "0 0 1 0 0 {wet_width_max_cm:g} 1"
+            "0 0 1 0 0 {wet_width_max_cm:g} 5 1.0"
         ),
         node_line=" 7",
     ),
@@ -197,7 +197,7 @@ DEFAULT_SCENARIOS = (
         name="long_pressure_single",
         event_line=(
             "'05/01/2007' 0.0 '06/15/2007' 0.0 0.08 1 "
-            "1 1.0 1.0 0.0 0.0 {wet_width_max_cm:g} 1"
+            "1 1.0 1.0 0.0 0.0 {wet_width_max_cm:g} 5 1.0"
         ),
         node_line=" 7",
         pressure_reference="long_high_single",
@@ -380,17 +380,17 @@ def write_drip_file(path, scenario, soil=None):
     """Write the drip schedule for one matrix case."""
     if scenario is None:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation",
             "Number of Drip irrigations(max=75)  ",
             " 0 ",
             "No drip irrigation",
         ]
     else:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation",
             "Number of Drip irrigations(max=75)  ",
             " 1 ",
-            "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes",
+            "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth",
             render_drip_event_line(scenario, soil),
             "Drip application nodes",
             scenario.node_line,

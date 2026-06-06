@@ -155,6 +155,27 @@ python -m compileall DA_Framework/da_framework DA_Framework/tests DA_Framework/r
 python -m unittest discover -s DA_Framework/tests
 ```
 
+## 滴灌验证工具
+
+`da_framework.drip_validation`、`hydrus_aligned_validation`和示例输入生成器当前接受`DripSpreadMode=0/5/6`，并拒绝已废弃的`1/2/3/4`。`Mode5`和`Mode6`都必须提供正的`DripSourceWidth`；如果输入记录提供`DripSourceWidth`但省略`DripSpreadMode`，工具仍按兼容规则默认写出`Mode5`。
+
+`Mode6`表示地表滴灌活动边界近似：总供水率先给中心地表边界，无法接纳时切换为`h=0`头边界，再把剩余流量递推给邻近地表边界。G05解析会识别以下额外列：
+
+```text
+DripMode6Accepted
+DripMode6Remaining
+DripMode6HeadNodes
+DripMode6FluxNodes
+DripMode6Iterations
+DripMode6ClosureResidual
+```
+
+相关最小测试命令：
+
+```powershell
+pixi run --manifest-path pixi.toml python -m pytest DA_Framework/tests/test_maizsim_drip_inputs.py DA_Framework/tests/test_drip_validation.py DA_Framework/tests/test_hydrus_aligned_validation.py DA_Framework/tests/test_drip_precision_validation.py DA_Framework/tests/test_mode5_fortran_contract.py DA_Framework/tests/test_mode6_fortran_contract.py DA_Framework/tests/test_mode6_active_boundary_scenarios.py -q
+```
+
 ## 第一版限制
 
 - `workflow.py` 通过约定接口调用 `prior`, `observation`, `ensemble`, `output_reader`, `update` 等模块；接口缺失时, dry-run 使用内置兜底逻辑, 正式 forecast 会提示缺少接口。

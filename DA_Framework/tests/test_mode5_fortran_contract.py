@@ -34,7 +34,8 @@ def test_mode5_dynamic_surface_source_contract():
 
     assert "dripspreadmode(i).ne.0.and." in source
     assert "dripspreadmode(jj).eq.4" not in source
-    assert "dripspreadmode(i).ne.5)then" in source
+    assert "dripspreadmode(i).ne.5.and." in source
+    assert "dripspreadmode(i).ne.6)then" in source
     assert "driptargetwidth" not in source
     assert "dripcurvehour" not in source
     assert "sourcedemandflux=sourcerate*dripsourcewidth(jj)" in source

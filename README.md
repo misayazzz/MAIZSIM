@@ -33,6 +33,16 @@ https://github.com/precision-sustainable-ag/BuildMaizsim
 
 More documention is being prepared. See the "how to run model" file for information on how to set up the input files and run the executable from the command line. 
 
+## Drip irrigation spread modes
+
+Current drip input validation accepts only these `DripSpreadMode` values:
+
+- `0`: legacy compatible surface drip input.
+- `5`: dynamic local surface-source approximation using positive `DripSourceWidth`.
+- `6`: HYDRUS-style surface active-boundary approximation. This is surface drip only; it switches overloaded surface flux nodes to `h=0` head boundaries, recursively offers remaining water to neighboring surface nodes, and reports accepted/remaining water in G05.
+
+Modes `1`, `2`, `3`, and `4` remain obsolete and are rejected as spread modes. For `Mode5` and `Mode6`, `DripSourceWidth` is required and must be positive. The implementation notes and validation summary for `Mode6` are in `2026-06-06-mode6-hydrus-surface-drip-design.md`.
+
 
 See the ExcelInterface repository for an excel based interface and example input files.
 https://github.com/USDA-ARS-ACSL/ExcelInterface

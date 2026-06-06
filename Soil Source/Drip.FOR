@@ -39,7 +39,8 @@
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
      !        CandidateRight,ActiveNodes,TestNode,ios,
      !        DesiredRadius,FieldCount,DripFieldCount,m,
-     !        DripBaseDtMxSet,DripActive
+     !        DripBaseDtMxSet,DripActive,Mode6Source,
+     !        Mode6Left,Mode6Right
       Character*256 EventLine
 
       Character*10 Start_Date(Max_times),Stop_Date(Max_times)
@@ -93,6 +94,12 @@
         DripPressureFactor_StepSum=0.0D0
         DripPressureFactor_StepMin=1.0D30
         DripDiag_StepCount=0.0D0
+        DripMode6Accepted_Flux=0.0D0
+        DripMode6Remaining_Flux=0.0D0
+        DripMode6HeadNodes_Sum=0.0D0
+        DripMode6FluxNodes_Sum=0.0D0
+        DripMode6Iterations_Sum=0.0D0
+        DripMode6Diag_Time=0.0D0
         Open(40,file=DripFile,err=20)
         Read(40,*,Err=20)
         Read(40,*,Err=20)
@@ -119,6 +126,27 @@
           DripStorageBoundary(i)=0
           DripSurfNode(i)=0
           DripSurfBnd(i)=0
+          DripMode6AssignedFlux(i)=0.0D0
+          DripMode6FluxActive(i)=0
+          DripMode6HeadActive(i)=0
+          DripMode6CandidateOwner(i)=0
+          DripMode6BoundaryOwner(i)=0
+        EndDo
+        DripMode6Active=0
+        DripMode6Count=0
+        DripMode6IterationCount=0
+        Do i=1,MaxDripMode6D
+          DripMode6DemandFlux(i)=0.0D0
+          DripMode6InputFlux(i)=0.0D0
+          DripMode6RemainingFlux(i)=0.0D0
+          DripMode6AcceptedFlux(i)=0.0D0
+          DripMode6PressureLossFlux(i)=0.0D0
+          DripMode6PressureFactor(i)=0.0D0
+          DripMode6CenterPos(i)=0
+          DripMode6CenterBnd(i)=0
+          DripMode6MaxRadius(i)=0
+          DripMode6CurrentRadius(i)=0
+          DripMode6Closed(i)=1
         EndDo
         DripBypassRunoff=0
         Do i=1,Max_times
@@ -225,19 +253,22 @@
             Stop 'Invalid drip wetted width limit'
           Endif
           If(DripSpreadMode(i).ne.0.and.
-     !      DripSpreadMode(i).ne.5) then
+     !      DripSpreadMode(i).ne.5.and.
+     !      DripSpreadMode(i).ne.6) then
             Stop 'Invalid drip spread mode'
           Endif
           If(DripSourceWidth(i).lt.0.0) then
             Stop 'Invalid drip source width'
           Endif
           If(DripSpreadMode(i).ne.5.and.
+     !      DripSpreadMode(i).ne.6.and.
      !      DripSourceWidth(i).gt.0.0) then
-            Stop 'Drip source width requires mode 5'
+            Stop 'Drip source width requires mode 5 or 6'
           Endif
-          If(DripSpreadMode(i).eq.5.and.
+          If((DripSpreadMode(i).eq.5.or.
+     !      DripSpreadMode(i).eq.6).and.
      !      DripSourceWidth(i).le.0.0) then
-            Stop 'Mode 5 drip source width required'
+            Stop 'Mode 5/6 drip source width required'
           Endif
           Read(40,*,Err=20)
           Read(40,*,Err=20) (nAppl(i,j),j=1,Num_nodes(i))
@@ -300,6 +331,11 @@ c so capture it on the first routine pass and restore it outside events.
         DripPressureLoss_Rate(i)=0.0
         DripStorageRelease_Rate(i)=0.0
         DripStorageActive(i)=0
+        DripMode6AssignedFlux(i)=0.0D0
+        DripMode6FluxActive(i)=0
+        DripMode6HeadActive(i)=0
+        DripMode6CandidateOwner(i)=0
+        DripMode6BoundaryOwner(i)=0
         If(DripSurfaceStorage(i).le.1.0D-12) then
           DripCoveredMeasure(i)=0.0D0
         Endif
@@ -326,10 +362,27 @@ c so capture it on the first routine pass and restore it outside events.
       DripPressureFactor_StepSum=0.0D0
       DripPressureFactor_StepMin=1.0D30
       DripDiag_StepCount=0.0D0
+      DripMode6Active=0
+      DripMode6Count=0
+      DripMode6IterationCount=0
+      Do i=1,MaxDripMode6D
+        DripMode6DemandFlux(i)=0.0D0
+        DripMode6InputFlux(i)=0.0D0
+        DripMode6RemainingFlux(i)=0.0D0
+        DripMode6AcceptedFlux(i)=0.0D0
+        DripMode6PressureLossFlux(i)=0.0D0
+        DripMode6PressureFactor(i)=0.0D0
+        DripMode6CenterPos(i)=0
+        DripMode6CenterBnd(i)=0
+        DripMode6MaxRadius(i)=0
+        DripMode6CurrentRadius(i)=0
+        DripMode6Closed(i)=1
+      EndDo
 
       Do jj=1,Drip_times
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
-          If(DripSpreadMode(jj).eq.5) DripBypassRunoff=1
+          If(DripSpreadMode(jj).eq.5.or.
+     !      DripSpreadMode(jj).eq.6) DripBypassRunoff=1
           Do in=1,Num_nodes(jj)
             CenterPos=SourceSurfPos(jj,in)
             CenterBnd=SourceBnd(jj,in)
@@ -352,7 +405,8 @@ c so capture it on the first routine pass and restore it outside events.
               MaxWetWidth=amin1(DripDefaultWetWidth,
      !          0.5*SurfaceWidth)
             Endif
-            If(DripSpreadMode(jj).eq.5) then
+            If(DripSpreadMode(jj).eq.5.or.
+     !        DripSpreadMode(jj).eq.6) then
               MaxWetWidth=amax1(MaxWetWidth,DripSourceWidth(jj))
               If(SurfaceWidth.gt.DripTol) then
                 MaxWetWidth=amin1(MaxWetWidth,SurfaceWidth)
@@ -434,6 +488,51 @@ c so capture it on the first routine pass and restore it outside events.
                 Endif
               Endif
               PressureFactor=amax1(0.0,amin1(1.0,PressureFactor))
+            Endif
+            If(DripSpreadMode(jj).eq.6) then
+c Mode 6 registers a HYDRUS-style surface active boundary source.
+c WaterMover assigns the active flux/head boundaries from this state.
+              SourceRate=wAppl(jj)/PERIOD
+              SourceDemandFlux=SourceRate*DripSourceWidth(jj)
+              SourceFlux=SourceDemandFlux*PressureFactor
+              Mode6Left=max(1,CenterPos-MaxRadius)
+              Mode6Right=min(DripSurfCount,CenterPos+MaxRadius)
+              If(DripMode6Count.ge.MaxDripMode6D) then
+                Stop 'Too many active Mode 6 drip sources'
+              Endif
+              Do k=Mode6Left,Mode6Right
+                If(DripMode6CandidateOwner(DripSurfBnd(k)).ne.0) then
+                  Stop 'Overlapping Mode 6 drip sources'
+                Endif
+              EndDo
+              DripMode6Count=DripMode6Count+1
+              Mode6Source=DripMode6Count
+              DripMode6Active=1
+              DripMode6DemandFlux(Mode6Source)=dble(SourceDemandFlux)
+              DripMode6InputFlux(Mode6Source)=dble(SourceFlux)
+              DripMode6RemainingFlux(Mode6Source)=dble(SourceFlux)
+              DripMode6AcceptedFlux(Mode6Source)=0.0D0
+              DripMode6PressureLossFlux(Mode6Source)=
+     !          dble(SourceDemandFlux-SourceFlux)
+              DripMode6PressureFactor(Mode6Source)=
+     !          dble(PressureFactor)
+              DripMode6CenterPos(Mode6Source)=CenterPos
+              DripMode6CenterBnd(Mode6Source)=CenterBnd
+              DripMode6MaxRadius(Mode6Source)=MaxRadius
+              DripMode6CurrentRadius(Mode6Source)=0
+              If(SourceFlux.le.DripTol) then
+                DripMode6Closed(Mode6Source)=1
+              Else
+                DripMode6Closed(Mode6Source)=0
+                DripMode6FluxActive(CenterBnd)=1
+                DripMode6AssignedFlux(CenterBnd)=
+     !            DripMode6AssignedFlux(CenterBnd)+dble(SourceFlux)
+                DripMode6BoundaryOwner(CenterBnd)=Mode6Source
+              Endif
+              Do k=Mode6Left,Mode6Right
+                DripMode6CandidateOwner(DripSurfBnd(k))=Mode6Source
+              EndDo
+              GoTo 520
             Endif
             If(DripSpreadMode(jj).eq.5) then
 c Mode 5 is a dynamic local surface source. DripSourceWidth defines
@@ -947,6 +1046,7 @@ c surface wetting interval selected from local hydraulic acceptance.
             DripPressureFactor_StepMin=dmin1(DripPressureFactor_StepMin,
      !        dble(PressureFactor))
             DripDiag_StepCount=DripDiag_StepCount+1.0D0
+ 520        Continue
           EndDo
         ElseIf(time.ge.tAppl_stop(jj)) then
           Do in=1,Num_nodes(jj)

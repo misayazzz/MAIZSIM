@@ -42,6 +42,12 @@ G05_DRIP_DIAGNOSTIC_COLUMNS = {
     "drip_surface_application_width_max_cm": "DripWetWidthMax",
     "drip_pressure_factor_mean": "DripPressureFactorMean",
     "drip_pressure_factor_min": "DripPressureFactorMin",
+    "drip_mode6_accepted_mm": "DripMode6Accepted",
+    "drip_mode6_remaining_mm": "DripMode6Remaining",
+    "drip_mode6_head_nodes": "DripMode6HeadNodes",
+    "drip_mode6_flux_nodes": "DripMode6FluxNodes",
+    "drip_mode6_iterations": "DripMode6Iterations",
+    "drip_mode6_closure_residual_mm": "DripMode6ClosureResidual",
 }
 
 
@@ -94,8 +100,8 @@ class DripSchedule:
         MAIZSIM G05 reports surface water terms as grid-averaged mm.
         For a fixed-node surface drip event, the expected increment is:
         rate_cm_hr * duration_hr * sum(node_width_cm) / grid_width_cm * 10.
-        In Mode5, source_width_cm overrides the grid node width to keep
-        physical emitter flow independent of mesh spacing.
+        In Mode5 and Mode6, source_width_cm defines the emitter source
+        measure used to keep physical emitter flow independent of mesh spacing.
         """
         grid_width = _positive_float(grid_width_cm, "grid_width_cm")
         width_by_node = {
@@ -302,8 +308,9 @@ def build_public_comparison_report_skeleton(
             "",
             "- Boundary type: surface point-source Neumann flux at fixed nodes.",
             "- Scheduling: event start/stop time, duration, node count, and rate.",
-            "- Water amount: rate * duration * source measure / grid width for Mode5.",
+            "- Water amount: rate * duration * source measure / grid width for Mode5/Mode6.",
             "- Mode5 uses a dynamic local surface interval bounded by DripWetWidthMax.",
+            "- Mode6 uses a HYDRUS-style surface active-boundary approximation with h=0 head switching.",
             "- Pressure correction: optional event fields support back-pressure and pressure-compensating surface-source approximations.",
             "- Refined diagnostics: G05 can report drip demand, pressure loss, hydraulic excess, surface application width, wet node count, and pressure factors.",
             "- Water balance: G05 CumRain, infiltration, runoff, and drainage deltas.",
@@ -429,22 +436,22 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} wet_width_max_cm must be non-negative"
         )
-    if spread_mode not in (0, 5):
+    if spread_mode not in (0, 5, 6):
         raise ValueError(
-            f"Drip event {event_index + 1} spread_mode must be 0 or 5"
+            f"Drip event {event_index + 1} spread_mode must be 0, 5, or 6"
         )
     if source_width_cm < 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be non-negative"
         )
-    if spread_mode != 5 and source_width_cm > 0.0:
+    if spread_mode not in (5, 6) and source_width_cm > 0.0:
         raise ValueError(
-            f"Drip event {event_index + 1} source_width_cm requires spread_mode 5"
+            f"Drip event {event_index + 1} source_width_cm requires spread_mode 5 or 6"
         )
-    if spread_mode == 5 and source_width_cm <= 0.0:
+    if spread_mode in (5, 6) and source_width_cm <= 0.0:
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be positive "
-            "when spread_mode is 5"
+            "when spread_mode is 5 or 6"
         )
 
     return {

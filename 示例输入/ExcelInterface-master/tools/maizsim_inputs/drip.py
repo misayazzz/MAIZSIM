@@ -13,7 +13,7 @@ from .run_files import RUN_FILE_NAME
 from .shared_inputs import read_text_with_encoding
 
 
-DRIP_HEADER = "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses DripSourceWidth measure"
+DRIP_HEADER = "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation"
 DRIP_COUNT_HEADER = "Number of Drip irrigations(max=75)  "
 NO_DRIP_LINES = [
     DRIP_HEADER,
@@ -242,8 +242,8 @@ def normalize_drip_record(run_id, record, require_distance):
         spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
     if pressure_mode not in (0, 1, 2, 3):
         raise ConfigError(f"{context} 的 DripMode 必须是 0、1、2 或 3: {pressure_mode}")
-    if spread_mode not in (0, 5):
-        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0 或 5: {spread_mode}")
+    if spread_mode not in (0, 5, 6):
+        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、5 或 6: {spread_mode}")
     if pressure_mode in (1, 2) and pressure_head <= 0:
         raise ConfigError(f"{context} 的 DripHIn 在 DripMode=1/2 时必须大于 0.")
     if pressure_exp <= 0:
@@ -254,14 +254,14 @@ def normalize_drip_record(run_id, record, require_distance):
         raise ConfigError(f"{context} 的 DripWetWidthMax 不能为负数.")
     if source_width < 0:
         raise ConfigError(f"{context} 的 DripSourceWidth 不能为负数.")
-    if spread_mode != 5 and source_width > 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 只能在 DripSpreadMode=5 时填写.")
-    if spread_mode == 5 and source_width <= 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=5 时必须大于 0.")
-    if spread_mode == 5 and 0 < wet_width_max <= source_width:
+    if spread_mode not in (5, 6) and source_width > 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 只能在 DripSpreadMode=5 或 6 时填写.")
+    if spread_mode in (5, 6) and source_width <= 0:
+        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=5/6 时必须大于 0.")
+    if spread_mode in (5, 6) and 0 < wet_width_max <= source_width:
         warnings.warn(
             (
-                f"{context} 的 DripSpreadMode=5 设置了 DripWetWidthMax={wet_width_max:g} cm, "
+                f"{context} 的 DripSpreadMode={spread_mode} 设置了 DripWetWidthMax={wet_width_max:g} cm, "
                 f"不大于 DripSourceWidth={source_width:g} cm；该算例会接近固定宽度源，"
                 "建议把 DripWetWidthMax 设为更大的最大湿润斑宽度."
             ),

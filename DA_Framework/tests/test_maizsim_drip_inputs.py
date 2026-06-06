@@ -268,6 +268,30 @@ class MaizsimDripInputTests(unittest.TestCase):
             self.assertIn("DripSourceWidth", lines[3])
             self.assertTrue(lines[4].endswith("18.5 5 2.5"))
 
+    def test_dynamic_surface_spread_mode6_is_written(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_spread6_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            record = _drip_record(distance=10)
+            record["dripwetwidthmax"] = 18.5
+            record["dripspreadmode"] = 6
+            record["dripsourcewidth"] = 2.5
+
+            write_run_drip_file(
+                {
+                    "id": "TEST",
+                    "drip_records": [record],
+                    "drip_node_records": [],
+                },
+                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+            )
+
+            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
+            self.assertIn("DripSourceWidth", lines[3])
+            self.assertTrue(lines[4].endswith("18.5 6 2.5"))
+
     def test_source_width_without_spread_mode_defaults_to_dynamic_surface(self):
         with tempfile.TemporaryDirectory(prefix="codex_drp_source_width_mode5_") as tmp_dir:
             run_dir = Path(tmp_dir)
@@ -293,6 +317,14 @@ class MaizsimDripInputTests(unittest.TestCase):
     def test_dynamic_surface_spread_mode5_requires_source_width(self):
         record = _drip_record()
         record["dripspreadmode"] = 5
+        record["dripwetwidthmax"] = 18.5
+
+        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
+            validate_drip_records_for_run("TEST", [record], [])
+
+    def test_dynamic_surface_spread_mode6_requires_source_width(self):
+        record = _drip_record()
+        record["dripspreadmode"] = 6
         record["dripwetwidthmax"] = 18.5
 
         with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):

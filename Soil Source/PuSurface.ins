@@ -1,4 +1,5 @@
       Parameter (NumMulHLD=15, NumMulFluxD=2*NumMulHLD)
+      Parameter (MaxDripMode6D=150)
 cccz the following blocks are for irrigation
        Double Precision Qautoirrig(NumNPD)
        Common /SurWaterInput/ Qautoirrig
@@ -42,6 +43,42 @@ c Drip water and diagnostics since the last surface output print.
      !        DripStorageRelease_Rate,
      !        DripBypassRunoff,
      !        DripStorageActive,DripStorageBoundary
+
+c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
+       Double Precision DripMode6DemandFlux(MaxDripMode6D),
+     !      DripMode6InputFlux(MaxDripMode6D),
+     !      DripMode6RemainingFlux(MaxDripMode6D),
+     !      DripMode6AcceptedFlux(MaxDripMode6D),
+     !      DripMode6PressureLossFlux(MaxDripMode6D),
+     !      DripMode6PressureFactor(MaxDripMode6D),
+     !      DripMode6AssignedFlux(NumBPD),
+     !      DripMode6Accepted_Flux,DripMode6Remaining_Flux,
+     !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
+     !      DripMode6Iterations_Sum,DripMode6Diag_Time
+       Integer DripMode6Active,DripMode6Count,
+     !      DripMode6CenterPos(MaxDripMode6D),
+     !      DripMode6CenterBnd(MaxDripMode6D),
+     !      DripMode6MaxRadius(MaxDripMode6D),
+     !      DripMode6CurrentRadius(MaxDripMode6D),
+     !      DripMode6Closed(MaxDripMode6D),
+     !      DripMode6FluxActive(NumBPD),
+     !      DripMode6HeadActive(NumBPD),
+     !      DripMode6CandidateOwner(NumBPD),
+     !      DripMode6BoundaryOwner(NumBPD),
+     !      DripMode6IterationCount
+       Common /DripMode6C/ DripMode6DemandFlux,
+     !      DripMode6InputFlux,DripMode6RemainingFlux,
+     !      DripMode6AcceptedFlux,DripMode6PressureLossFlux,
+     !      DripMode6PressureFactor,DripMode6AssignedFlux,
+     !      DripMode6Accepted_Flux,DripMode6Remaining_Flux,
+     !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
+     !      DripMode6Iterations_Sum,DripMode6Diag_Time,
+     !      DripMode6Active,DripMode6Count,DripMode6CenterPos,
+     !      DripMode6CenterBnd,DripMode6MaxRadius,
+     !      DripMode6CurrentRadius,DripMode6Closed,
+     !      DripMode6FluxActive,DripMode6HeadActive,
+     !      DripMode6CandidateOwner,DripMode6BoundaryOwner,
+     !      DripMode6IterationCount
 
 
 cccz the following blocks are used for surface runoff

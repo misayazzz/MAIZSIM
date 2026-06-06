@@ -131,6 +131,30 @@ class DripValidationTests(unittest.TestCase):
         self.assertAlmostEqual(event.wet_width_max_cm, 18.5)
         self.assertAlmostEqual(event.source_width_cm, 2.5)
 
+    def test_parse_hydrus_active_boundary_mode6(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_mode6_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "mode6.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 18.5 6 2.5",
+                        "7",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            schedule = parse_drip_file(drip_path)
+
+        event = schedule.events[0]
+        self.assertEqual(event.spread_mode, 6)
+        self.assertAlmostEqual(event.wet_width_max_cm, 18.5)
+        self.assertAlmostEqual(event.source_width_cm, 2.5)
+        self.assertAlmostEqual(
+            schedule.expected_grid_depth_mm({7: 15.0}, grid_width_cm=120.0),
+            2.5 / 120.0 * 4.0 * 10.0,
+        )
+
     def test_parse_optional_wet_width_without_pressure_fields(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_wet_width_") as tmp_dir:
             drip_path = Path(tmp_dir) / "wet_width.drp"
@@ -235,7 +259,7 @@ class DripValidationTests(unittest.TestCase):
             ),
             "invalid_spread_mode": _drip_text(
                 [
-                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 6",
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 10 7",
                     "7",
                 ]
             ),
@@ -254,6 +278,12 @@ class DripValidationTests(unittest.TestCase):
             "mode5_missing_source_width": _drip_text(
                 [
                     "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 5",
+                    "7",
+                ]
+            ),
+            "mode6_missing_source_width": _drip_text(
+                [
+                    "05/20/2007 6.0 05/20/2007 8.0 2.0 1 0 0 1 0 0 0 6",
                     "7",
                 ]
             ),
@@ -326,9 +356,12 @@ class DripValidationTests(unittest.TestCase):
                             "DripSurfaceStorage,DripBoundaryInClosure,"
                             "DripBoundaryAccClosure,DripWetNodesMean,"
                             "DripWetNodesMax,DripWetWidthMean,"
-                            "DripPressureFactorMean"
+                            "DripPressureFactorMean,DripMode6Accepted,"
+                            "DripMode6Remaining,DripMode6HeadNodes,"
+                            "DripMode6FluxNodes,DripMode6Iterations,"
+                            "DripMode6ClosureResidual"
                         ),
-                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,0.3,0.4,0.5,0.01,-0.02,2.0,3.0,30.0,0.88",
+                        "05/21/2007,121.0,45.0,0.75,5.5,5.4,5.0,0.2,0.1,4.7,4.8,0.2,0.3,0.4,0.5,0.01,-0.02,2.0,3.0,30.0,0.88,4.5,0.2,1.0,2.0,3.0,0.0",
                     ]
                 )
                 + "\n",
@@ -365,6 +398,12 @@ class DripValidationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(frame["drip_pressure_factor_mean"].iloc[0], 0.88)
         self.assertAlmostEqual(frame["drip_pressure_factor_min"].iloc[0], 0.75)
+        self.assertAlmostEqual(frame["drip_mode6_accepted_mm"].iloc[0], 4.5)
+        self.assertAlmostEqual(frame["drip_mode6_remaining_mm"].iloc[0], 0.2)
+        self.assertAlmostEqual(frame["drip_mode6_head_nodes"].iloc[0], 1.0)
+        self.assertAlmostEqual(frame["drip_mode6_flux_nodes"].iloc[0], 2.0)
+        self.assertAlmostEqual(frame["drip_mode6_iterations"].iloc[0], 3.0)
+        self.assertAlmostEqual(frame["drip_mode6_closure_residual_mm"].iloc[0], 0.0)
 
     def test_g05_delta_by_date_returns_drip_minus_baseline(self):
         with tempfile.TemporaryDirectory(prefix="codex_g05_delta_") as tmp_dir:
@@ -425,6 +464,7 @@ class DripValidationTests(unittest.TestCase):
 
         self.assertIn("surface point-source Neumann flux", report)
         self.assertIn("Mode5 uses a dynamic local surface interval", report)
+        self.assertIn("Mode6 uses a HYDRUS-style surface active-boundary approximation", report)
         self.assertIn("Pressure correction", report)
         self.assertIn("G05 DripInput", report)
         self.assertIn("Skaggs et al. 2004", report)

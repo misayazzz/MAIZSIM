@@ -2,7 +2,27 @@
 
 ## 状态
 
-本文是`DripSpreadMode=6`的实现设计草案。当前代码尚未实现`Mode6`；现有可用模式仍为`DripSpreadMode=0/5`。本文目标是把HYDRUS-style地表滴灌活动边界算法拆解成可在MAIZSIM当前二维水分求解框架内实现、测试和审阅的工程步骤。
+本文最初是`DripSpreadMode=6`的实现设计草案。截至2026-06-06，当前实现已支持`DripSpreadMode=0/5/6`，并继续拒绝已废弃的`1/2/3/4`。`Mode6`已作为MAIZSIM/2DSOIL框架内的HYDRUS-style地表活动边界近似实现；它不是HYDRUS完整地表径流或地下滴灌模型复刻。
+
+当前实现要点：
+
+- `Drip.FOR`读取和校验`DripSpreadMode=6`，用`DripSourceWidth`把`wAppl`转换为滴头总供水率，并登记中心地表边界和候选活动范围。
+- `Watmov.for`在Richards求解中恢复基础`Q/CodeW`，应用`Mode6`通量边界或`h=0`头边界，求解后用`QAct`计算实际接纳量，再把剩余流量递推给下一候选环。
+- 达到`DripWetWidthMax`、地表边界或内部迭代上限后仍未接纳的剩余水量，优先进入`DripSurfaceStorage`，超出暂存容量的部分进入`DripSurfaceRunoff_Flux`。
+- `OUTPUT.FOR`的G05新增`DripMode6Accepted`、`DripMode6Remaining`、`DripMode6HeadNodes`、`DripMode6FluxNodes`、`DripMode6Iterations`和`DripMode6ClosureResidual`。
+- Python输入生成和验证工具接受`0/5/6`，`Mode5/Mode6`均要求正`DripSourceWidth`；未写`DripSpreadMode`但写`DripSourceWidth`时仍默认写出`Mode5`。
+
+## 已验证行为
+
+2026-06-06在HUTD06短窗算例中运行了三组`Mode6`地表滴灌验证，事件窗口为`04/01/2006 00:00`到`04/01/2006 04:00`，中心节点为`7`。验证文件放在HDD的`D:\Codex\codex_mode6_validation_20260606`下，解析后已清理临时目录。
+
+| 算例 | `wAppl` | `DripWetWidthMax` | G05结果摘要 |
+| --- | ---: | ---: | --- |
+| low | `0.20 cm/h` | `30.0 cm` | `DripInput=0.227 mm`，`DripActualInfil=0.227 mm`，`DripMode6Remaining=0`，两类闭合残差为`0` |
+| high_limited | `5.00 cm/h` | `12.0 cm` | `DripInput=5.460 mm`，`DripActualInfil=5.460 mm`，`DripMode6Remaining=0`，两类闭合残差为`0` |
+| extreme_limited | `200.0 cm/h` | `4.84 cm` | `DripInput=215.378 mm`，`DripActualInfil=28.216 mm`，`DripMode6Remaining=188.572 mm`，`DripSurfaceRunoff=187.164 mm`，两类闭合残差为`0` |
+
+同一验证中，G03二维`theta`输出显示灌后正`delta theta`湿润体存在并可审阅：low算例灌后最大`delta theta=0.203`、最深正变化约`63.0 cm`；high_limited算例灌后最大`delta theta=0.202`、最深正变化约`63.0 cm`；extreme_limited算例灌后最大`delta theta=0.203`、最深正变化约`63.0 cm`。这些结果用于工程闭合和二维输出冒烟验证，不作为HYDRUS benchmark精度结论。
 
 ## 背景
 

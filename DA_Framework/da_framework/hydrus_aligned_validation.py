@@ -121,11 +121,11 @@ def prepare_hydrus_aligned_runs(
         wet_delta_threshold=wet_delta_threshold,
     )
     drip_spread_mode = int(drip_spread_mode)
-    if drip_spread_mode not in (0, 5):
-        raise ValueError("drip_spread_mode must be 0 or 5")
+    if drip_spread_mode not in (0, 5, 6):
+        raise ValueError("drip_spread_mode must be 0, 5, or 6")
     if drip_wet_width_max_cm is not None:
         drip_radius_cm = float(drip_wet_width_max_cm)
-    elif drip_spread_mode == 5:
+    elif drip_spread_mode in (5, 6):
         drip_radius_cm = 0.0
     else:
         drip_radius_cm = _hydrus_calibrated_drip_radius_cm(
@@ -136,8 +136,12 @@ def prepare_hydrus_aligned_runs(
     drip_mode = 0
     if drip_mode_override is not None:
         drip_mode = int(drip_mode_override)
-    drip_source_formulation = "partial-width surface flux boundary"
-    water_solver_coupling = "richards_surface_flux_boundary"
+    if drip_spread_mode == 6:
+        drip_source_formulation = "surface active-boundary approximation with h=0 switching"
+        water_solver_coupling = "richards_surface_active_boundary"
+    else:
+        drip_source_formulation = "partial-width surface flux boundary"
+        water_solver_coupling = "richards_surface_flux_boundary"
     rate_l_h = (
         float(emitter_rate_l_h)
         if emitter_rate_l_h is not None
@@ -173,7 +177,7 @@ def prepare_hydrus_aligned_runs(
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
         drip_spread_mode=drip_spread_mode,
-        drip_source_width_cm=source_width if drip_spread_mode == 5 else 0.0,
+        drip_source_width_cm=source_width if drip_spread_mode in (5, 6) else 0.0,
     )
     write_maizsim_drip_file(
         baseline_dir / "LOAM2D.drp",
@@ -183,7 +187,7 @@ def prepare_hydrus_aligned_runs(
         drip_source_depth_cm=drip_source_depth_cm,
         drip_mode=drip_mode,
         drip_spread_mode=drip_spread_mode,
-        drip_source_width_cm=source_width if drip_spread_mode == 5 else 0.0,
+        drip_source_width_cm=source_width if drip_spread_mode in (5, 6) else 0.0,
     )
 
     manifest = {
@@ -204,6 +208,7 @@ def prepare_hydrus_aligned_runs(
         "drip_source_right_cm": drip_radius_cm if int(selector.get("kat", -1)) == 1 else float(source["x_cm"] + 0.5 * drip_radius_cm),
         "drip_source_formulation": drip_source_formulation,
         "water_solver_coupling": water_solver_coupling,
+        "validation_scope": "same-condition HYDRUS field comparison, not HYDRUS solver replication",
         "boundary_conditions": "HYDRUS BOUNDARY.IN widths; MAIZSIM surface atmospheric, bottom seepage face",
         "baseline_definition": "same MAIZSIM setup with zero drip events",
         "hydrus_kat": int(selector.get("kat", -1)),
@@ -805,21 +810,21 @@ def write_maizsim_drip_file(
     """Write one precision drip event or a zero-event baseline."""
     if w_appl_cm_h <= 0.0:
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation",
             "Number of Drip irrigations(max=75)",
             " 0 ",
             "No drip irrigation",
         ]
     else:
         drip_spread_mode = int(drip_spread_mode)
-        if drip_spread_mode not in (0, 5):
-            raise ValueError("drip_spread_mode must be 0 or 5")
-        if drip_spread_mode != 5 and float(drip_source_width_cm) > 0.0:
-            raise ValueError("drip_source_width_cm requires drip_spread_mode 5")
-        if drip_spread_mode == 5 and float(drip_source_width_cm) <= 0.0:
-            raise ValueError("drip_source_width_cm must be positive when drip_spread_mode is 5")
+        if drip_spread_mode not in (0, 5, 6):
+            raise ValueError("drip_spread_mode must be 0, 5, or 6")
+        if drip_spread_mode not in (5, 6) and float(drip_source_width_cm) > 0.0:
+            raise ValueError("drip_source_width_cm requires drip_spread_mode 5 or 6")
+        if drip_spread_mode in (5, 6) and float(drip_source_width_cm) <= 0.0:
+            raise ValueError("drip_source_width_cm must be positive when drip_spread_mode is 5 or 6")
         lines = [
-            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 applies it over DripSourceWidth measure",
+            "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation",
             "Number of Drip irrigations(max=75)",
             " 1 ",
             "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax DripSpreadMode DripSourceWidth",
