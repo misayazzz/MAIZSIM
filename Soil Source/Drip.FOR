@@ -129,6 +129,8 @@
           DripMode6AssignedFlux(i)=0.0D0
           DripMode6FluxActive(i)=0
           DripMode6HeadActive(i)=0
+          DripMode6BoundedFlux(i)=0
+          DripMode6RateActive(i)=0
           DripMode6CandidateOwner(i)=0
           DripMode6BoundaryOwner(i)=0
         EndDo
@@ -334,6 +336,8 @@ c so capture it on the first routine pass and restore it outside events.
         DripMode6AssignedFlux(i)=0.0D0
         DripMode6FluxActive(i)=0
         DripMode6HeadActive(i)=0
+        DripMode6BoundedFlux(i)=0
+        DripMode6RateActive(i)=0
         DripMode6CandidateOwner(i)=0
         DripMode6BoundaryOwner(i)=0
         If(DripSurfaceStorage(i).le.1.0D-12) then
@@ -464,6 +468,10 @@ c so capture it on the first routine pass and restore it outside events.
                 MaxRadius=CandidateRadius
               Endif
             EndDo
+            If(DripSpreadMode(jj).eq.6.and.
+     !        MaxWetWidth.ge.SurfaceWidth-DripTol) then
+              MaxRadius=EdgeMaxRadius
+            Endif
             If(DripSpreadMode(jj).eq.5) MaxRadius=EdgeMaxRadius
             If(WetRadius(jj,in).gt.MaxRadius) then
               WetRadius(jj,in)=MaxRadius
@@ -519,19 +527,102 @@ c WaterMover assigns the active flux/head boundaries from this state.
               DripMode6CenterPos(Mode6Source)=CenterPos
               DripMode6CenterBnd(Mode6Source)=CenterBnd
               DripMode6MaxRadius(Mode6Source)=MaxRadius
-              DripMode6CurrentRadius(Mode6Source)=0
-              If(SourceFlux.le.DripTol) then
-                DripMode6Closed(Mode6Source)=1
-              Else
-                DripMode6Closed(Mode6Source)=0
-                DripMode6FluxActive(CenterBnd)=1
-                DripMode6AssignedFlux(CenterBnd)=
-     !            DripMode6AssignedFlux(CenterBnd)+dble(SourceFlux)
-                DripMode6BoundaryOwner(CenterBnd)=Mode6Source
-              Endif
               Do k=Mode6Left,Mode6Right
                 DripMode6CandidateOwner(DripSurfBnd(k))=Mode6Source
               EndDo
+              DesiredRadius=0
+              Do CandidateRadius=0,MaxRadius
+                CandidateLeft=max(1,CenterPos-CandidateRadius)
+                CandidateRight=min(DripSurfCount,
+     !            CenterPos+CandidateRadius)
+                CapSum=0.0
+                TotalMeasure=0.0
+                Do k=CandidateLeft,CandidateRight
+                  TestNode=DripSurfNode(k)
+                  LocalMeasure=Width(DripSurfBnd(k))
+                  If(LocalMeasure.gt.DripTol) then
+                    TotalMeasure=TotalMeasure+LocalMeasure
+                    LocalCap=0.01*ConSat(MatNumN(TestNode))*
+     !                LocalMeasure
+                    CapSum=CapSum+LocalCap
+                  Endif
+                EndDo
+                If(CapSum.ge.SourceFlux.or.
+     !            CandidateRadius.eq.MaxRadius) then
+                  DesiredRadius=CandidateRadius
+                  GoTo 515
+                Endif
+              EndDo
+ 515          Continue
+              DripMode6CurrentRadius(Mode6Source)=DesiredRadius
+              If(SourceFlux.le.DripTol) then
+                DripMode6Closed(Mode6Source)=1
+              Else
+                Mode6Left=max(1,CenterPos-DesiredRadius)
+                Mode6Right=min(DripSurfCount,CenterPos+DesiredRadius)
+                TotalMeasure=0.0
+                Do k=Mode6Left,Mode6Right
+                  TotalMeasure=TotalMeasure+Width(DripSurfBnd(k))
+                EndDo
+                If(TotalMeasure.le.DripTol) then
+                  TotalMeasure=Width(CenterBnd)
+                  Mode6Left=CenterPos
+                  Mode6Right=CenterPos
+                Endif
+                If(DesiredRadius.gt.0) then
+                  DripMode6Closed(Mode6Source)=1
+                  AddRate=SourceFlux/TotalMeasure
+                  DemandRate=SourceDemandFlux/TotalMeasure
+                  LossRate=(SourceDemandFlux-SourceFlux)/TotalMeasure
+                  ActiveNodes=Mode6Right-Mode6Left+1
+                  TotalWidth=0.0
+                  Do k=Mode6Left,Mode6Right
+                    DripMode6RateActive(DripSurfBnd(k))=1
+                    DripMode6AssignedFlux(DripSurfBnd(k))=
+     !                DripMode6AssignedFlux(DripSurfBnd(k))+
+     !                dble(SourceFlux*Width(DripSurfBnd(k))/
+     !                TotalMeasure)
+                    DripMode6BoundaryOwner(DripSurfBnd(k))=
+     !                Mode6Source
+                    DripRate(DripSurfBnd(k))=
+     !                DripRate(DripSurfBnd(k))+AddRate
+                    DripInput_Rate(DripSurfBnd(k))=
+     !                DripInput_Rate(DripSurfBnd(k))+AddRate
+                    DripDemand_Rate(DripSurfBnd(k))=
+     !                DripDemand_Rate(DripSurfBnd(k))+DemandRate
+                    DripPressureLoss_Rate(DripSurfBnd(k))=
+     !                DripPressureLoss_Rate(DripSurfBnd(k))+LossRate
+                    DripStorageActive(DripSurfBnd(k))=1
+                    DripStorageBoundary(DripSurfBnd(k))=1
+                    TotalWidth=TotalWidth+Width(DripSurfBnd(k))
+                  EndDo
+                  DripWetNodes_StepSum=DripWetNodes_StepSum+
+     !              dble(ActiveNodes)
+                  DripWetNodes_StepMax=dmax1(DripWetNodes_StepMax,
+     !              dble(ActiveNodes))
+                  DripWetWidth_StepSum=DripWetWidth_StepSum+
+     !              dble(TotalWidth)
+                  DripWetWidth_StepMax=dmax1(DripWetWidth_StepMax,
+     !              dble(TotalWidth))
+                  DripPressureFactor_StepSum=
+     !              DripPressureFactor_StepSum+dble(PressureFactor)
+                  DripPressureFactor_StepMin=dmin1(
+     !              DripPressureFactor_StepMin,dble(PressureFactor))
+                  DripDiag_StepCount=DripDiag_StepCount+1.0D0
+                Else
+                  DripMode6Closed(Mode6Source)=0
+                  Do k=Mode6Left,Mode6Right
+                    DripMode6FluxActive(DripSurfBnd(k))=1
+                    DripMode6BoundedFlux(DripSurfBnd(k))=0
+                    DripMode6AssignedFlux(DripSurfBnd(k))=
+     !                DripMode6AssignedFlux(DripSurfBnd(k))+
+     !                dble(SourceFlux*Width(DripSurfBnd(k))/
+     !                TotalMeasure)
+                    DripMode6BoundaryOwner(DripSurfBnd(k))=
+     !                Mode6Source
+                  EndDo
+                Endif
+              Endif
               GoTo 520
             Endif
             If(DripSpreadMode(jj).eq.5) then

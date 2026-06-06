@@ -2,17 +2,34 @@
 
 ## 状态
 
-本文最初是`DripSpreadMode=6`的实现设计草案。截至2026-06-06，当前实现已支持`DripSpreadMode=0/5/6`，并继续拒绝已废弃的`1/2/3/4`。`Mode6`已作为MAIZSIM/2DSOIL框架内的HYDRUS-style地表活动边界近似实现；它不是HYDRUS完整地表径流或地下滴灌模型复刻。
+本文最初是`DripSpreadMode=6`的实现设计草案。截至2026-06-07，当前实现已支持`DripSpreadMode=0/5/6`，并继续拒绝已废弃的`1/2/3/4`。`Mode6`已作为MAIZSIM/2DSOIL框架内的HYDRUS-style地表滴灌近似实现；它不是HYDRUS完整地表径流、地下滴灌模型或HYDRUS数值内核复刻。
 
 当前实现要点：
 
 - `Drip.FOR`读取和校验`DripSpreadMode=6`，用`DripSourceWidth`把`wAppl`转换为滴头总供水率，并登记中心地表边界和候选活动范围。
-- `Watmov.for`在Richards求解中恢复基础`Q/CodeW`，应用`Mode6`通量边界或`h=0`头边界，求解后用`QAct`计算实际接纳量，再把剩余流量递推给下一候选环。
+- 低流量或保守容量估计显示中心节点可承受时，`Watmov.for`在Richards求解中恢复基础`Q/CodeW`，应用`Mode6`通量边界或`h=0`头边界，求解后用`QAct`计算实际接纳量，再把剩余流量递推给下一候选环。
+- 高流量场景若直接活动重解会使当前WaterMover出现ORTHOMIN发散或近零步长，`Drip.FOR`先用保守容量阈值`0.01 * Ks`估计需要的候选湿润带；当需要预展开时，使用现有稳定的地表源路径施加到预展开边界，并在`Watmov.for`已有实际入渗核算处记录`Mode6`的accepted/remaining诊断。
 - 达到`DripWetWidthMax`、地表边界或内部迭代上限后仍未接纳的剩余水量，优先进入`DripSurfaceStorage`，超出暂存容量的部分进入`DripSurfaceRunoff_Flux`。
 - `OUTPUT.FOR`的G05新增`DripMode6Accepted`、`DripMode6Remaining`、`DripMode6HeadNodes`、`DripMode6FluxNodes`、`DripMode6Iterations`和`DripMode6ClosureResidual`。
 - Python输入生成和验证工具接受`0/5/6`，`Mode5/Mode6`均要求正`DripSourceWidth`；未写`DripSpreadMode`但写`DripSourceWidth`时仍默认写出`Mode5`。
 
 ## 已验证行为
+
+2026-06-07在本次50 mm二维作物半域算例中运行了壤土和砂壤土验证，基础目录为`D:\Codex\codex_mode6_soil_test_20260606`。每种土壤均运行`baseline`、`Mode6 drip`和`Flood flux`三组；滴灌事件为`05/18/2007 00:00`到`05/22/2007 00:00`，`DripSourceWidth=1.0 cm`，`DripWetWidthMax=38.1 cm`，滴头位于左边界节点`1`，未对供水量自动折半。所有6个case的stdout均结束于`Finished at 39224.0000000000`。
+
+| 土壤 | 处理 | G05输入或供水 | G05实际入渗 | G05 Mode6剩余 | 最大湿润宽度 | 近地表剖面结果 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 壤土 | Mode6 drip | `DripInput=50.042 mm` | `DripActualInfil=42.572 mm` | `8.812 mm` | `38.1 cm` | `theta_mean_top100=0.2732` |
+| 壤土 | Flood flux | `50 mm`漫灌目标 | G05总`infil=86.711 mm` | 不适用 | 全地表 | `theta_mean_top100=0.2896` |
+| 砂壤土 | Mode6 drip | `DripInput=50.042 mm` | `DripActualInfil=43.570 mm` | `7.632 mm` | `38.1 cm` | `theta_mean_top100=0.1592` |
+| 砂壤土 | Flood flux | `50 mm`漫灌目标 | G05总`infil=86.620 mm` | 不适用 | 全地表 | `theta_mean_top100=0.1748` |
+
+图像输出已生成：
+
+- `D:\Codex\codex_mode6_soil_test_20260606\codex_mode6_vs_flood_theta_50mm.png`
+- `D:\Codex\codex_mode6_soil_test_20260606\codex_mode6_vs_flood_delta_theta_50mm.png`
+
+这组算例说明：在左边界滴头、半域宽度`38.1 cm`、`DripWetWidthMax`覆盖全地表时，`Mode6`会扩展到全宽；但达到上限后仍有约`7.6`到`8.8 mm`未被土壤接纳，进入地表暂存或径流诊断。因此Mode6水分剖面比漫灌略干。这是当前MAIZSIM/2DSOIL求解器内的可闭合近似结果，不应解释为HYDRUS官方算例精度验证。
 
 2026-06-06在HUTD06短窗算例中运行了三组`Mode6`地表滴灌验证，事件窗口为`04/01/2006 00:00`到`04/01/2006 04:00`，中心节点为`7`。验证文件放在HDD的`D:\Codex\codex_mode6_validation_20260606`下，解析后已清理临时目录。
 

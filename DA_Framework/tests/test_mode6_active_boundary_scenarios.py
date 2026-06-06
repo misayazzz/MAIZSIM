@@ -21,17 +21,33 @@ def test_mode6_low_flow_starts_as_center_flux_boundary():
     assert "sourcedemandflux=sourcerate*dripsourcewidth(jj)" in drip
     assert "sourceflux=sourcedemandflux*pressurefactor" in drip
     assert "dripmode6centerbnd(mode6source)=centerbnd" in drip
-    assert "dripmode6fluxactive(centerbnd)=1" in drip
-    assert "dripmode6assignedflux(centerbnd)" in drip
+    assert "desiredradius=0" in drip
+    assert "mode6left=max(1,centerpos-desiredradius)" in drip
+    assert "dripmode6fluxactive(dripsurfbnd(k))=1" in drip
+    assert "dripmode6assignedflux(dripsurfbnd(k))" in drip
 
 
-def test_mode6_high_flow_switches_overloaded_flux_nodes_to_zero_head():
+def test_mode6_positive_head_flux_nodes_switch_to_zero_head():
     water_mover = _compact(_source(WATER_MOVER_SOURCE))
 
-    assert "mode6assigned-dmax1(dble(qact(n)),0.0d0).gt." in water_mover
+    assert "hnew(n).gt.sngl(mode6tol)" in water_mover
+    assert "mode6assigned-dmax1(dble(qact(n)),0.0d0).gt." not in water_mover
     assert "dripmode6fluxactive(k)=0" in water_mover
     assert "dripmode6headactive(k)=1" in water_mover
     assert "hnew(n)=0.0" in water_mover
+
+
+def test_mode6_uses_hydrus_positive_head_trigger_without_flux_cap():
+    water_mover = _compact(_source(WATER_MOVER_SOURCE))
+
+    assert "dripmode6boundedflux(i).ne.1" in water_mover
+    assert "hnew(n).gt.sngl(mode6tol)" in water_mover
+    assert "mode6actual.gt.mode6assigned+mode6tol" in water_mover
+    assert "dripmode6boundedflux(k)=1" in water_mover
+    assert "mode6fluxlimit" not in water_mover
+    assert "mode6headpresent" not in water_mover
+    assert "dripmode6fluxactive(i).ne.1" in water_mover
+    assert "mode6needresolve=1" in water_mover
 
 
 def test_mode6_remaining_flux_expands_to_neighboring_surface_ring():
