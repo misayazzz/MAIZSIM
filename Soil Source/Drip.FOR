@@ -531,45 +531,38 @@ c WaterMover assigns the active flux/head boundaries from this state.
                 DripMode6CandidateOwner(DripSurfBnd(k))=Mode6Source
               EndDo
               DesiredRadius=0
-              Do CandidateRadius=0,MaxRadius
-                CandidateLeft=max(1,CenterPos-CandidateRadius)
-                CandidateRight=min(DripSurfCount,
-     !            CenterPos+CandidateRadius)
-                CapSum=0.0
-                TotalMeasure=0.0
-                Do k=CandidateLeft,CandidateRight
-                  TestNode=DripSurfNode(k)
-                  LocalMeasure=Width(DripSurfBnd(k))
-                  If(LocalMeasure.gt.DripTol) then
-                    TotalMeasure=TotalMeasure+LocalMeasure
-                    LocalCap=0.01*ConSat(MatNumN(TestNode))*
-     !                LocalMeasure
-                    CapSum=CapSum+LocalCap
-                  Endif
-                EndDo
-                If(CapSum.ge.SourceFlux.or.
-     !            CandidateRadius.eq.MaxRadius) then
-                  DesiredRadius=CandidateRadius
-                  GoTo 515
-                Endif
-              EndDo
- 515          Continue
               DripMode6CurrentRadius(Mode6Source)=DesiredRadius
               If(SourceFlux.le.DripTol) then
                 DripMode6Closed(Mode6Source)=1
               Else
-                Mode6Left=max(1,CenterPos-DesiredRadius)
-                Mode6Right=min(DripSurfCount,CenterPos+DesiredRadius)
-                TotalMeasure=0.0
-                Do k=Mode6Left,Mode6Right
-                  TotalMeasure=TotalMeasure+Width(DripSurfBnd(k))
-                EndDo
+                Mode6Left=CenterPos
+                Mode6Right=CenterPos
+                TotalMeasure=Width(CenterBnd)
+                TestNode=SourceNode
+                LocalCapFactor=1.0+amax1(0.0,-hNew(TestNode))/25.0
+                LocalCapFactor=amax1(1.0,amin1(5.0,LocalCapFactor))
+                ReleaseCap=ConSat(MatNumN(TestNode))*LocalCapFactor*
+     !            Width(CenterBnd)
                 If(TotalMeasure.le.DripTol) then
                   TotalMeasure=Width(CenterBnd)
                   Mode6Left=CenterPos
                   Mode6Right=CenterPos
                 Endif
-                If(DesiredRadius.gt.0) then
+                If(SourceFlux.gt.ReleaseCap) then
+c High emitter rates can make repeated h=0 re-solves unstable in the
+c current WaterMover. Keep the water local with a bounded surface
+c source over the configured Mode 6 candidate range.
+                  Mode6Left=max(1,CenterPos-MaxRadius)
+                  Mode6Right=min(DripSurfCount,CenterPos+MaxRadius)
+                  TotalMeasure=0.0
+                  Do k=Mode6Left,Mode6Right
+                    TotalMeasure=TotalMeasure+Width(DripSurfBnd(k))
+                  EndDo
+                  If(TotalMeasure.le.DripTol) then
+                    TotalMeasure=Width(CenterBnd)
+                    Mode6Left=CenterPos
+                    Mode6Right=CenterPos
+                  Endif
                   DripMode6Closed(Mode6Source)=1
                   AddRate=SourceFlux/TotalMeasure
                   DemandRate=SourceDemandFlux/TotalMeasure
@@ -618,8 +611,7 @@ c WaterMover assigns the active flux/head boundaries from this state.
      !                DripMode6AssignedFlux(DripSurfBnd(k))+
      !                dble(SourceFlux*Width(DripSurfBnd(k))/
      !                TotalMeasure)
-                    DripMode6BoundaryOwner(DripSurfBnd(k))=
-     !                Mode6Source
+                    DripMode6BoundaryOwner(DripSurfBnd(k))=Mode6Source
                   EndDo
                 Endif
               Endif

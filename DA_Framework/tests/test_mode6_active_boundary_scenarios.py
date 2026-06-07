@@ -15,14 +15,17 @@ def _compact(text):
     return re.sub(r"[\s!&]+", "", text.lower())
 
 
-def test_mode6_low_flow_starts_as_center_flux_boundary():
+def test_mode6_uses_center_active_boundary_or_local_high_flow_fallback():
     drip = _compact(_source(DRIP_SOURCE))
 
     assert "sourcedemandflux=sourcerate*dripsourcewidth(jj)" in drip
     assert "sourceflux=sourcedemandflux*pressurefactor" in drip
     assert "dripmode6centerbnd(mode6source)=centerbnd" in drip
     assert "desiredradius=0" in drip
-    assert "mode6left=max(1,centerpos-desiredradius)" in drip
+    assert "mode6left=centerpos" in drip
+    assert "mode6right=centerpos" in drip
+    assert "if(sourceflux.gt.releasecap)then" in drip
+    assert "dripmode6rateactive(dripsurfbnd(k))=1" in drip
     assert "dripmode6fluxactive(dripsurfbnd(k))=1" in drip
     assert "dripmode6assignedflux(dripsurfbnd(k))" in drip
 
@@ -58,6 +61,8 @@ def test_mode6_remaining_flux_expands_to_neighboring_surface_ring():
     assert "dripmode6currentradius(mode6source)=mode6radius" in water_mover
     assert "dripmode6assignedflux(mode6bnd)=" in water_mover
     assert "dble(width(mode6bnd))/mode6newmeasure" in water_mover
+    assert "dripmode6assignedflux(mode6bnd)=mode6store" in water_mover
+    assert "dripmode6boundedflux(mode6bnd)=1" in water_mover
 
 
 def test_mode6_wet_width_limit_routes_unaccepted_water_to_storage_or_runoff():

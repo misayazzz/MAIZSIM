@@ -159,7 +159,7 @@ python -m unittest discover -s DA_Framework/tests
 
 `da_framework.drip_validation`、`hydrus_aligned_validation`和示例输入生成器当前接受`DripSpreadMode=0/5/6`，并拒绝已废弃的`1/2/3/4`。`Mode5`和`Mode6`都必须提供正的`DripSourceWidth`；如果输入记录提供`DripSourceWidth`但省略`DripSpreadMode`，工具仍按兼容规则默认写出`Mode5`。
 
-`Mode6`表示地表滴灌活动边界近似：低流量时总供水率先给中心地表边界，无法接纳时切换为`h=0`头边界，再把剩余流量递推给邻近地表边界。对当前WaterMover数值上较硬的高流量场景，Fortran求解器会先按保守容量估计把候选湿润带预展开到允许宽度，并通过稳定地表源路径核算实际入渗和剩余水量。G05解析会识别以下额外列：
+`Mode6`表示地表滴灌活动边界近似：低流量时总供水率先给中心地表边界，无法接纳时切换为`h=0`头边界，再把剩余流量递推给邻近地表边界。对当前WaterMover数值上较硬的高流量场景，Fortran求解器使用受`DripWetWidthMax`限制的局部稳定地表源兜底路径，核算实际入渗和剩余水量。若`DripWetWidthMax`设为整条作物半域，二维图形会接近全宽地表供水；要检查局部滴灌湿润体，应给出较小的局部上限。G05解析会识别以下额外列：
 
 ```text
 DripMode6Accepted

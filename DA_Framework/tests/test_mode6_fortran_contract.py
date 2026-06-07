@@ -49,11 +49,13 @@ def test_mode6_drip_registers_activity_without_mode5_distribution():
     assert mode6_pos < mode5_pos
     assert "dripmode6inputflux(mode6source)=dble(sourceflux)" in drip
     assert "desiredradius=0" in drip
-    assert "localcap=0.01*consat(matnumn(testnode))*localmeasure" in drip
-    assert "mode6left=max(1,centerpos-desiredradius)" in drip
-    assert "dripmode6fluxactive(dripsurfbnd(k))=1" in drip
-    assert "if(desiredradius.gt.0)then" in drip
+    assert "mode6left=centerpos" in drip
+    assert "mode6right=centerpos" in drip
+    assert "if(sourceflux.gt.releasecap)then" in drip
     assert "dripmode6rateactive(dripsurfbnd(k))=1" in drip
+    assert "dripmode6fluxactive(dripsurfbnd(k))=1" in drip
+    assert "if(desiredradius.gt.0)then" not in drip
+    assert "localcap=0.01*consat" not in drip
     assert "dripmode6assignedflux(dripsurfbnd(k))" in drip
     assert "dripspreadmode(jj).eq.6.and.maxwetwidth.ge.surfacewidth-driptol" in drip
     assert "gotot520" not in drip
@@ -75,7 +77,7 @@ def test_mode6_water_mover_active_boundary_contract():
     assert "qact(n)=qn" in water_mover
     assert "dripmode6remainingflux" in water_mover
     assert "goto1111" in water_mover
-    assert "mode6maxiter=min(2*numbp+2,100)" in water_mover
+    assert "mode6maxiter=min(4,2*numbp+2)" in water_mover
     assert "mode6boundaryactive=0" in water_mover
     assert "if(mode6boundaryactive.eq.1)then" in water_mover
     assert "hnew(n).gt.sngl(mode6tol)" in water_mover

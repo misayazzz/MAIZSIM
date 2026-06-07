@@ -169,6 +169,7 @@ cccz set the auto irrgation part before the iteration
           If(DripMode6HeadActive(k).eq.1) then
             CodeW(i)=4
             hNew(i)=0.0
+            hOld(i)=0.0
             Q(i)=0.0
           ElseIf(DripMode6FluxActive(k).eq.1) then
             CodeW(i)=-4
@@ -647,7 +648,7 @@ c
         EndDo
         If(Mode6BoundaryActive.eq.1) then
         Mode6Tol=1.0D-8
-        Mode6MaxIter=min(2*NumBP+2,100)
+        Mode6MaxIter=min(4,2*NumBP+2)
         If(Mode6MaxIter.lt.1) Mode6MaxIter=1
         DripMode6IterationCount=DripMode6IterationCount+1
         Mode6NeedResolve=0
@@ -727,6 +728,7 @@ c
                       DripMode6HeadActive(k)=1
                       DripMode6BoundedFlux(k)=0
                       hNew(n)=0.0
+                      hOld(n)=0.0
                       Mode6Converted=1
                     Endif
                   Endif
@@ -748,6 +750,7 @@ c
                       DripMode6HeadActive(k)=1
                       DripMode6BoundedFlux(k)=0
                       hNew(n)=0.0
+                      hOld(n)=0.0
                       Mode6Converted=1
                     Endif
                   Endif
@@ -802,6 +805,18 @@ c
                         DripMode6AssignedFlux(Mode6Bnd)=
      !                    Mode6Remaining(Mode6Source)*
      !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
+                        n=KXB(Mode6Bnd)
+                        Mode6StorageAvail=1.0D0+
+     !                    dmax1(0.0D0,-dble(hNew(n)))/25.0D0
+                        Mode6StorageAvail=dmax1(1.0D0,
+     !                    dmin1(5.0D0,Mode6StorageAvail))
+                        Mode6Store=dble(ConSat(MatNumN(n)))*
+     !                    Mode6StorageAvail*dble(Width(Mode6Bnd))
+                        If(DripMode6AssignedFlux(Mode6Bnd).gt.
+     !                    Mode6Store) then
+                          DripMode6AssignedFlux(Mode6Bnd)=Mode6Store
+                          DripMode6BoundedFlux(Mode6Bnd)=1
+                        Endif
                       Endif
                     Endif
                     If(Mode6NewRight.le.DripSurfCount.and.
@@ -817,6 +832,18 @@ c
                         DripMode6AssignedFlux(Mode6Bnd)=
      !                    Mode6Remaining(Mode6Source)*
      !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
+                        n=KXB(Mode6Bnd)
+                        Mode6StorageAvail=1.0D0+
+     !                    dmax1(0.0D0,-dble(hNew(n)))/25.0D0
+                        Mode6StorageAvail=dmax1(1.0D0,
+     !                    dmin1(5.0D0,Mode6StorageAvail))
+                        Mode6Store=dble(ConSat(MatNumN(n)))*
+     !                    Mode6StorageAvail*dble(Width(Mode6Bnd))
+                        If(DripMode6AssignedFlux(Mode6Bnd).gt.
+     !                    Mode6Store) then
+                          DripMode6AssignedFlux(Mode6Bnd)=Mode6Store
+                          DripMode6BoundedFlux(Mode6Bnd)=1
+                        Endif
                       Endif
                     Endif
                     Mode6NeedResolve=1
