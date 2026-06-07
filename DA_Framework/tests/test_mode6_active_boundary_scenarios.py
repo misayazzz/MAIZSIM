@@ -15,19 +15,18 @@ def _compact(text):
     return re.sub(r"[\s!&]+", "", text.lower())
 
 
-def test_mode6_uses_center_active_boundary_or_local_high_flow_fallback():
+def test_mode6_uses_center_active_boundary_without_local_fallback():
     drip = _compact(_source(DRIP_SOURCE))
 
     assert "sourcedemandflux=sourcerate*dripsourcewidth(jj)" in drip
     assert "sourceflux=sourcedemandflux*pressurefactor" in drip
     assert "dripmode6centerbnd(mode6source)=centerbnd" in drip
     assert "desiredradius=0" in drip
-    assert "mode6left=centerpos" in drip
-    assert "mode6right=centerpos" in drip
-    assert "if(sourceflux.gt.releasecap)then" in drip
-    assert "dripmode6rateactive(dripsurfbnd(k))=1" in drip
-    assert "dripmode6fluxactive(dripsurfbnd(k))=1" in drip
-    assert "dripmode6assignedflux(dripsurfbnd(k))" in drip
+    assert "dripmode6fluxactive(centerbnd)=1" in drip
+    assert "dripmode6assignedflux(centerbnd)" in drip
+    assert "dripmode6boundaryowner(centerbnd)=mode6source" in drip
+    assert "if(sourceflux.gt.releasecap)then" not in drip
+    assert "dripmode6rateactive" not in drip
 
 
 def test_mode6_positive_head_flux_nodes_switch_to_zero_head():
@@ -43,14 +42,22 @@ def test_mode6_positive_head_flux_nodes_switch_to_zero_head():
 def test_mode6_uses_hydrus_positive_head_trigger_without_flux_cap():
     water_mover = _compact(_source(WATER_MOVER_SOURCE))
 
-    assert "dripmode6boundedflux(i).ne.1" in water_mover
     assert "hnew(n).gt.sngl(mode6tol)" in water_mover
-    assert "mode6actual.gt.mode6assigned+mode6tol" in water_mover
-    assert "dripmode6boundedflux(k)=1" in water_mover
+    assert "mode6actual.gt.mode6assigned+mode6tol" not in water_mover
+    assert "dripmode6boundedflux" not in water_mover
     assert "mode6fluxlimit" not in water_mover
     assert "mode6headpresent" not in water_mover
     assert "dripmode6fluxactive(i).ne.1" in water_mover
     assert "mode6needresolve=1" in water_mover
+
+
+def test_mode6_solver_limit_is_reported_before_time_step_fallback():
+    water_mover = _compact(_source(WATER_MOVER_SOURCE))
+
+    assert "mode6solvermaxit=max(maxit,60)" in water_mover
+    assert "dripmode6solverlimit_sum=dripmode6solverlimit_sum+dt" in water_mover
+    assert "goto619" in water_mover
+    assert "mode6nonconv" not in water_mover
 
 
 def test_mode6_remaining_flux_expands_to_neighboring_surface_ring():
@@ -61,8 +68,8 @@ def test_mode6_remaining_flux_expands_to_neighboring_surface_ring():
     assert "dripmode6currentradius(mode6source)=mode6radius" in water_mover
     assert "dripmode6assignedflux(mode6bnd)=" in water_mover
     assert "dble(width(mode6bnd))/mode6newmeasure" in water_mover
-    assert "dripmode6assignedflux(mode6bnd)=mode6store" in water_mover
-    assert "dripmode6boundedflux(mode6bnd)=1" in water_mover
+    assert "dripmode6assignedflux(mode6bnd)=mode6store" not in water_mover
+    assert "dripmode6boundedflux" not in water_mover
 
 
 def test_mode6_wet_width_limit_routes_unaccepted_water_to_storage_or_runoff():

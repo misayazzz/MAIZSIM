@@ -54,7 +54,8 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6AssignedFlux(NumBPD),
      !      DripMode6Accepted_Flux,DripMode6Remaining_Flux,
      !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
-     !      DripMode6Iterations_Sum,DripMode6Diag_Time
+     !      DripMode6Iterations_Sum,DripMode6SolverLimit_Sum,
+     !      DripMode6Diag_Time
        Integer DripMode6Active,DripMode6Count,
      !      DripMode6CenterPos(MaxDripMode6D),
      !      DripMode6CenterBnd(MaxDripMode6D),
@@ -63,8 +64,6 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6Closed(MaxDripMode6D),
      !      DripMode6FluxActive(NumBPD),
      !      DripMode6HeadActive(NumBPD),
-     !      DripMode6BoundedFlux(NumBPD),
-     !      DripMode6RateActive(NumBPD),
      !      DripMode6CandidateOwner(NumBPD),
      !      DripMode6BoundaryOwner(NumBPD),
      !      DripMode6IterationCount
@@ -74,12 +73,12 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6PressureFactor,DripMode6AssignedFlux,
      !      DripMode6Accepted_Flux,DripMode6Remaining_Flux,
      !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
-     !      DripMode6Iterations_Sum,DripMode6Diag_Time,
+     !      DripMode6Iterations_Sum,DripMode6SolverLimit_Sum,
+     !      DripMode6Diag_Time,
      !      DripMode6Active,DripMode6Count,DripMode6CenterPos,
      !      DripMode6CenterBnd,DripMode6MaxRadius,
      !      DripMode6CurrentRadius,DripMode6Closed,
      !      DripMode6FluxActive,DripMode6HeadActive,
-     !      DripMode6BoundedFlux,DripMode6RateActive,
      !      DripMode6CandidateOwner,DripMode6BoundaryOwner,
      !      DripMode6IterationCount
 

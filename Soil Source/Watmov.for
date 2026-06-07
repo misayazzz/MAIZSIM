@@ -46,8 +46,8 @@ cccz  Double precision CriticalH, CriticalH_R
      !        Mode6NeedResolve,Mode6Source,Mode6Bnd,
      !        Mode6Node,Mode6Radius,Mode6NewLeft,Mode6NewRight,
      !        Mode6HeadCount,Mode6FluxCount,Mode6ActiveCount,
-     !        Mode6MaxIter,Mode6Converted,Mode6Done,
-     !        Mode6BoundaryActive,Mode6RateCount
+     !        Mode6MaxIter,Mode6SolverMaxIt,Mode6Converted,Mode6Done,
+     !        Mode6BoundaryActive
       Integer BaseCodeW(NumNPD)
       Dimension A(MBandD,NumNPD),B(NumNPD),F(NumNPD),DS(NumNPD),
      !    Cap(NumNPD),ListE(NumElD),E(3,3),iLoc(3),Fc(NumNPD),
@@ -445,8 +445,7 @@ cMK-----------------------------------------------------------------------------
 
 		if ((CodeW(n).eq.-4).and.(q(n).gt.0).and.
      !      ((DripMode6Active.ne.1).or.
-     !      (DripMode6FluxActive(i).ne.1).or.
-     !      (DripMode6BoundedFlux(i).ne.1))) then
+     !      (DripMode6FluxActive(i).ne.1))) then
 c Ponded infiltration measurement is from Misha Kouznetzov
 			HSP=0.009D0 !EMPIRICAL PARAMETER, HSP~=dz/3 - was 0.03
 			PI=3.141592653589793238D0
@@ -606,34 +605,73 @@ c               Dif(i)=EpsH
 615     continue
 616   Continue
       If (.not.ItCrit) then
-        If (Iter.lt.MaxIt.AND.hMax.lt.10.*abs(hCritA)) then
+        Mode6SolverMaxIt=MaxIt
+        If(DripMode6Active.eq.1) Mode6SolverMaxIt=max(MaxIt,60)
+        If (Iter.lt.Mode6SolverMaxIt.AND.
+     !      hMax.lt.10.*abs(hCritA)) then
 c adjust for runoff within an iteration
  
 
           Goto 12
-        Elseif (dt.le.dtMin) then
-          Explic=.true.
-          Do 617 i=1,NumNP
-            hNew(i) =hOld(i)
-            hTemp(i)=hOld(i)
-617       Continue
-          Goto 12
         Else
+          If(DripMode6Active.eq.1) then
+            Mode6Tol=1.0D-8
+            Mode6MaxIter=1
+            Do Mode6Source=1,DripMode6Count
+              Mode6MaxIter=max(Mode6MaxIter,
+     !        2*DripMode6MaxRadius(Mode6Source)+3)
+            EndDo
+            Mode6MaxIter=min(Mode6MaxIter,50)
+            If(DripMode6IterationCount.lt.Mode6MaxIter) then
+              Mode6Converted=0
+              Do k=1,NumBP
+                If(DripMode6FluxActive(k).eq.1) then
+                  n=KXB(k)
+                  If(hNew(n).gt.sngl(Mode6Tol)) then
+                    DripMode6FluxActive(k)=0
+                    DripMode6HeadActive(k)=1
+                    hNew(n)=0.0
+                    hOld(n)=0.0
+                    hTemp(n)=0.0
+                    Mode6Converted=1
+                  Endif
+                Endif
+              EndDo
+              If(Mode6Converted.eq.1) then
+                DripMode6IterationCount=DripMode6IterationCount+1
+                Goto 1111
+              Endif
+            Endif
+            If(Iter.ge.Mode6SolverMaxIt.and.
+     !        hMax.lt.10.*abs(hCritA)) then
+              DripMode6SolverLimit_Sum=DripMode6SolverLimit_Sum+dt
+              Goto 619
+            Endif
+          Endif
+          If (dt.le.dtMin) then
+            Explic=.true.
+            Do 617 i=1,NumNP
+              hNew(i) =hOld(i)
+              hTemp(i)=hOld(i)
+617         Continue
+            Goto 12
+          Else
 C
 C   Save new boundary conditions If any
 C
-          Do i=1,NumNP
-            If (CodeW(i).gt.0) hOld(i)=hNew(i)
-          Enddo
+            Do i=1,NumNP
+              If (CodeW(i).gt.0) hOld(i)=hNew(i)
+            Enddo
 
-          Do 618 i=1,NumNP
-            hNew(i) =hOld(i)
-            hTemp(i)=hOld(i)
-618       Continue
-          dt=dmax1(dt/3.0D0,dtMin)
-          dtOpt=dt
-          t=tOld+dt
-          goto 1111
+            Do 618 i=1,NumNP
+              hNew(i) =hOld(i)
+              hTemp(i)=hOld(i)
+618         Continue
+            dt=dmax1(dt/3.0D0,dtMin)
+            dtOpt=dt
+            t=tOld+dt
+            goto 1111
+          Endif
         Endif
       Endif
 c
@@ -648,7 +686,12 @@ c
         EndDo
         If(Mode6BoundaryActive.eq.1) then
         Mode6Tol=1.0D-8
-        Mode6MaxIter=min(4,2*NumBP+2)
+        Mode6MaxIter=1
+        Do Mode6Source=1,DripMode6Count
+          Mode6MaxIter=max(Mode6MaxIter,
+     !      2*DripMode6MaxRadius(Mode6Source)+3)
+        EndDo
+        Mode6MaxIter=min(Mode6MaxIter,50)
         If(Mode6MaxIter.lt.1) Mode6MaxIter=1
         DripMode6IterationCount=DripMode6IterationCount+1
         Mode6NeedResolve=0
@@ -684,15 +727,6 @@ c
               Mode6Actual=Mode6Assigned
             Else
               Mode6Actual=dmax1(dble(QN),0.0D0)
-              If(DripMode6HeadActive(k).eq.1.and.
-     !          Mode6Assigned.gt.Mode6Tol.and.
-     !          Mode6Actual.gt.Mode6Assigned+Mode6Tol) then
-                DripMode6HeadActive(k)=0
-                DripMode6FluxActive(k)=1
-                DripMode6BoundedFlux(k)=1
-                Mode6Actual=Mode6Assigned
-                Mode6NeedResolve=1
-              Endif
             Endif
             Mode6Accepted(Mode6Source)=
      !        Mode6Accepted(Mode6Source)+Mode6Actual
@@ -720,13 +754,11 @@ c
                 Mode6Converted=0
                 Do k=1,NumBP
                   If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
-     !              DripMode6FluxActive(k).eq.1.and.
-     !              DripMode6BoundedFlux(k).ne.1) then
+     !              DripMode6FluxActive(k).eq.1) then
                     n=KXB(k)
                     If(hNew(n).gt.sngl(Mode6Tol)) then
                       DripMode6FluxActive(k)=0
                       DripMode6HeadActive(k)=1
-                      DripMode6BoundedFlux(k)=0
                       hNew(n)=0.0
                       hOld(n)=0.0
                       Mode6Converted=1
@@ -742,13 +774,11 @@ c
                 Mode6Converted=0
                 Do k=1,NumBP
                   If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
-     !              DripMode6FluxActive(k).eq.1.and.
-     !              DripMode6BoundedFlux(k).ne.1) then
+     !              DripMode6FluxActive(k).eq.1) then
                     n=KXB(k)
                     If(hNew(n).gt.sngl(Mode6Tol)) then
                       DripMode6FluxActive(k)=0
                       DripMode6HeadActive(k)=1
-                      DripMode6BoundedFlux(k)=0
                       hNew(n)=0.0
                       hOld(n)=0.0
                       Mode6Converted=1
@@ -800,23 +830,10 @@ c
      !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
      !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
                         DripMode6FluxActive(Mode6Bnd)=1
-                        DripMode6BoundedFlux(Mode6Bnd)=0
                         DripMode6BoundaryOwner(Mode6Bnd)=Mode6Source
                         DripMode6AssignedFlux(Mode6Bnd)=
      !                    Mode6Remaining(Mode6Source)*
      !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
-                        n=KXB(Mode6Bnd)
-                        Mode6StorageAvail=1.0D0+
-     !                    dmax1(0.0D0,-dble(hNew(n)))/25.0D0
-                        Mode6StorageAvail=dmax1(1.0D0,
-     !                    dmin1(5.0D0,Mode6StorageAvail))
-                        Mode6Store=dble(ConSat(MatNumN(n)))*
-     !                    Mode6StorageAvail*dble(Width(Mode6Bnd))
-                        If(DripMode6AssignedFlux(Mode6Bnd).gt.
-     !                    Mode6Store) then
-                          DripMode6AssignedFlux(Mode6Bnd)=Mode6Store
-                          DripMode6BoundedFlux(Mode6Bnd)=1
-                        Endif
                       Endif
                     Endif
                     If(Mode6NewRight.le.DripSurfCount.and.
@@ -827,23 +844,10 @@ c
      !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
      !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
                         DripMode6FluxActive(Mode6Bnd)=1
-                        DripMode6BoundedFlux(Mode6Bnd)=0
                         DripMode6BoundaryOwner(Mode6Bnd)=Mode6Source
                         DripMode6AssignedFlux(Mode6Bnd)=
      !                    Mode6Remaining(Mode6Source)*
      !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
-                        n=KXB(Mode6Bnd)
-                        Mode6StorageAvail=1.0D0+
-     !                    dmax1(0.0D0,-dble(hNew(n)))/25.0D0
-                        Mode6StorageAvail=dmax1(1.0D0,
-     !                    dmin1(5.0D0,Mode6StorageAvail))
-                        Mode6Store=dble(ConSat(MatNumN(n)))*
-     !                    Mode6StorageAvail*dble(Width(Mode6Bnd))
-                        If(DripMode6AssignedFlux(Mode6Bnd).gt.
-     !                    Mode6Store) then
-                          DripMode6AssignedFlux(Mode6Bnd)=Mode6Store
-                          DripMode6BoundedFlux(Mode6Bnd)=1
-                        Endif
                       Endif
                     Endif
                     Mode6NeedResolve=1
@@ -1035,17 +1039,6 @@ cdt - calculate actual boundary fluxes to see what we have
   
  1299   Continue
 
-      If(DripMode6Active.eq.1) then
-        Do k=1,NumBP
-          If(DripMode6BoundaryOwner(k).gt.0.and.
-     !      DripMode6FluxActive(k).eq.1) then
-            n=KXB(k)
-            QAct(n)=sngl(DripMode6AssignedFlux(k))
-          Endif
-        EndDo
-      Endif
-
-      
 cdt - calculate available water content in root zone
 
       ThetaAvailRZ=0.0
@@ -1084,8 +1077,6 @@ c*         Loop on subelements
 cccz start to calculate the runoff
 cccz this is the water source part, i.e., the exfiltration from soil surface
 c only calculate this when the surface nodes are atmospheric boundary nodes
-      Mode6RateCount=0
-      Mode6RateWidth=0.0D0
       do k=1, NumBp
         i=KXB(k)
         if (((hnew(i).ge.CriticalH)).and.(abs(codeW(i)).eq.4)) then
@@ -1108,22 +1099,6 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           DripActual=dmax1(DripPotential-DripExcess,0.0D0)
           DripActualInfil_Flux=DripActualInfil_Flux+
      !      DripActual*Step
-          If(DripMode6Active.eq.1.and.
-     !      DripMode6RateActive(k).eq.1) then
-            Mode6Source=DripMode6BoundaryOwner(k)
-            If(Mode6Source.gt.0) then
-              DripMode6AcceptedFlux(Mode6Source)=
-     !        DripMode6AcceptedFlux(Mode6Source)+DripActual
-              DripMode6RemainingFlux(Mode6Source)=
-     !        DripMode6RemainingFlux(Mode6Source)+DripExcess
-            Endif
-            DripMode6Accepted_Flux=DripMode6Accepted_Flux+
-     !      DripActual*Step
-            DripMode6Remaining_Flux=DripMode6Remaining_Flux+
-     !      DripExcess*Step
-            Mode6RateCount=Mode6RateCount+1
-            Mode6RateWidth=Mode6RateWidth+dble(Width(k))
-          Endif
           If(DripStorageActive(k).eq.1) then
             If(DripPotential.gt.0.0D0) then
               DripNewExcess=DripExcess*DripNew/DripPotential
@@ -1161,12 +1136,6 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           Endif
         Endif
        Enddo
-      If(Mode6RateCount.gt.0) then
-        DripMode6FluxNodes_Sum=DripMode6FluxNodes_Sum+
-     !    dble(Mode6RateCount)*Step
-        DripMode6Iterations_Sum=DripMode6Iterations_Sum+Step
-        DripMode6Diag_Time=DripMode6Diag_Time+Step
-      Endif
 cccz turn this on for Ex_4 plastic mulching
 cccz #ifdef EX_4P
 cccz                 if (k.ge.2.and.k.le.7) then

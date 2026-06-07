@@ -6,42 +6,39 @@
 
 当前实现要点：
 
-- `Drip.FOR`读取和校验`DripSpreadMode=6`，用`DripSourceWidth`把`wAppl`转换为滴头总供水率，并登记中心地表边界和候选活动范围。
-- 低流量且中心节点容量检查可承受时，`Watmov.for`在Richards求解中恢复基础`Q/CodeW`，应用`Mode6`通量边界或`h=0`头边界，求解后用`QAct`计算实际接纳量，再把剩余流量递推给下一候选环。
-- 高流量场景若直接活动重解会使当前WaterMover出现ORTHOMIN发散或近零步长，`Drip.FOR`不再按`0.01 * Ks`预展开到整条允许宽度，而是使用受`DripWetWidthMax`限制的局部稳定地表源兜底路径，并在已有实际入渗核算处记录`Mode6`的accepted/remaining诊断。这是MAIZSIM/2DSOIL内的求解稳定性兜底，不是HYDRUS完整数值内核复刻。
+- `Drip.FOR`读取和校验`DripSpreadMode=6`，用`DripSourceWidth`把`wAppl`转换为滴头总供水率，只登记中心地表通量边界和候选活动范围，不按局部面源预分配最终`DripRate`。
+- `Watmov.for`在Richards求解中恢复基础`Q/CodeW`，应用`Mode6`通量边界或`h=0`头边界；若通量节点求解所需压力头为正，则切换为`h=0`并重解，用WaterMover得到的实际入渗量`QAct`计算接纳量，再把剩余流量递推给下一候选环。
+- 当前实现不再把高流量`Mode6`静默降级为受`DripWetWidthMax`限制的局部稳定地表源。若达到`DripWetWidthMax`、地表边界、活动边界迭代上限或`Mode6`专属非线性迭代上限，必须通过G05的`DripMode6Remaining`、`DripMode6SolverLimit`、暂存和径流列显式诊断，不能作为HYDRUS-style成功闭合处理。
 - 达到`DripWetWidthMax`、地表边界或内部迭代上限后仍未接纳的剩余水量，优先进入`DripSurfaceStorage`，超出暂存容量的部分进入`DripSurfaceRunoff_Flux`。
-- `OUTPUT.FOR`的G05新增`DripMode6Accepted`、`DripMode6Remaining`、`DripMode6HeadNodes`、`DripMode6FluxNodes`、`DripMode6Iterations`和`DripMode6ClosureResidual`。
+- `OUTPUT.FOR`的G05新增`DripMode6Accepted`、`DripMode6Remaining`、`DripMode6HeadNodes`、`DripMode6FluxNodes`、`DripMode6Iterations`、`DripMode6SolverLimit`和`DripMode6ClosureResidual`。
 - Python输入生成和验证工具接受`0/5/6`，`Mode5/Mode6`均要求正`DripSourceWidth`；未写`DripSpreadMode`但写`DripSourceWidth`时仍默认写出`Mode5`。
 - `DripWetWidthMax`直接约束可见湿润斑范围；若把它设为整条作物半域，50 mm高流量算例会接近全宽地表供水，不能用于判断滴灌湿润锋形态。
 
 ## 已验证行为
 
-2026-06-07重新运行了50 mm二维作物半域算例，基础目录为`D:\Codex\codex_mode6_local_shape_test_20260607`。每种土壤均运行`baseline`、`Mode6 drip`和`Flood flux`三组；滴灌事件为`05/18/2007 00:00`到`05/22/2007 00:00`，`DripSourceWidth=1.0 cm`，`DripWetWidthMax=12.0 cm`，滴头位于左边界节点`1`，未对供水量自动折半。所有6个case的stdout均结束于`Finished at 39224.0000000000`。
+2026-06-07重新运行了50 mm二维作物半域算例，基础目录为`D:\Codex\codex_mode6_strict_surface_drip_20260607`。只使用壤土和砂壤土；每种土壤均运行`baseline`、`Mode5 drip`、`Mode6 drip`和`Flood flux`四组。滴灌事件为`04/28/2007 00:00`到`04/29/2007 00:00`，持续`24 h`；`DripSourceWidth=1.0 cm`，`DripWetWidthMax=12.0 cm`，滴头位于左边界节点`1`，`wAppl=7.9375 cm/h`，对应半域全宽`38.1 cm`上的50 mm供水量，未对供水量自动折半。漫灌用全地表均匀通量`5.0 cm/d`。
 
-| 土壤 | 处理 | G05输入或供水 | G05实际入渗 | G05 Mode6剩余 | 最大湿润宽度 | 近地表剖面结果 |
+| 土壤 | 处理 | G05输入或供水 | G05实际入渗 | G05 Mode6剩余 | 最大湿润宽度 | Mode6活动诊断 |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| 壤土 | Mode6 drip | `DripInput=50.002 mm` | `DripActualInfil=50.002 mm` | `0.000 mm` | `10.23 cm` | `theta_mean_top100=0.2721` |
-| 壤土 | Flood flux | `50 mm`漫灌目标 | G05总`infil=86.711 mm` | 不适用 | 全地表 | `theta_mean_top100=0.2896` |
-| 砂壤土 | Mode6 drip | `DripInput=50.001 mm` | `DripActualInfil=50.001 mm` | `0.000 mm` | `10.23 cm` | `theta_mean_top100=0.1941` |
-| 砂壤土 | Flood flux | `50 mm`漫灌目标 | G05总`infil=86.620 mm` | 不适用 | 全地表 | `theta_mean_top100=0.1748` |
+| 壤土 | baseline | `0.000 mm` | `0.000 mm` | `0.000 mm` | `0.00 cm` | 无滴灌 |
+| 壤土 | Mode5 drip | `DripInput=50.012 mm` | `DripActualInfil=50.012 mm` | `0.000 mm` | `6.005 cm` | 不适用 |
+| 壤土 | Mode6 drip | `DripInput=50.040 mm` | `DripActualInfil=50.040 mm` | `0.001 mm` | `10.23 cm` | `HeadNodes=2.956`，`FluxNodes=2.879`，`Iterations=8.791`，`SolverLimit=1.0` |
+| 壤土 | Flood flux | `50.000 mm`漫灌目标 | G05总`Infil=50.000 mm` | `0.000 mm` | 全地表 | 不适用 |
+| 砂壤土 | baseline | `0.000 mm` | `0.000 mm` | `0.000 mm` | `0.00 cm` | 无滴灌 |
+| 砂壤土 | Mode5 drip | `DripInput=49.996 mm` | `DripActualInfil=49.996 mm` | `0.000 mm` | `2.158 cm` | 不适用 |
+| 砂壤土 | Mode6 drip | `DripInput=50.049 mm` | `DripActualInfil=50.049 mm` | `0.000 mm` | `0.38 cm` | `HeadNodes=1.000`，`FluxNodes=0.001`，`Iterations=2.000`，`SolverLimit=0.0` |
+| 砂壤土 | Flood flux | `50.000 mm`漫灌目标 | G05总`Infil=50.000 mm` | `0.000 mm` | 全地表 | 不适用 |
 
 图像输出已生成：
 
-- `D:\Codex\codex_mode6_local_shape_test_20260607\codex_mode6_vs_flood_summary_50mm_local12.csv`
-- `D:\Codex\codex_mode6_local_shape_test_20260607\codex_mode6_vs_flood_theta_50mm_local12.png`
-- `D:\Codex\codex_mode6_local_shape_test_20260607\codex_mode6_vs_flood_delta_theta_50mm_local12.png`
+- `D:\Codex\codex_mode6_strict_surface_drip_20260607\codex_mode6_strict_summary_50mm_24h_local12.csv`
+- `D:\Codex\codex_mode6_strict_surface_drip_20260607\codex_mode6_strict_delta_metrics_50mm_24h_local12.csv`
+- `D:\Codex\codex_mode6_strict_surface_drip_20260607\codex_mode6_strict_theta_50mm_24h_local12.png`
+- `D:\Codex\codex_mode6_strict_surface_drip_20260607\codex_mode6_strict_delta_theta_50mm_24h_local12.png`
 
-G03二维`delta theta`复算显示，滴灌峰值均位于左边界滴头位置`x=0 cm`。按`delta theta >= 50% * peak_delta`定义高增量区，壤土Mode6横向范围约`17.89 cm`、砂壤土约`12.24 cm`；对应漫灌两种土壤均达到`38.1 cm`全宽。这组算例说明：在左边界滴头、半域宽度`38.1 cm`、`DripWetWidthMax=12.0 cm`时，`Mode6`二维增量图呈现左上角局部湿润体，并向右、向下扩展；漫灌图则表现为近水平层状推进。此前把`DripWetWidthMax`设为`38.1 cm`时，模型允许滴灌扩展到整条半域，图形因此接近全宽地表供水，不能作为局部滴灌形态验证。这是当前MAIZSIM/2DSOIL求解器内的可闭合近似结果，不应解释为HYDRUS官方算例精度验证。
+G03二维`theta`和`delta theta`图已审阅。baseline近似保持初始分布；漫灌在两种土壤中均表现为全宽近水平湿润带，`delta theta >= 50% * peak_delta`的横向范围为`38.1 cm`。`Mode6`峰值均位于左边界滴头位置`x=0 cm`：壤土峰值`delta theta=0.194`、峰值深度`0.79 cm`、50%峰值横向范围`25.8 cm`；砂壤土峰值`delta theta=0.307`、峰值深度`0.00 cm`、50%峰值横向范围`17.89 cm`。图像形态为从左上角滴头节点出发并向右、向下推进的局部湿润体，不是漫灌式全宽铺水。
 
-2026-06-06在HUTD06短窗算例中运行了三组`Mode6`地表滴灌验证，事件窗口为`04/01/2006 00:00`到`04/01/2006 04:00`，中心节点为`7`。验证文件放在HDD的`D:\Codex\codex_mode6_validation_20260606`下，解析后已清理临时目录。
-
-| 算例 | `wAppl` | `DripWetWidthMax` | G05结果摘要 |
-| --- | ---: | ---: | --- |
-| low | `0.20 cm/h` | `30.0 cm` | `DripInput=0.227 mm`，`DripActualInfil=0.227 mm`，`DripMode6Remaining=0`，两类闭合残差为`0` |
-| high_limited | `5.00 cm/h` | `12.0 cm` | `DripInput=5.460 mm`，`DripActualInfil=5.460 mm`，`DripMode6Remaining=0`，两类闭合残差为`0` |
-| extreme_limited | `200.0 cm/h` | `4.84 cm` | `DripInput=215.378 mm`，`DripActualInfil=28.216 mm`，`DripMode6Remaining=188.572 mm`，`DripSurfaceRunoff=187.164 mm`，两类闭合残差为`0` |
-
-同一验证中，G03二维`theta`输出显示灌后正`delta theta`湿润体存在并可审阅：low算例灌后最大`delta theta=0.203`、最深正变化约`63.0 cm`；high_limited算例灌后最大`delta theta=0.202`、最深正变化约`63.0 cm`；extreme_limited算例灌后最大`delta theta=0.203`、最深正变化约`63.0 cm`。这些结果用于工程闭合和二维输出冒烟验证，不作为HYDRUS benchmark精度结论。
+壤土`Mode6`二维形态接近`Mode5`，但G05诊断显示它走的是活动边界递推路径：有非零头边界节点、通量节点和约`8.8`次边界迭代，且源码已移除`DripRate`局部稳定兜底。该算例同时触发`DripMode6SolverLimit=1.0`，应解读为当前WaterMover在24 h、50 mm高强度壤土事件下达到`Mode6`专属非线性迭代上限后的显式降级诊断，不应静默判定为HYDRUS-style无诊断成功。砂壤土`Mode6`未触发该诊断，主要由单个`h=0`中心节点接纳，湿润体更集中在左上角。
 
 ## 背景
 
@@ -285,10 +282,10 @@ if remaining flux persists:
 必须设置最大活动边界迭代次数，例如：
 
 ```text
-max_active_iterations = min(number_of_surface_boundary_segments, 50)
+max_active_iterations = min(2 * max_candidate_radius + 3, 50)
 ```
 
-超过上限时应停止扩展并把剩余水量计入诊断，不能无限重解。
+超过上限时应停止扩展并把剩余水量计入诊断，不能无限重解。当前实现还给`Mode6`设置高于普通`MaxIt`的专属非线性迭代上限；达到该上限时进入同一活动边界闭合段并累计`DripMode6SolverLimit`，不能继续静默缩步到`dtMin`后把结果当作普通成功。
 
 ### `OUTPUT.FOR`
 
@@ -304,6 +301,7 @@ G05建议新增或复用以下诊断：
 - `DripMode6HeadNodes`
 - `DripMode6FluxNodes`
 - `DripMode6Iterations`
+- `DripMode6SolverLimit`
 - `DripWetWidth`
 - `DripClosureResidual`
 
@@ -357,6 +355,7 @@ hNew(node) = 0.0
 
 - 若`Mode6`活动边界迭代次数超过阈值，缩短下一水分时间步。
 - 若某时间步出现大量剩余未接纳水量，缩短下一水分时间步。
+- 若达到`Mode6`专属非线性迭代上限，输出`DripMode6SolverLimit`诊断并走活动边界闭合逻辑，而不是静默切换成Mode5-like局部源。
 - 保留当前`NextTime`事件起止时间控制，确保滴灌开始和停止时刻被精确切分。
 
 ## 测试计划
@@ -374,6 +373,7 @@ hNew(node) = 0.0
 2. `Mode6`不会走`Mode5`的`CoverMeasure`预分配分支。
 3. `Mode6`会设置活动边界登记数组，而不是直接写最终`DripRate`。
 4. `WaterMover`包含`Mode6`活动边界循环、头边界切换和剩余流量递推逻辑。
+5. `WaterMover`达到`Mode6`专属非线性迭代上限时必须累计`DripMode6SolverLimit`，不能出现无诊断的局部源兜底。
 
 ### 数值单元场景
 

@@ -33,7 +33,8 @@ C summary output variables
      &     DripPressureFactorMean, DripPressureFactorMin,
      &     DripMode6Accepted, DripMode6Remaining,
      &     DripMode6HeadNodes, DripMode6FluxNodes,
-     &     DripMode6Iterations, DripMode6ClosureResidual
+     &     DripMode6Iterations, DripMode6SolverLimit,
+     &     DripMode6ClosureResidual
       Character*10 date, Stime
       Logical OutG04, OutG05, OutG06, OutG07
       Logical OutRunoff, OutMulch
@@ -143,6 +144,7 @@ cccz
         DripMode6HeadNodes=0.0
         DripMode6FluxNodes=0.0
         DripMode6Iterations=0.0
+        DripMode6SolverLimit=0.0
         DripMode6ClosureResidual=0.0
         DripInput_Flux=0.0D0
         DripDemand_Flux=0.0D0
@@ -172,6 +174,7 @@ cccz
         DripMode6HeadNodes_Sum=0.0D0
         DripMode6FluxNodes_Sum=0.0D0
         DripMode6Iterations_Sum=0.0D0
+        DripMode6SolverLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
         SeasonActualInfil=0.0
         SeasonPotenTranspiration=0.0
@@ -247,7 +250,8 @@ C G05 file  Surface Graphics
      &      "DripPressureFactorMean,","DripPressureFactorMin,",
      &      "DripMode6Accepted,","DripMode6Remaining,",
      &      "DripMode6HeadNodes,","DripMode6FluxNodes,",
-     &      "DripMode6Iterations,","DripMode6ClosureResidual"
+     &      "DripMode6Iterations,","DripMode6SolverLimit,",
+     &      "DripMode6ClosureResidual"
       endif
 
 c Flux Graphics       
@@ -590,10 +594,13 @@ cccz
      &            DripMode6Diag_Time
                 DripMode6Iterations=DripMode6Iterations_Sum/
      &            DripMode6Diag_Time
+                DripMode6SolverLimit=DripMode6SolverLimit_Sum/
+     &            DripMode6Diag_Time
               Else
                 DripMode6HeadNodes=0.0
                 DripMode6FluxNodes=0.0
                 DripMode6Iterations=0.0
+                DripMode6SolverLimit=0.0
               Endif
               Flux_drain=Flux_drain/gridWidth*10.0   !cccz unit [water:width(cm)*flux(cm/day)*timestep(day)]/gridWidth *10 mm/cm
               CumulativeFlux=CumulativeFlux+Flux_drain
@@ -669,7 +676,8 @@ C     Gas unit conversion to ugCo2/cm2
      &              DripPressureFactorMean, DripPressureFactorMin,
      &              DripMode6Accepted, DripMode6Remaining,
      &              DripMode6HeadNodes, DripMode6FluxNodes,
-     &              DripMode6Iterations, DripMode6ClosureResidual
+     &              DripMode6Iterations, DripMode6SolverLimit,
+     &              DripMode6ClosureResidual
         endif
         
         
@@ -754,12 +762,14 @@ cccz ---------------------- finish mulch printing --------------------------
         DripMode6HeadNodes=0.0
         DripMode6FluxNodes=0.0
         DripMode6Iterations=0.0
+        DripMode6SolverLimit=0.0
         DripMode6ClosureResidual=0.0
         DripMode6Accepted_Flux=0.0D0
         DripMode6Remaining_Flux=0.0D0
         DripMode6HeadNodes_Sum=0.0D0
         DripMode6FluxNodes_Sum=0.0D0
         DripMode6Iterations_Sum=0.0D0
+        DripMode6SolverLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
         nitrogenFLux=0.0
 	  PotentialSoilEvaporation=0.0
@@ -801,9 +811,9 @@ C format 5 is water, 6 is roots Vy is the last on on this lin
   6   Format (1x,A16,T20,A5,T36,A2,T46,A2,T56,A5,T65,A7,T78,A7, T90,A6,
      &        T102, A6, T112, A11, T124, A8, T136, A8)
   10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',                  !relative water content
-     &        37(F16.3, ','),F16.3)  !format for flux data  [G03]
+     &        38(F16.3, ','),F16.3)  !format for flux data  [G03]
  13   Format (1x,F17.6,',',A15,',',15(F16.3, ','), F16.3)  ! format for second flux data [G06]
-  20   Format (1x,50A24)              !format for flux header [G05]
+ 20   Format (1x,51A24)              !format for flux header [G05]
  21   Format (1x,12A16)           ! format for Organic Matter header
 2103  Format (1x,A12,T20,A12,T49,A2,T64,A2,T75,A10,T95,A10,T109,A10)
 2104  Format (1x,F17.6,',',A15,',',4(F16.4,','),F16.4)     
