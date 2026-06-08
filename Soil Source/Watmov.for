@@ -47,7 +47,8 @@ cccz  Double precision CriticalH, CriticalH_R
      !        Mode6Node,Mode6Radius,Mode6NewLeft,Mode6NewRight,
      !        Mode6HeadCount,Mode6FluxCount,Mode6ActiveCount,
      !        Mode6MaxIter,Mode6SolverMaxIt,Mode6Converted,Mode6Done,
-     !        Mode6BoundaryActive
+     !        Mode6BoundaryActive,Mode6SolverLimited,
+     !        Mode6LimitedClosure
       Integer BaseCodeW(NumNPD)
       Dimension A(MBandD,NumNPD),B(NumNPD),F(NumNPD),DS(NumNPD),
      !    Cap(NumNPD),ListE(NumElD),E(3,3),iLoc(3),Fc(NumNPD),
@@ -148,6 +149,7 @@ c
 c   Start of iteration loop
 c
 1111  Iter=0
+      Mode6SolverLimited=0
       Explic=.false.
 
       Do i=1,NumNP
@@ -645,6 +647,7 @@ c adjust for runoff within an iteration
             If(Iter.ge.Mode6SolverMaxIt.and.
      !        hMax.lt.10.*abs(hCritA)) then
               DripMode6SolverLimit_Sum=DripMode6SolverLimit_Sum+dt
+              Mode6SolverLimited=1
               Goto 619
             Endif
           Endif
@@ -686,6 +689,7 @@ c
         EndDo
         If(Mode6BoundaryActive.eq.1) then
         Mode6Tol=1.0D-8
+        Mode6LimitedClosure=Mode6SolverLimited
         Mode6MaxIter=1
         Do Mode6Source=1,DripMode6Count
           Mode6MaxIter=max(Mode6MaxIter,
@@ -737,6 +741,7 @@ c
             GoTo 1111
           Else
             Mode6NeedResolve=0
+            Mode6LimitedClosure=1
           Endif
         Endif
         If(DripMode6IterationCount.lt.Mode6MaxIter) then
@@ -853,7 +858,11 @@ c
                     Mode6NeedResolve=1
                     Mode6Done=1
                   Endif
-                  If(Mode6Done.eq.0) DripMode6Closed(Mode6Source)=1
+                  If(Mode6Done.eq.0) then
+                    DripMode6Closed(Mode6Source)=1
+                    If(Mode6Remaining(Mode6Source).gt.Mode6Tol)
+     !                Mode6LimitedClosure=1
+                  Endif
                 Endif
               Endif
             Endif
@@ -862,6 +871,7 @@ c
           Do Mode6Source=1,DripMode6Count
             DripMode6Closed(Mode6Source)=1
           EndDo
+          Mode6LimitedClosure=1
         Endif
         If(Mode6NeedResolve.eq.1) GoTo 1111
         Mode6HeadCount=0
@@ -956,6 +966,10 @@ c
      !    dble(Mode6FluxCount)*dt
         DripMode6Iterations_Sum=DripMode6Iterations_Sum+
      !    dble(DripMode6IterationCount)*dt
+        If(Mode6LimitedClosure.eq.1) then
+          DripMode6BoundaryLimit_Sum=DripMode6BoundaryLimit_Sum+dt
+          Iter=min(Iter,3)
+        Endif
         DripMode6Diag_Time=DripMode6Diag_Time+dt
         DripWetNodes_StepSum=DripWetNodes_StepSum+
      !    dble(Mode6ActiveCount)

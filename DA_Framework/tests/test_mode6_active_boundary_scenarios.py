@@ -60,6 +60,15 @@ def test_mode6_solver_limit_is_reported_before_time_step_fallback():
     assert "mode6nonconv" not in water_mover
 
 
+def test_mode6_boundary_limit_is_reported_as_controlled_closure():
+    water_mover = _compact(_source(WATER_MOVER_SOURCE))
+
+    assert "mode6limitedclosure=1" in water_mover
+    assert "dripmode6boundarylimit_sum=dripmode6boundarylimit_sum+dt" in water_mover
+    assert "iter=min(iter,3)" in water_mover
+    assert "dripmode6remaining_flux=dripmode6remaining_flux+" in water_mover
+
+
 def test_mode6_remaining_flux_expands_to_neighboring_surface_ring():
     water_mover = _compact(_source(WATER_MOVER_SOURCE))
 

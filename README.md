@@ -39,7 +39,7 @@ Current drip input validation accepts only these `DripSpreadMode` values:
 
 - `0`: legacy compatible surface drip input.
 - `5`: dynamic local surface-source approximation using positive `DripSourceWidth`.
-- `6`: HYDRUS-style surface drip approximation. This is surface drip only. Water is first assigned to the emitter-center surface node, positive-head flux nodes switch to `h=0`, and WaterMover recursively passes remaining water to neighboring surface nodes until accepted or explicitly reported in G05 as remaining/storage/runoff or a `DripMode6SolverLimit` event.
+- `6`: HYDRUS-style surface drip approximation. This is surface drip only. Water is first assigned to the emitter-center surface node, positive-head flux nodes switch to `h=0`, and WaterMover recursively passes remaining water to neighboring surface nodes until accepted or explicitly reported in G05 as remaining/storage/runoff, `DripMode6SolverLimit`, or `DripMode6BoundaryLimit`.
 
 Modes `1`, `2`, `3`, and `4` remain obsolete and are rejected as spread modes. For `Mode5` and `Mode6`, `DripSourceWidth` is required and must be positive. The implementation notes and validation summary for `Mode6` are in `2026-06-06-mode6-hydrus-surface-drip-design.md`.
 

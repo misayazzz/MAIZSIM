@@ -27,6 +27,7 @@ def test_mode6_public_state_is_shared_with_water_mover():
     assert "dripmode6headactive(numbpd)" in include
     assert "dripmode6candidateowner(numbpd)" in include
     assert "dripmode6solverlimit_sum" in include
+    assert "dripmode6boundarylimit_sum" in include
 
 
 def test_mode6_input_contract_allows_only_supported_spread_modes():
@@ -79,6 +80,8 @@ def test_mode6_water_mover_active_boundary_contract():
     assert "mode6maxiter=min(mode6maxiter,50)" in water_mover
     assert "mode6solvermaxit=max(maxit,60)" in water_mover
     assert "dripmode6solverlimit_sum=dripmode6solverlimit_sum+dt" in water_mover
+    assert "dripmode6boundarylimit_sum=dripmode6boundarylimit_sum+dt" in water_mover
+    assert "iter=min(iter,3)" in water_mover
     assert "mode6boundaryactive=0" in water_mover
     assert "if(mode6boundaryactive.eq.1)then" in water_mover
     assert "hnew(n).gt.sngl(mode6tol)" in water_mover
@@ -106,9 +109,11 @@ def test_mode6_g05_diagnostic_contract():
         "DripMode6FluxNodes",
         "DripMode6Iterations",
         "DripMode6SolverLimit",
+        "DripMode6BoundaryLimit",
         "DripMode6ClosureResidual",
     ):
         assert column in output
     assert "dripmode6accepted_flux/gridwidth*10.0" in compact
     assert "dripmode6solverlimit_sum/dripmode6diag_time" in compact
+    assert "dripmode6boundarylimit_sum/dripmode6diag_time" in compact
     assert "dripinput_flux-dripmode6accepted_flux-dripmode6remaining_flux" in compact

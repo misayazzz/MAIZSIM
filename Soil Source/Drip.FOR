@@ -100,6 +100,7 @@
         DripMode6FluxNodes_Sum=0.0D0
         DripMode6Iterations_Sum=0.0D0
         DripMode6SolverLimit_Sum=0.0D0
+        DripMode6BoundaryLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
         Open(40,file=DripFile,err=20)
         Read(40,*,Err=20)
