@@ -495,6 +495,66 @@ def plot_ranking_figure(frame, output_file, times_font, top_n):
     plt.close(figure)
 
 
+def top_ratio_frame(frame, metric, top_n):
+    """提取单个指标中 mu_star top 参数并计算 sigma/mu_star."""
+    top = top_metric_frame(frame, metric, top_n).copy()
+    top["sigma_mu_star_ratio"] = top["sigma"] / top["mu_star"].replace(0, np.nan)
+    top = top.dropna(subset=["sigma_mu_star_ratio"])
+    return top.sort_values("sigma_mu_star_ratio", ascending=True)
+
+
+def plot_ratio_figure(frame, output_file, times_font, top_n):
+    """绘制关键参数的 sigma/mu_star 比值图, 用于判断作用稳定性."""
+    metrics = ordered_values(frame["metric"], METRIC_ORDER)
+    colors = category_colors()
+    ratio_frames = {metric: top_ratio_frame(frame, metric, top_n) for metric in metrics}
+    max_ratio = max(float(ratio_frame["sigma_mu_star_ratio"].max()) for ratio_frame in ratio_frames.values())
+    x_limit = rounded_x_limit(max_ratio + 0.12)
+    rows, columns = subplot_grid(len(metrics))
+    figure_width = 7.2 if columns == 2 else 7.0
+    figure_height = 1.48 * rows + 0.35
+    figure, axes = plt.subplots(rows, columns, figsize=(figure_width, figure_height), sharex=True)
+    figure.subplots_adjust(left=0.17, right=0.99, top=0.96, bottom=0.085, wspace=0.42, hspace=0.58)
+    flat_axes = axes.ravel() if hasattr(axes, "ravel") else [axes]
+
+    for axis, metric, panel_label in zip(flat_axes, metrics, PANEL_LABELS):
+        plot_frame = ratio_frames[metric]
+        y_positions = np.arange(len(plot_frame))
+        parameters = plot_frame["parameter"].tolist()
+        values = plot_frame["sigma_mu_star_ratio"].to_numpy()
+        bars = axis.barh(
+            y_positions,
+            values,
+            height=0.56,
+            color=parameter_colors(parameters, colors),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.3,
+        )
+        apply_bar_hatches(bars, parameters)
+        for reference in [0.5, 1.0]:
+            if reference < x_limit:
+                axis.axvline(reference, color="#9a9a9a", linestyle="--", linewidth=0.45, zorder=0)
+        axis.set_yticks(y_positions)
+        axis.set_yticklabels(parameters)
+        axis.set_xlim(0, x_limit)
+        style_axis(axis, times_font, grid_axis="x")
+        add_panel_title(axis, panel_label, metric_label(metric), times_font)
+        for y_position, value in zip(y_positions, values):
+            axis.text(
+                value + x_limit * 0.012,
+                y_position,
+                f"{value:.2f}",
+                va="center",
+                ha="left",
+                fontproperties=font_with_size(times_font, ANNOTATION_SIZE - 0.3),
+            )
+
+    add_legend_to_empty_axes(flat_axes, len(metrics), colors, times_font, handle_style="bar")
+    add_common_axis_labels(figure, r"$R=\sigma/\mu^*$", "", times_font, xlabel_y=0.038)
+    save_figure(figure, output_file)
+    plt.close(figure)
+
+
 def annotate_top_points(axis, frame, x_column, y_column, times_font, limit):
     """标注当前面板中最重要的参数."""
     label_frame = frame.assign(max_value=frame[[x_column, y_column]].max(axis=1)).sort_values("max_value", ascending=False).head(limit)
@@ -686,12 +746,20 @@ def method_notes_table(top_n):
                 "description": "Half-width of the bootstrap confidence interval for mu_star. Current analysis used 1000 resamples and 0.95 confidence level.",
             },
             {
+                "item": "Figure1",
+                "description": "The Morris mu_star-sigma plane is exported to assess parameter importance together with nonlinearity or interaction effects.",
+            },
+            {
                 "item": "Figure2",
                 "description": f"The plotted ranking figure shows the top {top_n} parameters for each output metric by mu_star.",
             },
             {
                 "item": "Figure5",
                 "description": "Mean normalized sensitivity is derived by dividing mu_star by the maximum mu_star within each output metric, then averaging by parameter.",
+            },
+            {
+                "item": "Figure6",
+                "description": f"The sigma/mu_star ratio is plotted for the top {top_n} parameters of each output metric to indicate effect stability among important parameters.",
             },
             {
                 "item": "Sigma",
@@ -805,6 +873,10 @@ def main():
     filtered_frame = read_indices(analysis_dir / args.filtered_file)
     figure_rows = [
         {
+            "file": "figure1_mu_star_sigma_plane_without_slow_trajectories.png",
+            "description": "Morris mu_star-sigma plane after dropping slow trajectories.",
+        },
+        {
             "file": "figure2_mu_star_ranking_without_slow_trajectories.png",
             "description": "Top Morris mu_star ranking after dropping slow trajectories.",
         },
@@ -812,18 +884,33 @@ def main():
             "file": "figure5_normalized_mean_sensitivity_without_slow.png",
             "description": "Mean normalized Morris mu_star ranking after dropping slow trajectories.",
         },
+        {
+            "file": "figure6_sigma_mu_star_ratio_without_slow_trajectories.png",
+            "description": "Sigma to mu_star ratio ranking for top Morris parameters after dropping slow trajectories.",
+        },
     ]
 
-    plot_ranking_figure(
+    plot_morris_plane_figure(
         filtered_frame,
         output_dir / figure_rows[0]["file"],
+        times_font,
+    )
+    plot_ranking_figure(
+        filtered_frame,
+        output_dir / figure_rows[1]["file"],
         times_font,
         args.top_n,
     )
     plot_normalized_mean_figure(
         filtered_frame,
-        output_dir / figure_rows[1]["file"],
+        output_dir / figure_rows[2]["file"],
         times_font,
+    )
+    plot_ratio_figure(
+        filtered_frame,
+        output_dir / figure_rows[3]["file"],
+        times_font,
+        args.top_n,
     )
     write_supplementary_workbook(filtered_frame, xlsx_file, args.top_n)
 
