@@ -85,6 +85,77 @@ class ModelRunnerTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("ORTHOMIN TERMINATES", result.message)
 
+    def test_run_model_treats_mode6_fortran_stop_as_failure(self):
+        with tempfile.TemporaryDirectory(prefix="codex_model_runner_mode6_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+            (run_dir / "run.dat").write_text("", encoding="utf-8")
+
+            def write_marker(*args, **kwargs):
+                kwargs["stderr"].write(
+                    "Mode 6 failed to converge at minimum water step"
+                )
+                return SimpleNamespace(returncode=0)
+
+            with patch(
+                "da_framework.model_runner.subprocess.run",
+                side_effect=write_marker,
+            ):
+                result = run_model(run_dir)
+
+        self.assertFalse(result.success)
+        self.assertIn("Mode 6 failed to converge", result.message)
+
+    def test_run_model_treats_mode6_newton_stops_as_failure(self):
+        markers = (
+            "Mode 6 Newton failed at minimum water step",
+            "Mode 6 atmospheric active boundary did not close",
+        )
+        for marker in markers:
+            with self.subTest(marker=marker):
+                with tempfile.TemporaryDirectory(
+                    prefix="codex_model_runner_mode6_newton_",
+                ) as tmp_dir:
+                    run_dir = Path(tmp_dir)
+                    (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+                    (run_dir / "run.dat").write_text("", encoding="utf-8")
+
+                    def write_marker(*args, **kwargs):
+                        kwargs["stderr"].write(marker)
+                        return SimpleNamespace(returncode=0)
+
+                    with patch(
+                        "da_framework.model_runner.subprocess.run",
+                        side_effect=write_marker,
+                    ):
+                        result = run_model(run_dir)
+
+                self.assertFalse(result.success)
+                self.assertIn(marker, result.message)
+
+    def test_run_model_treats_mode6_mass_balance_stop_as_failure(self):
+        with tempfile.TemporaryDirectory(
+            prefix="codex_model_runner_mode6_mass_",
+        ) as tmp_dir:
+            run_dir = Path(tmp_dir)
+            (run_dir / "2dMAIZSIM.exe").write_text("", encoding="utf-8")
+            (run_dir / "run.dat").write_text("", encoding="utf-8")
+
+            def write_marker(*args, **kwargs):
+                kwargs["stderr"].write(
+                    "Mode 6 water mass balance failed at minimum step"
+                )
+                return SimpleNamespace(returncode=0)
+
+            with patch(
+                "da_framework.model_runner.subprocess.run",
+                side_effect=write_marker,
+            ):
+                result = run_model(run_dir)
+
+        self.assertFalse(result.success)
+        self.assertIn("Mode 6 water mass balance failed", result.message)
+
     def test_run_model_clears_stale_soil_log_before_run(self):
         with tempfile.TemporaryDirectory(prefix="codex_model_runner_stale_") as tmp_dir:
             run_dir = Path(tmp_dir)

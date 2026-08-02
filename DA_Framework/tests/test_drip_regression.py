@@ -67,9 +67,9 @@ class DripRegressionTests(unittest.TestCase):
         loam_line = render_drip_event_line(scenario, DEFAULT_SOILS[0])
         clay_line = render_drip_event_line(scenario, DEFAULT_SOILS[2])
 
-        self.assertTrue(sandy_line.endswith("16.3 1"))
-        self.assertTrue(loam_line.endswith("39.7 1"))
-        self.assertTrue(clay_line.endswith("20 1"))
+        self.assertTrue(sandy_line.endswith("16.3 5 1.0"))
+        self.assertTrue(loam_line.endswith("39.7 5 1.0"))
+        self.assertTrue(clay_line.endswith("20 5 1.0"))
         self.assertNotIn("{wet_width_max_cm", sandy_line)
 
     def test_hydrus_surface_drip_width_curve_interpolates(self):

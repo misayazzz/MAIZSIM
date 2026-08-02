@@ -18,7 +18,8 @@ C summary output variables
       Integer Plevel,e, hourCount
       
       Dimension temp(1000)
-      Real PotentialSoilEvaporation, WidthT,Period
+      Real PotentialSoilEvaporation, WidthT
+      Double precision Period,NextCanonicalHour
       Real SeasonRainfall, SeasonPotenTranspiration,
      &     SeasonActualTranspiration, SeasonPotenSoilEvap,
      &     SeasonActualSoilEvap,SeasonActualInfil,
@@ -34,7 +35,10 @@ C summary output variables
      &     DripMode6Accepted, DripMode6Remaining,
      &     DripMode6HeadNodes, DripMode6FluxNodes,
      &     DripMode6Iterations, DripMode6SolverLimit,
-     &     DripMode6BoundaryLimit, DripMode6ClosureResidual
+     &     DripMode6BoundaryLimit, DripMode6ClosureResidual,
+     &     DripMode6StepCuts,DripMode6NonlinearCuts,
+     &     DripMode6SupplyCuts,DripMode6MassCuts,
+     &     DripMode6MinDtDays
       Character*10 date, Stime
       Logical OutG04, OutG05, OutG06, OutG07
       Logical OutRunoff, OutMulch
@@ -43,7 +47,8 @@ cccz output for runoff module
      &     Runoff_Flux,Runoff_Terminal_Flux,Flux_drain,
      &     Runoff_Left_Sum,Runoff_Right_Sum,WaterStorage,
      &     WaterStorage_pre ,Surface_Gas_Flux,FluxGas,
-     $     nitrogenFlux
+     $     nitrogenFlux,WaterMBDeltaStorage,WaterMBScale,
+     $     WaterMBRelativeError
       
       double precision
      &      ActualInfil,     ! cccz: original infiltration, Q(n) based, so it is a cumulative value.
@@ -89,7 +94,7 @@ cccz output for runoff module
 C
 C  Initialize 
 C
-        If (DailyOutput.eq.1) Period=1.0
+        If (DailyOutput.eq.1) Period=1.0D0
         If (HourlyOutput.eq.1) Period=1.0/24.0D0
         NumMod=NumMod+1
         ModNum=NumMod
@@ -147,6 +152,11 @@ cccz
         DripMode6SolverLimit=0.0
         DripMode6BoundaryLimit=0.0
         DripMode6ClosureResidual=0.0
+        DripMode6StepCuts=0.0
+        DripMode6NonlinearCuts=0.0
+        DripMode6SupplyCuts=0.0
+        DripMode6MassCuts=0.0
+        DripMode6MinDtDays=0.0
         DripInput_Flux=0.0D0
         DripDemand_Flux=0.0D0
         DripPressureLoss_Flux=0.0D0
@@ -178,6 +188,11 @@ cccz
         DripMode6SolverLimit_Sum=0.0D0
         DripMode6BoundaryLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
+        DripMode6StepCuts_Sum=0.0D0
+        DripMode6NonlinearCuts_Sum=0.0D0
+        DripMode6SupplyCuts_Sum=0.0D0
+        DripMode6MassCuts_Sum=0.0D0
+        DripMode6MinDt=1.0D30
         SeasonActualInfil=0.0
         SeasonPotenTranspiration=0.0
         SeasonActualTranspiration=0.0
@@ -217,9 +232,15 @@ C declare files for output
         if (OutG07) then
           Open(85,file=OrganicMatterGraphics,recl=300)  !G07
         endif
-       if (OutRunoff) then
+        if (OutRunoff) then
           open(99,file=MassBalanceRunoffFileOut,recl=250)
-       endif
+        endif
+        Open(87,file='WaterMassBalance.out',status='replace',recl=500)
+        Write(87,'(11A)') 'Date_time,','Date,','Storage_cm2,',
+     &    'DeltaStorage_cm2,','CumulativeIn_cm2,',
+     &    'CumulativeOut_cm2,','CumulativeSink_cm2,',
+     &    'Residual_cm2,','RelativeError_pct,',
+     &    'MaxStepResidual_cm2,','AcceptedSteps'
  
 c NodeGrpahics       
       Write(81,5) "Date_time,", "Date,", "X,", "Y,", "hNew,","thNew,",
@@ -253,7 +274,10 @@ C G05 file  Surface Graphics
      &      "DripMode6Accepted,","DripMode6Remaining,",
      &      "DripMode6HeadNodes,","DripMode6FluxNodes,",
      &      "DripMode6Iterations,","DripMode6SolverLimit,",
-     &      "DripMode6BoundaryLimit,","DripMode6ClosureResidual"
+     &      "DripMode6BoundaryLimit,","DripMode6ClosureResidual,",
+     &      "DripMode6StepCuts,","DripMode6NonlinearCuts,",
+     &      "DripMode6SupplyCuts,","DripMode6MassCuts,",
+     &      "DripMode6MinDtDays"
       endif
 
 c Flux Graphics       
@@ -458,6 +482,18 @@ cccz calculation is done, just do an assignment
            endif
         call caldat(iday,mm,id,iyyy) 
         write (date,'(i2.2,A1,i2.2,A1,i4.4)') mm,'/',id,'/',iyyy  
+        WaterMBDeltaStorage=WaterMBCurrentStorage-
+     &    WaterMBInitialStorage
+        WaterMBScale=dmax1(dabs(WaterMBDeltaStorage)+
+     &    WaterMBCumulativeIn+WaterMBCumulativeOut+
+     &    WaterMBCumulativeSink,1.0D-20)
+        WaterMBRelativeError=100.0D0*
+     &    dabs(WaterMBCumulativeResidual)/WaterMBScale
+        Write(87,22) t,Date,WaterMBCurrentStorage,
+     &    WaterMBDeltaStorage,WaterMBCumulativeIn,
+     &    WaterMBCumulativeOut,WaterMBCumulativeSink,
+     &    WaterMBCumulativeResidual,WaterMBRelativeError,
+     &    WaterMBMaxStepResidual,WaterMBAcceptedSteps
           Call ArrNodOut (Date,x,y,NumNP,t,hNew,
      !      ThNew,vz,vx,Q,Conc(1,1),NH4,Tmpr,g(1,1), g(1,2),
      !      g(1,3),ugGasCm3air_to_ppm,NumG, NodeArea)
@@ -489,7 +525,10 @@ cccz calculation is done, just do an assignment
           Call ArrOrganicMatterOut(Date,x,y,NumNP,t,Ch,Nh,
      !       Cl,Nl, Cm, Nm, cRoot, nRoot)
         endif
-        tNext(ModNum) = time + Period
+        If(DailyOutput.eq.1)
+     &    tNext(ModNum)=dble(idint(time))+1.0D0
+        If(HourlyOutput.eq.1)
+     &    tNext(ModNum)=NextCanonicalHour(time)
 C      
 * This code operates hourly to output data on the surface nodes
 	  
@@ -600,12 +639,27 @@ cccz
      &            DripMode6Diag_Time
                 DripMode6BoundaryLimit=
      &            DripMode6BoundaryLimit_Sum/DripMode6Diag_Time
+                DripMode6StepCuts=sngl(DripMode6StepCuts_Sum)
+                DripMode6NonlinearCuts=
+     &            sngl(DripMode6NonlinearCuts_Sum)
+                DripMode6SupplyCuts=sngl(DripMode6SupplyCuts_Sum)
+                DripMode6MassCuts=sngl(DripMode6MassCuts_Sum)
+                If(DripMode6MinDt.lt.1.0D20) then
+                  DripMode6MinDtDays=sngl(DripMode6MinDt)
+                Else
+                  DripMode6MinDtDays=0.0
+                Endif
               Else
                 DripMode6HeadNodes=0.0
                 DripMode6FluxNodes=0.0
                 DripMode6Iterations=0.0
                 DripMode6SolverLimit=0.0
                 DripMode6BoundaryLimit=0.0
+                DripMode6StepCuts=0.0
+                DripMode6NonlinearCuts=0.0
+                DripMode6SupplyCuts=0.0
+                DripMode6MassCuts=0.0
+                DripMode6MinDtDays=0.0
               Endif
               Flux_drain=Flux_drain/gridWidth*10.0   !cccz unit [water:width(cm)*flux(cm/day)*timestep(day)]/gridWidth *10 mm/cm
               CumulativeFlux=CumulativeFlux+Flux_drain
@@ -682,7 +736,10 @@ C     Gas unit conversion to ugCo2/cm2
      &              DripMode6Accepted, DripMode6Remaining,
      &              DripMode6HeadNodes, DripMode6FluxNodes,
      &              DripMode6Iterations, DripMode6SolverLimit,
-     &              DripMode6BoundaryLimit, DripMode6ClosureResidual
+     &              DripMode6BoundaryLimit, DripMode6ClosureResidual,
+     &              DripMode6StepCuts,DripMode6NonlinearCuts,
+     &              DripMode6SupplyCuts,DripMode6MassCuts,
+     &              DripMode6MinDtDays
         endif
         
         
@@ -770,6 +827,11 @@ cccz ---------------------- finish mulch printing --------------------------
         DripMode6SolverLimit=0.0
         DripMode6BoundaryLimit=0.0
         DripMode6ClosureResidual=0.0
+        DripMode6StepCuts=0.0
+        DripMode6NonlinearCuts=0.0
+        DripMode6SupplyCuts=0.0
+        DripMode6MassCuts=0.0
+        DripMode6MinDtDays=0.0
         DripMode6Accepted_Flux=0.0D0
         DripMode6Remaining_Flux=0.0D0
         DripMode6HeadNodes_Sum=0.0D0
@@ -778,6 +840,11 @@ cccz ---------------------- finish mulch printing --------------------------
         DripMode6SolverLimit_Sum=0.0D0
         DripMode6BoundaryLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
+        DripMode6StepCuts_Sum=0.0D0
+        DripMode6NonlinearCuts_Sum=0.0D0
+        DripMode6SupplyCuts_Sum=0.0D0
+        DripMode6MassCuts_Sum=0.0D0
+        DripMode6MinDt=1.0D30
         nitrogenFLux=0.0
 	  PotentialSoilEvaporation=0.0
 
@@ -817,11 +884,14 @@ C format 5 is water, 6 is roots Vy is the last on on this lin
      &     T152, A5,T165,A8,T176,A8,T187,A9 )   ! format for nodal data header
   6   Format (1x,A16,T20,A5,T36,A2,T46,A2,T56,A5,T65,A7,T78,A7, T90,A6,
      &        T102, A6, T112, A11, T124, A8, T136, A8)
-  10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',                  !relative water content
-     &        39(F16.3, ','),F16.3)  !format for flux data  [G03]
+  10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',
+     &        32(F16.3, ','),12(ES16.8,','),ES16.8)
+c Keep the Mode 6 closure ledger at scientific precision.  Hourly F16.3
+c rounding can otherwise accumulate to O(0.01 mm) over a one-day event.
  13   Format (1x,F17.6,',',A15,',',15(F16.3, ','), F16.3)  ! format for second flux data [G06]
- 20   Format (1x,52A24)              !format for flux header [G05]
+  20   Format (1x,57A)                !untruncated CSV header [G05]
  21   Format (1x,12A16)           ! format for Organic Matter header
+ 22   Format (1x,F17.6,',',A15,',',8(ES24.16,','),I12)
 2103  Format (1x,A12,T20,A12,T49,A2,T64,A2,T75,A10,T95,A10,T109,A10)
 2104  Format (1x,F17.6,',',A15,',',4(F16.4,','),F16.4)     
       
@@ -853,7 +923,8 @@ C/***************************************************/
      !          ThetaArr, vzArr,vxArr,QArr,ConcArr,NH4Arr,TemprArr,
      !          gArr1,gArr2,gArr3,ugGasCm3air_to_ppm, NumG,areaArr)
       Character*10 Date
-      Real x,y,t,Head,ThetaArr,vzArr,vxArr,QArr,ConcArr,NH4Arr,TemprArr,
+      Double precision Head,ThetaArr
+      Real x,y,t,vzArr,vxArr,QArr,ConcArr,NH4Arr,TemprArr,
      !      gArr1,gArr2,gArr3,ugGasCm3air_to_ppm, areaArr
       Integer NumNP,NumG, n
 

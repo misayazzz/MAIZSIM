@@ -155,6 +155,60 @@ class DripValidationTests(unittest.TestCase):
             2.5 / 120.0 * 4.0 * 10.0,
         )
 
+    def test_mode6_rejects_more_than_one_emitter_per_event(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_mode6_multi_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "mode6_multi.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6 05/20/2007 8 2 2 0 0 1 0 0 0 6 2.5",
+                        "7 8",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "exactly one emitter"):
+                parse_drip_file(drip_path)
+
+    def test_mode6_rejects_different_emitters_across_events(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_mode6_nodes_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "mode6_nodes.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6 05/20/2007 8 2 1 0 0 1 0 0 0 6 2.5",
+                        "7",
+                        "05/21/2007 6 05/21/2007 8 2 1 0 0 1 0 0 0 6 2.5",
+                        "8",
+                    ],
+                    event_count=2,
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "same drip emitter"):
+                parse_drip_file(drip_path)
+
+    def test_mode6_rejects_overlapping_events(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drip_mode6_overlap_") as tmp_dir:
+            drip_path = Path(tmp_dir) / "mode6_overlap.drp"
+            drip_path.write_text(
+                _drip_text(
+                    [
+                        "05/20/2007 6 05/20/2007 8 2 1 0 0 1 0 0 0 6 2.5",
+                        "7",
+                        "05/20/2007 7 05/20/2007 9 2 1 0 0 1 0 0 0 6 2.5",
+                        "7",
+                    ],
+                    event_count=2,
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "must not overlap"):
+                parse_drip_file(drip_path)
+
     def test_parse_optional_wet_width_without_pressure_fields(self):
         with tempfile.TemporaryDirectory(prefix="codex_drip_wet_width_") as tmp_dir:
             drip_path = Path(tmp_dir) / "wet_width.drp"

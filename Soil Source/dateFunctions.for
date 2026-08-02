@@ -63,6 +63,21 @@ C Julian is a function that returns a julian day given a calendar day
       endif
       return
       END
+
+C**********************************************************************************
+C Return the next exact hourly point on the model's calendar-day time axis.
+C Reconstructing from an integer day and hour avoids cumulative PERIOD drift.
+C**********************************************************************************
+      Double precision function NextCanonicalHour(CurrentTime)
+      Implicit None
+      Double precision CurrentTime,DayAnchor
+      Integer HourIndex
+
+      DayAnchor=dble(idint(CurrentTime))
+      HourIndex=nint(24.0D0*(CurrentTime-DayAnchor))
+      NextCanonicalHour=DayAnchor+dble(HourIndex+1)/24.0D0
+      Return
+      End
 C**********************************************************************************
 C Subroutine fromCalendar
 C**********************************************************************************      
@@ -107,6 +122,5 @@ C takes a calendar date string as mm/dd/yyyy and returns the month, day and year
             
           return 
        END
-       
        
        

@@ -118,8 +118,10 @@ c     $     young     old    young     old      sum       sumSink'
           TotalFUPY=TotalFUPY+FUP(n,2)
           TotalFUPM=TotalFUPM+FUP(n,1)
           SIncrSink2=SIncrSink2+cSink(n,1)*step*14./62.*nodeArea(n)
-          Disp(n,1)=Dmol(1)*ThNew(n)*Tau(hNew(n))+DlngR(M)*VUP(n,1)
-		Disp(n,2)=Dmol(1)*ThNew(n)*Tau(hNew(n))+DlngR(M)*VUP(n,2)	
+          Disp(n,1)=Dmol(1)*ThNew(n)*Tau(sngl(hNew(n)))+
+     !      DlngR(M)*VUP(n,1)
+          Disp(n,2)=Dmol(1)*ThNew(n)*Tau(sngl(hNew(n)))+
+     !      DlngR(M)*VUP(n,2)
        Enddo
        
        
@@ -284,4 +286,4 @@ c102    format(g14.8,1x,I5,12(2x,e10.3))
         A(I) = F(I) / (ALF(I) + A(I))
 	 ENDDO
 	 RETURN
-	END 
+	END

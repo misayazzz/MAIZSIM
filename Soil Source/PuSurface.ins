@@ -55,7 +55,10 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6Accepted_Flux,DripMode6Remaining_Flux,
      !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
      !      DripMode6Iterations_Sum,DripMode6SolverLimit_Sum,
-     !      DripMode6BoundaryLimit_Sum,DripMode6Diag_Time
+     !      DripMode6BoundaryLimit_Sum,DripMode6Diag_Time,
+     !      DripMode6StepCuts_Sum,DripMode6NonlinearCuts_Sum,
+     !      DripMode6SupplyCuts_Sum,DripMode6MassCuts_Sum,
+     !      DripMode6MinDt
        Integer DripMode6Active,DripMode6Count,
      !      DripMode6CenterPos(MaxDripMode6D),
      !      DripMode6CenterBnd(MaxDripMode6D),
@@ -64,9 +67,10 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6Closed(MaxDripMode6D),
      !      DripMode6FluxActive(NumBPD),
      !      DripMode6HeadActive(NumBPD),
+     !      DripMode6AtmosHeadActive(NumBPD),
      !      DripMode6CandidateOwner(NumBPD),
      !      DripMode6BoundaryOwner(NumBPD),
-     !      DripMode6IterationCount
+     !      DripMode6IterationCount,DripMode6AdaptiveIter
        Common /DripMode6C/ DripMode6DemandFlux,
      !      DripMode6InputFlux,DripMode6RemainingFlux,
      !      DripMode6AcceptedFlux,DripMode6PressureLossFlux,
@@ -75,12 +79,16 @@ c HYDRUS-style surface drip active-boundary state for DripSpreadMode=6.
      !      DripMode6HeadNodes_Sum,DripMode6FluxNodes_Sum,
      !      DripMode6Iterations_Sum,DripMode6SolverLimit_Sum,
      !      DripMode6BoundaryLimit_Sum,DripMode6Diag_Time,
+     !      DripMode6StepCuts_Sum,DripMode6NonlinearCuts_Sum,
+     !      DripMode6SupplyCuts_Sum,DripMode6MassCuts_Sum,
+     !      DripMode6MinDt,
      !      DripMode6Active,DripMode6Count,DripMode6CenterPos,
      !      DripMode6CenterBnd,DripMode6MaxRadius,
      !      DripMode6CurrentRadius,DripMode6Closed,
      !      DripMode6FluxActive,DripMode6HeadActive,
+     !      DripMode6AtmosHeadActive,
      !      DripMode6CandidateOwner,DripMode6BoundaryOwner,
-     !      DripMode6IterationCount
+     !      DripMode6IterationCount,DripMode6AdaptiveIter
 
 
 cccz the following blocks are used for surface runoff

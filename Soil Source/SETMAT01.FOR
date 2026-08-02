@@ -24,6 +24,10 @@ C
       character SoilFile*132
       ! or character*1 InitType(5)
       Real BldDn,soilair,ThAMin,ThATr
+      Double precision hNew,hOld,Con,Cap,hTemp,Theta,
+     &                 Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh,
+     &                 FK,FC,FQ,FH,Hr,VG_m,ThetaRel,hi1,hi2,hiM,
+     &                 Ci,Ti,S1,S2
       Parameter (NTabD=100,NPar=13,NMatD=15)
       character*1, dimension(NMatD)::InitType
 
@@ -93,11 +97,11 @@ c calculate MP from water content if wc is given as an initial
             hOld(n)=hTemp(n)
           Enddo
         Do 14 M=1,NMat
-          Hr          =FH(0.0,Par(1,M))
-          hSat(M)     =FH(1.0,Par(1,M))
-          ConSat(M)   =FK(0.0,Par(1,M))
+          Hr          =FH(0.0D0,Par(1,M))
+          hSat(M)     =FH(1.0D0,Par(1,M))
+          ConSat(M)   =FK(0.0D0,Par(1,M))
           thR(M)      =FQ(Hr ,Par(1,M))
-          thSat(M)    =FQ(0.0,Par(1,M)) 
+          thSat(M)    =FQ(0.0D0,Par(1,M))
           
           
 CDT FracSind is sand + silt. Since we don't input silt, we 
@@ -108,8 +112,8 @@ c          FracSind(M) =1.0-(Par(12,M)+Par(13,M))
 c          FracClay(M) =Par(13,M)
           FracSind(M) = Par(12,M)+Par(13,M) 
           FracClay(M) = 1-Par(12,M)-Par(13,M) 
-          TUpperLimit(M)=FQ(-100.0,Par(1,M))
-          TLowerLimit(M)=FQ(-150000.0,Par(1,M))
+          TUpperLimit(M)=FQ(-100.0D0,Par(1,M))
+          TLowerLimit(M)=FQ(-150000.0D0,Par(1,M))
           ThFull(M)=TUpperLimit(M)-TLowerLimit(M)
           if (ThFull(M).lt.0) then
              iii=0;
@@ -131,14 +135,14 @@ c          FracClay(M) =Par(13,M)
       Endif  !lInput=1
       Do 15 i=1,NumNP
         M=MatNum(i)
-        hi1=amin1(hSat(M),hTemp(i))
-        hi2=amin1(hSat(M), hNew(i))
+        hi1=dmin1(dble(hSat(M)),hTemp(i))
+        hi2=dmin1(dble(hSat(M)),hNew(i))
         If(Explic) hi2=hi1
         hiM=0.1*hi1+0.9*hi2
         If(hi1.ge.hSat(M).and.hi2.ge.hSat(M)) then
           Ci=ConSat(M)
         Else if(hiM.ge.(hTab(NTabD)+0.04).and.hiM.le.hTab(1)) then
-          iT=int((alog10(-hiM)-alh1)/dlh)+1
+          iT=int((dlog10(-hiM)-alh1)/dlh)+1
           S1=(ConTab(iT+1,M)-ConTab(iT,M))/(hTab(iT+1)-hTab(iT))
           Ci=ConTab(iT,M)+S1*(hiM-hTab(iT))
         Else
@@ -149,11 +153,10 @@ c          FracClay(M) =Par(13,M)
         hi2=hNew(i)
         If(Explic) hi2=hi1
         If(hi2.ge.hSat(M)) then
-          Ci=0
-          Ci=FC(hSat(M),PAR) !prevent capacitance from going to 0
+          Ci=FC(dble(hSat(M)),Par(1,M)) !prevent capacitance from going to 0
           Ti=thSat(M)
         Else if(hi2.ge.(hTab(NTabD)+.04).and.hi2.le.hTab(1)) then
-          iT=int((alog10(-hi2)-alh1)/dlh)+1
+          iT=int((dlog10(-hi2)-alh1)/dlh)+1
           S1=(CapTab(iT+1,M)-CapTab(iT,M))/(hTab(iT+1)-hTab(iT))
           S2=(TheTab(iT+1,M)-TheTab(iT,M))/(hTab(iT+1)-hTab(iT))
           Ci=CapTab(iT,M)+S1*(hi2-hTab(iT))
@@ -166,13 +169,13 @@ c          FracClay(M) =Par(13,M)
         theta(i)=thR(M)+(Ti-thR(M))
 
 csb soil air  equals total porosity (or saturated water content)- current water content
-        soilair(i)= AMAX1(thSat(M)-theta(i),0.0001)
+        soilair(i)=max(dble(thSat(M))-theta(i),1.0D-4)
 	
 C calculate available water content
         If (theta(i).lt.TLowerLimit(M)) Then 
           ThAvail(i)=0;     
           else 
-            ThAvail(i)=Amin1(theta(i),TUpperLimit(M))
+            ThAvail(i)=min(theta(i),dble(TUpperLimit(M)))
      &                       -TLowerLimit(M)
             ThAvail(i)=Amax1(ThAvail(i),0.0)
          End If          
@@ -184,11 +187,117 @@ C calculate available water content
       End
 
 ************************************************************************
-      real function FK(h,Par)
+      Subroutine SetMatCurrentPoint(h,Par,ConCurrent,DCon,
+     &                              ThetaCurrent,DTheta)
+c Return current-state hydraulic properties and their head derivatives.
+c This routine is independent of the legacy SetMat Picard interpolation:
+c it never reads hTemp and does not alter FK, FC, FQ, or SetMat.
+      Implicit None
+      Double precision h,Par(12),ConCurrent,DCon,ThetaCurrent,DTheta
+      Double precision BPar,PPar,Qa,Qm,Qs,Alfa,n,m,Ks,Kk,Qk
+      Double precision HMin,HH,Qees,Qeek,Hs,Hk,Qee,Qe,Qek
+      Double precision FFQ,FFQk,FFQRaw,Kr,ConRaw
+      Double precision U,DQee,DLogQee,DLogFFQ,DFFQ
+      Double precision ThetaRaw
+
+      BPar=0.5D0
+      PPar=2.0D0
+      Qs=Par(2)
+      Qa=Par(3)
+      Qm=Par(4)
+      Alfa=Par(5)
+      n=Par(6)
+      Ks=Par(7)
+      Kk=Par(8)
+      Qk=Par(9)
+      m=1.0D0-1.0D0/n
+      HMin=-1.0D300**(1.0D0/n)/dmax1(Alfa,1.0D0)
+      HH=dmax1(h,HMin)
+      Qees=dmin1((Qs-Qa)/(Qm-Qa),0.999999999999999D0)
+      Qeek=dmin1((Qk-Qa)/(Qm-Qa),Qees)
+      Call SetMatCurrentBreakpoints(Par,Hk,Hs)
+
+      U=(-Alfa*HH)**n
+      Qee=(1.0D0+U)**(-m)
+      DQee=0.0D0
+      If(h.gt.HMin) DQee=m*n*Alfa*(-Alfa*HH)**(n-1.0D0)*
+     &                         (1.0D0+U)**(-m-1.0D0)
+
+      If(h.lt.Hs) then
+        ThetaRaw=Qa+(Qm-Qa)*Qee
+        ThetaCurrent=dmax1(ThetaRaw,1.0D-37)
+        DTheta=0.0D0
+        If(ThetaRaw.gt.1.0D-37) DTheta=(Qm-Qa)*DQee
+      Else
+        ThetaCurrent=Qs
+        DTheta=0.0D0
+      Endif
+
+      If(h.lt.Hk) then
+        Qe=(Qm-Qa)/(Qs-Qa)*Qee
+        Qek=(Qm-Qa)/(Qs-Qa)*Qeek
+        FFQRaw=1.0D0-(1.0D0-Qee**(1.0D0/m))**m
+        FFQk=1.0D0-(1.0D0-Qeek**(1.0D0/m))**m
+        FFQ=FFQRaw
+        If(FFQ.le.0.0D0) FFQ=m*Qee**(1.0D0/m)
+        Kr=((Qe/Qek)**BPar)*((FFQ/FFQk)**PPar)*Kk/Ks
+        ConRaw=Ks*Kr
+        ConCurrent=dmax1(ConRaw,1.0D-37)
+        DCon=0.0D0
+        If(ConRaw.gt.1.0D-37.and.DQee.gt.0.0D0) then
+          DLogQee=DQee/Qee
+          If(FFQRaw.gt.0.0D0) then
+            DFFQ=(1.0D0-Qee**(1.0D0/m))**(m-1.0D0)*
+     &            Qee**(1.0D0/m-1.0D0)*DQee
+            DLogFFQ=DFFQ/FFQ
+          Else
+            DLogFFQ=DLogQee/m
+          Endif
+          DCon=ConRaw*(BPar*DLogQee+PPar*DLogFFQ)
+        Endif
+      ElseIf(h.lt.Hs) then
+        Kr=(1.0D0-Kk/Ks)/(Hs-Hk)*(h-Hs)+1.0D0
+        ConCurrent=Ks*Kr
+        DCon=(Ks-Kk)/(Hs-Hk)
+      Else
+        ConCurrent=Ks
+        DCon=0.0D0
+      Endif
+
+      Return
+      End
+
+************************************************************************
+      Subroutine SetMatCurrentBreakpoints(Par,Hk,Hs)
+c Return the pressure-head breakpoints of the continuous, piecewise-smooth
+c hydraulic law used by SetMatCurrentPoint.  Newton globalization uses these
+c same constitutive events, so breakpoint locations have one source of truth.
+      Implicit None
+      Double precision Par(12),Hk,Hs
+      Double precision Qa,Qm,Qs,Alfa,n,m,Qees,Qeek
+
+      Qs=Par(2)
+      Qa=Par(3)
+      Qm=Par(4)
+      Alfa=Par(5)
+      n=Par(6)
+      m=1.0D0-1.0D0/n
+      Qees=dmin1((Qs-Qa)/(Qm-Qa),0.999999999999999D0)
+      Qeek=dmin1((Par(9)-Qa)/(Qm-Qa),Qees)
+      Hs=-1.0D0/Alfa*
+     &  (Qees**(-1.0D0/m)-1.0D0)**(1.0D0/n)
+      Hk=-1.0D0/Alfa*
+     &  (Qeek**(-1.0D0/m)-1.0D0)**(1.0D0/n)
+      Return
+      End
+
+************************************************************************
+
+      double precision function FK(h,Par)
 
       implicit double precision(A-H,O-Z)
       double precision n,m,Ks,Kr,Kk
-      real h,Par(12)
+      double precision h,Par(12)
 c      double precision PPar
       integer PPar
       
@@ -233,11 +342,11 @@ c      double precision PPar
 
 ************************************************************************
 
-      real function FC(h,Par)
+      double precision function FC(h,Par)
 
       implicit double precision(A-H,O-Z)
       double precision n,m
-      real h,Par(12)
+      double precision h,Par(12)
 
       Qr=Par(1)
       Qs=Par(2)
@@ -264,11 +373,11 @@ c      double precision PPar
 
 ************************************************************************
 
-      real function FQ(h,Par)
+      double precision function FQ(h,Par)
 
       implicit double precision(A-H,O-Z)
       double precision n,m
-      real h,Par(12)
+      double precision h,Par(12)
 
       Qr=Par(1)
       Qs=Par(2)
@@ -293,11 +402,11 @@ c      double precision PPar
 
 ************************************************************************
 
-      real function FH(Qe,Par)
+      double precision function FH(Qe,Par)
 
       implicit double precision(A-H,O-Z)
       double precision n,m
-      real Qe,Par(12)
+      double precision Qe,Par(12)
 
       Qr=Par(1)
       Qs=Par(2)

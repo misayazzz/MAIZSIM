@@ -13,17 +13,17 @@
       Include 'PuSurface.ins'
       
       integer :: pondTimeNum
-      Parameter (PERIOD= 1./24., pondTimeNum=20)
+      Double precision :: PERIOD
+      Parameter (PERIOD=1.0D0/24.0D0,pondTimeNum=20)
       Integer:: pondStarted, pondEnd,jj, irrigationApplied,
      &         startHour(pondTimeNum), endHour(pondTimeNum),
      &         irrigationTimes, modNum
       Character (len=10) :: startDate(pondTimeNum), endDate(pondTimeNum)
       Character (len=132) :: InString
       Real :: pondedDepth(pondTimeNum)
-      Real :: startTime(pondTimeNum), endTime(pondTimeNum)
       Real :: pondedTime, pondedRate(pondTimeNum)  
-      Real :: thisTime
-      Double Precision :: CriticalHSave
+      Double precision :: startTime(pondTimeNum),endTime(pondTimeNum)
+      Double precision :: thisTime,CriticalHSave
 
       
       
@@ -68,8 +68,10 @@
             else
                
              Do i=1,irrigationTimes
-                startTime(i)=julday(startDate(i)) + startHour(i)/24.        ! All the dates irrigation is applied stored in tApplIrrig
-                endTime(i)=julday(endDate(i)) + endHour(i)/24.
+                startTime(i)=dble(julday(startDate(i)))+
+     &            dble(startHour(i))/24.0D0
+                endTime(i)=dble(julday(endDate(i)))+
+     &            dble(endHour(i))/24.0D0
              EndDo
              tNext(ModNum)=startTime(1)
              irrigationApplied=1

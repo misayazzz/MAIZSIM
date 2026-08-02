@@ -4,13 +4,15 @@
       Include 'public.ins'
       Include 'nitvar.ins'
       Include 'PuSurface.ins'
-      Integer Max_Irrig_times,Irrig_times, IrrigHour
+      Integer Max_Irrig_times,Irrig_times,IrrigHour,IrrgStartHour
       Integer IrrigationApplied,HoursIrrigated
       Parameter (Max_Irrig_times=365)
       Character*10 Date(Max_Irrig_times)
       Character InString*132
       Real Amount_Irrig_Applied,AvgIrrRate,IrrigRate
-      Parameter (PERIOD =1./24.)
+      Double precision PERIOD,tApplIrrig,StopIrrig,
+     !                 NextCanonicalHour
+      Parameter (PERIOD=1.0D0/24.0D0)
       Common /Irrig/ tApplIrrig(Max_Irrig_times),
      !         StopIrrig(Max_Irrig_times),
      !         Amount_Irrig_Applied(Max_Irrig_times),
@@ -18,8 +20,8 @@
      !         AvgIrrRate, IrrigRate(24),IrrigHour
       
       t=time
-      IrrgStartHour=6.0                   ! irrigation start hour 6 AM   !if we want we can make this as an input by the user. 
-      HoursIrrigated=0.0                  ! total number of hours of irrigation in a day
+      IrrgStartHour=6                     ! irrigation start hour 6 AM
+      HoursIrrigated=0                    ! total number of hours of irrigation in a day
      
 c
       If(lInput.eq.1) then
@@ -44,7 +46,7 @@ c
           ModNum=NumMod
 
           Do i=1,Irrig_times
-              tApplIrrig(i)=julday(date(i))                   ! All the dates irrigation is applied stored in tApplIrrig
+              tApplIrrig(i)=dble(julday(date(i)))             ! All the dates irrigation is applied stored in tApplIrrig
           EndDo
           
           Do i=1,24
@@ -82,8 +84,10 @@ c
             IrrigRate(i)=DtIrrig*AvgIrrRate/(PERIOD*24.0)     !hour/daycm/hour /(1hour/24)= cm/hour
             DtIrrig=0.0                !no more irrigation
             HoursIrrigated=HoursIrrigated+1
-            tNext(ModNum)=tApplIrrig(jj)+IrrgStartHour*period
-            StopIrrig(jj)=tNext(ModNum)+HoursIrrigated*period
+            tNext(ModNum)=tApplIrrig(jj)+
+     !        dble(IrrgStartHour)/24.0D0
+            StopIrrig(jj)=tApplIrrig(jj)+
+     !        dble(IrrgStartHour+HoursIrrigated)/24.0D0
             IrrigHour=1
            Endif !! if DtIrrig>precision_threshold 
          i=i+1
@@ -120,15 +124,16 @@ cccz                   if (Q(i).gt.0.0) CodeW(i)=-4   ! make sure bc changes if 
             End Do
             !End of passing the flux      
             
-              tNext(ModNum)=time + PERIOD                     !once irrigated in one hour, next irrigation is in next hour
+              tNext(ModNum)=NextCanonicalHour(time)           !once irrigated in one hour, next irrigation is in next hour
               IrrigHour=IrrigHour+1                           !this count the number of irrigation in a day
           Else
               IrrigationApplied=IrrigationApplied+1           !when irrigation is stopped on a perticular day of irrigation
                   if (IrrigationApplied.gt.Irrig_times) then
                           tNext(ModNum)=1.E+32
                   else
-                      tNext(ModNum)=tApplIrrig(IrrigationApplied)+  ! this set the tnext to the next day of irrigation start time
-     !                IrrgStartHour*period
+                      tNext(ModNum)=
+     !                  tApplIrrig(IrrigationApplied)+
+     !                  dble(IrrgStartHour)/24.0D0
                   end if
           Endif
       End if
@@ -137,4 +142,3 @@ cccz                   if (Q(i).gt.0.0) CodeW(i)=-4   ! make sure bc changes if 
 20    Stop 'Irrgation data error'
 
       End
-        

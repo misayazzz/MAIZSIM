@@ -451,6 +451,31 @@ def write_drip_file(path, events):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def validate_mode6_emitter_contract(events):
+    """Enforce one physical, non-overlapping emitter for all Mode 6 events."""
+    mode6_events = [event for event in events if event.get("spread_mode", 0) == 6]
+    if not mode6_events:
+        return
+    for event in mode6_events:
+        if len(event["nodes"]) != 1:
+            raise ConfigError("DripSpreadMode=6 的每个事件必须且只能包含一个滴头节点.")
+    emitter_nodes = {event["nodes"][0] for event in mode6_events}
+    if len(emitter_nodes) != 1:
+        raise ConfigError("所有 DripSpreadMode=6 事件必须使用同一个物理滴头节点.")
+    for event_index, event in enumerate(mode6_events):
+        event_start = event["date"] + timedelta(hours=event["start_hour"])
+        event_stop = event["stop_date"] + timedelta(hours=event["stop_hour"])
+        for earlier in mode6_events[:event_index]:
+            earlier_start = earlier["date"] + timedelta(
+                hours=earlier["start_hour"]
+            )
+            earlier_stop = earlier["stop_date"] + timedelta(
+                hours=earlier["stop_hour"]
+            )
+            if event_start < earlier_stop and earlier_start < event_stop:
+                raise ConfigError("DripSpreadMode=6 的滴灌事件不能相互重叠.")
+
+
 def build_drip_events(run, grid_file):
     """Build writable drip events for a run using explicit nodes or Distance mapping."""
     run_id = run["id"]
@@ -469,6 +494,7 @@ def build_drip_events(run, grid_file):
     else:
         for event in normalized_events:
             event["nodes"] = [map_distance_to_surface_node(event["distance"], grid_data["surface_nodes"])]
+    validate_mode6_emitter_contract(normalized_events)
     return normalized_events
 
 

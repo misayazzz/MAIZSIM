@@ -83,7 +83,8 @@ c inputs hourly data
       Include 'puweath.ins'
       Include 'PuSurface.ins'
       
-      Parameter (PERIOD =1./24.)
+      Double precision PERIOD,NextCanonicalHour
+      Parameter (PERIOD=1.0D0/24.0D0)
       integer jday,m,DayOfYear,CurYear,Modnum, ThisYear,
      &         isol, HOUR, iperd
       double precision St,t, GAMMA_psy
@@ -1175,7 +1176,7 @@ c................... End of the furrow irrigation
    
 c................... This is the end of hourly calculations
       Wind=HWIND(Itime) ! save hourly value of wind to pass to crop model
-      tNext(ModNum)=Time+period
+      tNext(ModNum)=NextCanonicalHour(Time)
       
       do i=1,NumBPD
 cccz extract useful variables for surface physical processes
@@ -1223,4 +1224,3 @@ c
       stop
       END
 C
-     

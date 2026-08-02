@@ -109,6 +109,10 @@ class CaseMetrics:
     drip_pressure_factor_min: float
 
 
+# The texture-class van Genuchten parameters are supplemented by MAIZSIM's
+# existing HUTD06 near-saturation bridge.  Every HUTD06 material uses
+# Kk ~= 0.9 Ks and thk = ths - 0.004, which removes the singular standard
+# Mualem conductivity slope before saturation without soil-specific tuning.
 DEFAULT_SOILS = (
     SoilVariant(
         name="loam",
@@ -119,8 +123,8 @@ DEFAULT_SOILS = (
         alpha=0.036,
         n=1.560,
         ks=30.0,
-        kk=30.0,
-        thk=0.430,
+        kk=27.0,
+        thk=0.426,
         bulk_density=1.400,
         organic_matter=0.0025,
         sand=0.43,
@@ -135,8 +139,8 @@ DEFAULT_SOILS = (
         alpha=0.075,
         n=1.890,
         ks=106.1,
-        kk=106.1,
-        thk=0.410,
+        kk=95.49,
+        thk=0.406,
         bulk_density=1.550,
         organic_matter=0.0020,
         sand=0.65,
@@ -151,8 +155,8 @@ DEFAULT_SOILS = (
         alpha=0.019,
         n=1.310,
         ks=6.24,
-        kk=6.24,
-        thk=0.410,
+        kk=5.616,
+        thk=0.406,
         bulk_density=1.300,
         organic_matter=0.0030,
         sand=0.30,

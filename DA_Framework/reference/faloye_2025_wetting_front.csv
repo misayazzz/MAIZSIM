@@ -1,0 +1,11 @@
+benchmark_id,treatment,emitter_head_cm,emitter_rate_l_h,irrigation_time_min,applied_volume_cm3,wetted_width_mean_cm,wetted_width_reported_spread_cm,wetted_depth_mean_cm,wetted_depth_reported_spread_cm,replicate_count,source_table
+faloye_2025_q1_t10,Q1,10,0.12,10,20,6.50,0.50,9.00,1.73,3,Table 2
+faloye_2025_q1_t20,Q1,10,0.12,20,40,8.17,1.61,11.83,2.02,3,Table 2
+faloye_2025_q1_t30,Q1,10,0.12,30,60,11.83,1.15,14.67,4.51,3,Table 2
+faloye_2025_q1_t60,Q1,10,0.12,60,120,15.67,1.15,16.00,1.73,3,Table 2
+faloye_2025_q1_t120,Q1,10,0.12,120,240,21.70,2.13,18.00,2.15,3,Table 2
+faloye_2025_q2_t10,Q2,20,0.18,10,30,9.50,1.32,15.83,1.04,3,Table 2
+faloye_2025_q2_t20,Q2,20,0.18,20,60,10.67,0.58,17.33,0.58,3,Table 2
+faloye_2025_q2_t30,Q2,20,0.18,30,90,19.33,1.15,25.00,5.00,3,Table 2
+faloye_2025_q2_t60,Q2,20,0.18,60,180,20.00,2.00,26.00,5.00,3,Table 2
+faloye_2025_q2_t120,Q2,20,0.18,120,360,26.80,2.33,29.00,5.13,3,Table 2

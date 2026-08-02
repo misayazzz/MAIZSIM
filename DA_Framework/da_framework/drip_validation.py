@@ -47,6 +47,8 @@ G05_DRIP_DIAGNOSTIC_COLUMNS = {
     "drip_mode6_head_nodes": "DripMode6HeadNodes",
     "drip_mode6_flux_nodes": "DripMode6FluxNodes",
     "drip_mode6_iterations": "DripMode6Iterations",
+    "drip_mode6_step_cuts": "DripMode6StepCuts",
+    "drip_mode6_min_dt_days": "DripMode6MinDtDays",
     "drip_mode6_closure_residual_mm": "DripMode6ClosureResidual",
 }
 
@@ -201,6 +203,16 @@ def parse_drip_file(path):
                 source_width_cm=event["source_width_cm"],
             )
         )
+
+    mode6_events = [event for event in events if event.spread_mode == 6]
+    if mode6_events:
+        emitter_nodes = {event.nodes[0] for event in mode6_events}
+        if len(emitter_nodes) != 1:
+            raise ValueError("Mode 6 events must use the same drip emitter")
+        for event_index, event in enumerate(mode6_events):
+            for earlier in mode6_events[:event_index]:
+                if event.start < earlier.stop and earlier.start < event.stop:
+                    raise ValueError("Mode 6 drip events must not overlap")
 
     return DripSchedule(tuple(events))
 
@@ -452,6 +464,10 @@ def _parse_event_line(line, event_index, path):
         raise ValueError(
             f"Drip event {event_index + 1} source_width_cm must be positive "
             "when spread_mode is 5 or 6"
+        )
+    if spread_mode == 6 and count != 1:
+        raise ValueError(
+            f"Drip event {event_index + 1} Mode 6 requires exactly one emitter"
         )
 
     return {

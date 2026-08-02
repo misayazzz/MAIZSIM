@@ -15,6 +15,13 @@ MODEL_FAILURE_MARKERS = (
     "Invalid drip",
     "Drip data error",
     "WaterMover non-finite head",
+    "Mode 6 failed to converge",
+    "Mode 6 Newton failed at minimum water step",
+    "Mode 6 atmospheric active boundary did not close",
+    "Mode 6 head boundary exceeded emitter supply",
+    "Mode 6 active boundary iteration did not close",
+    "Mode 6 water mass balance failed",
+    "Water mass balance failed after Picard refinement",
     "Sowing date cannot be earlier",
 )
 MODEL_LOG_NAME = "2DSOIL03.LOG"

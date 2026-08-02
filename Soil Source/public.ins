@@ -1,7 +1,7 @@
 cdt ToDo - simplyfy common blocks so only variables needed in plant model
 cdt ToDo May 2016 added VarBW_old for debugging purposes can be removed later
 c   will be transferred.  
-      Parameter (NumNPD=4000, NumElD=3500, NumBPD=600, NSeepD = 2,
+      Parameter (NumNPD=5000, NumElD=5000, NumBPD=600, NSeepD = 2,
      !           NumSPD= 30, NumSD =10, NDrainD=2,NumDR=30,
      !           NumGD = 3, NumPlD=100, 
      !           NMatD=15,MNorth=4,
@@ -13,6 +13,11 @@ c   will be transferred.
       Double precision  A1,B1,VRV,RES,RQI,RQ,QI,QQ,RQIDOT  
 	  Double precision  ECNVRG, RCNVRG,ACNVRG
 	  Double precision Starter, TimeStep
+      Double precision WaterMBInitialStorage,WaterMBCurrentStorage,
+     !  WaterMBCumulativeIn,WaterMBCumulativeOut,
+     !  WaterMBCumulativeSink,WaterMBCumulativeResidual,
+     !  WaterMBMaxStepResidual
+      Double precision hNew,ThNew,Con
       
       Real BlkDn, FracSind, FracClay, FracOM, hCritS,hCritA
 	  Real nodeArea, gridWidth
@@ -23,6 +28,7 @@ c       ! NodalPub_aux variables
      !   RMassY, RDenY, gSink_OM, gSink_root, gsink_N2O, gSink_rootY,         
      !   gSink_rootM,cSink_OM
       Integer CodeW,CodeS,CodeT,CodeG,errPlant
+      Integer WaterMBAcceptedSteps,WaterMBInitialized
 	  Integer MaxItO, OutPutSoilNo, OutPutSoilYes  
       Logical*1 lOrt
       Integer DailyOutput, HourlyOutput,RunFlag,  
@@ -82,6 +88,11 @@ c       ! NodalPub_aux variables
      !           iTime, iDawn, iDusk, TimeStep
       Common /module_public/  NumMod,Movers(4), NShoot     
 	  Common /error_public/errPlant   
+      Common /WaterMassBalance_public/ WaterMBInitialStorage,
+     !       WaterMBCurrentStorage,WaterMBCumulativeIn,
+     !       WaterMBCumulativeOut,WaterMBCumulativeSink,
+     !       WaterMBCumulativeResidual,WaterMBMaxStepResidual,
+     !       WaterMBAcceptedSteps,WaterMBInitialized
       Common /Solver_public/IAD(MBandD,NumNPD), IADN(NumNPD),
      !        IADD(NumNPD),A1(MBandD,NumNPD),B1(NumNPD),
      !        VRV(NumNPD),RES(NumNPD),RQI(NumNPD,MNorth),

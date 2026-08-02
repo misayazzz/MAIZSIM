@@ -394,6 +394,7 @@ cSolve
      !               VClay,VOrgM,ThNew,
      !               EPSI_Heat,ThTot,CWat,Tmpr,Tcsxx,TCSzz,hCritA,hNew)
 C calculate thermal conducivity
+      Double precision hNew,ThNew
       Dimension HCS(NumNP),MatNumN(NumNP),VSind(NMatD),VClay(NMatD),
      !          VOrgM(NMatD),ThNew(NumNP),ThTot(NMatD),Tmpr(NumNP),
      !          Tcsxx(NumNP),TCSzz(NumNP),hNew(NumNP)

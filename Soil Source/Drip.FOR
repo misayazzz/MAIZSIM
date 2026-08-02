@@ -13,11 +13,11 @@
      ! DripSpreadMode
       Parameter (Max_times=75, Max_nodes=150)
       Parameter (NTabD=100, NPar=13)
-      Parameter (PERIOD =1./24.)
-      Real wAppl,tAppl_start,tAppl_stop,DripRate(NumBPD),
+      Double precision PERIOD
+      Parameter (PERIOD=1.0D0/24.0D0)
+      Real wAppl,DripRate(NumBPD),
      !     CurrentRate,
-     !     NextTime,DripTol,LastRate,LastAir,LastMulch,LastBW,
-     !     start_hour(Max_times),stop_hour(Max_times),TotalWidth,
+     !     DripTol,LastRate,LastAir,LastMulch,LastBW,TotalWidth,
      !     SourceFlux,AddRate,PressureFactor,Havail,HeadPressure,
      !     DripHIn,DripExp,DripPcMin,DripPcMax,SourceRate,
      !     SourceDemandFlux,DemandRate,LossRate,DripWetWidthMax,
@@ -30,17 +30,27 @@
      !     CapSum,LocalCap,LocalCapFactor,CandidateMin,CandidateMax,
      !     StorageFlux,SourceInputFlux,ReleaseCap,LocalMeasure,
      !     ReleaseMeasure
-      Double Precision StorageAdd,StorageLimit,StorageOverflow,
-     !                 ReleaseVolume,DripBaseDtMx
-      Real Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
-      Real DripThOld(NumNPD),DripHTemp(NumNPD),DripHOld(NumNPD)
+      Double Precision tAppl_start,tAppl_stop,NextTime,
+     !                 start_hour(Max_times),
+     !                 stop_hour(Max_times),
+     !                 StorageAdd,StorageLimit,StorageOverflow,
+     !                 ReleaseVolume,DripBaseDtMx,DripTimeTol
+      Double Precision Par,hTab,ConTab,CapTab,ConSat,TheTab,alh1,dlh
+      Double Precision DripThOld(NumNPD),DripHTemp(NumNPD),
+     !                 DripHOld(NumNPD),DripConAxx(NumElD),
+     !                 DripConAzz(NumElD),DripConAxz(NumElD),
+     !                 DripDt,DripDtOld,DripTOld,
+     !                 DripThR(NMatD),DripHSat(NMatD)
+      Real DripTolTh,DripTolH
+      Logical DripFreeD
       Integer CenterPos,CenterBnd,SourceNode,ActiveRadius,
      !        LeftPos,RightPos,NeedExpand,CanShrink,MaxRadius,
      !        EdgeMaxRadius,CandidateRadius,CandidateLeft,
      !        CandidateRight,ActiveNodes,TestNode,ios,
      !        DesiredRadius,FieldCount,DripFieldCount,m,
      !        DripBaseDtMxSet,DripActive,Mode6Source,
-     !        Mode6Left,Mode6Right
+     !        Mode6Left,Mode6Right,Mode6EmitterNode
+      Integer DripMaxIt,DripIsat(NumBPD)
       Character*256 EventLine
 
       Character*10 Start_Date(Max_times),Stop_Date(Max_times)
@@ -63,7 +73,11 @@
      !                hTab(NTabD),ConTab(NTabD,NMatD),
      !                CapTab(NTabD,NMatD),ConSat(NMatD),
      !                TheTab(NTabD,NMatD),alh1,dlh
-      Common /WaterM/ DripThOld,DripHTemp,DripHOld
+      Common /WaterM/ DripThOld,DripHTemp,DripHOld,
+     !                DripConAxx,DripConAzz,DripConAxz,
+     !                DripMaxIt,DripTolTh,DripTolH,
+     !                DripDt,DripDtOld,DripTOld,
+     !                DripThR,DripHSat,DripIsat,DripFreeD
       Save DripBaseDtMx,DripBaseDtMxSet
       Data DripBaseDtMxSet /0/
 
@@ -102,6 +116,11 @@
         DripMode6SolverLimit_Sum=0.0D0
         DripMode6BoundaryLimit_Sum=0.0D0
         DripMode6Diag_Time=0.0D0
+        DripMode6StepCuts_Sum=0.0D0
+        DripMode6NonlinearCuts_Sum=0.0D0
+        DripMode6SupplyCuts_Sum=0.0D0
+        DripMode6MassCuts_Sum=0.0D0
+        DripMode6MinDt=1.0D30
         Open(40,file=DripFile,err=20)
         Read(40,*,Err=20)
         Read(40,*,Err=20)
@@ -131,12 +150,18 @@
           DripMode6AssignedFlux(i)=0.0D0
           DripMode6FluxActive(i)=0
           DripMode6HeadActive(i)=0
+          DripMode6AtmosHeadActive(i)=0
           DripMode6CandidateOwner(i)=0
           DripMode6BoundaryOwner(i)=0
+        EndDo
+        Do i=1,NumBP
+          n=KXB(i)
+          If(CodeW(n).eq.4) DripMode6AtmosHeadActive(i)=1
         EndDo
         DripMode6Active=0
         DripMode6Count=0
         DripMode6IterationCount=0
+        DripMode6AdaptiveIter=0
         Do i=1,MaxDripMode6D
           DripMode6DemandFlux(i)=0.0D0
           DripMode6InputFlux(i)=0.0D0
@@ -194,6 +219,7 @@
           Return
         End if
         Read(40,*,Err=20)
+        Mode6EmitterNode=0
         Do i=1,Drip_times
           Read(40,'(A)',Err=20) EventLine
           DripMode(i)=0
@@ -272,16 +298,37 @@
      !      DripSourceWidth(i).le.0.0) then
             Stop 'Mode 5/6 drip source width required'
           Endif
+          If(DripSpreadMode(i).eq.6.and.Num_nodes(i).ne.1) then
+            Stop 'Mode 6 requires exactly one drip emitter'
+          Endif
           Read(40,*,Err=20)
           Read(40,*,Err=20) (nAppl(i,j),j=1,Num_nodes(i))
+          If(DripSpreadMode(i).eq.6) then
+            If(Mode6EmitterNode.eq.0) then
+              Mode6EmitterNode=nAppl(i,1)
+            ElseIf(nAppl(i,1).ne.Mode6EmitterNode) then
+              Stop 'Mode 6 events must use the same drip emitter'
+            Endif
+          Endif
         EndDo
         Close(40)
-        NextTime=1.E+32
+        NextTime=1.0D32
         Do i=1,Drip_times
-          tAppl_start(i)=julday(Start_Date(i)) + Start_hour(i)/24.0
-          tAppl_stop(i)= julday(Stop_Date(i))  + Stop_hour(i)/24.0
+          tAppl_start(i)=dble(julday(Start_Date(i)))+
+     !      Start_hour(i)/24.0D0
+          tAppl_stop(i)=dble(julday(Stop_Date(i)))+
+     !      Stop_hour(i)/24.0D0
           If(tAppl_stop(i).le.tAppl_start(i)) then
             Stop 'Invalid drip irrigation time window'
+          Endif
+          If(DripSpreadMode(i).eq.6) then
+            Do m=1,i-1
+              If(DripSpreadMode(m).eq.6.and.
+     !          tAppl_start(i).lt.tAppl_stop(m).and.
+     !          tAppl_start(m).lt.tAppl_stop(i)) then
+                Stop 'Mode 6 drip events must not overlap'
+              Endif
+            EndDo
           Endif
           Do j=1,Num_nodes(i)
             found=0
@@ -297,12 +344,19 @@
               Stop 'Drip node is not a surface water boundary'
             Endif
           EndDo
-          NextTime=amin1(NextTime,tAppl_start(i))
+          NextTime=dmin1(NextTime,tAppl_start(i))
         EndDo
         tNext(ModNum)=NextTime
       Endif
 
       If(Drip_times.eq.0) Return
+
+c Synchronizer advances Time to the end of the current integration step before
+c boundary modules are evaluated.  Scheduled irrigation must consequently use
+c the backward-Euler endpoint interval (start, stop].  Using [start, stop)
+c shifts one adaptive step of water ahead of the event and omits the final
+c event step, so the integrated volume depends on the two edge step sizes.
+      DripTimeTol=1.0D-10
 
 c Keep the small water step only while drip water is active.
 c The original water dtMx is read by WaterMover after the first input pass,
@@ -314,6 +368,9 @@ c so capture it on the first routine pass and restore it outside events.
       If(DripBaseDtMxSet.eq.1) dtMx(1)=DripBaseDtMx
       DripActive=0
       Do jj=1,Drip_times
+c This look-ahead flag controls the next Synchronizer step, so it is enabled
+c at the event start and released at its stop.  The actual source below uses
+c the distinct backward-Euler endpoint interval (start, stop].
         If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
           DripActive=1
         Endif
@@ -333,6 +390,21 @@ c so capture it on the first routine pass and restore it outside events.
         DripPressureLoss_Rate(i)=0.0
         DripStorageRelease_Rate(i)=0.0
         DripStorageActive(i)=0
+c Restore the independent atmospheric complementarity state beneath every
+c surface node used by the preceding Mode 6 water step before clearing drip
+c ownership.  A drip head/flux boundary has priority only while it is active;
+c after the event the accepted atmospheric flux/hCritA state must reappear.
+        If(DripMode6CandidateOwner(i).gt.0.or.
+     !    DripMode6BoundaryOwner(i).gt.0) then
+          n=KXB(i)
+          If(DripMode6AtmosHeadActive(i).eq.1) then
+            Q(n)=0.0
+            CodeW(n)=4
+          Else
+            Q(n)=-VarBW(i,3)*Width(i)
+            CodeW(n)=-4
+          Endif
+        Endif
         DripMode6AssignedFlux(i)=0.0D0
         DripMode6FluxActive(i)=0
         DripMode6HeadActive(i)=0
@@ -346,7 +418,7 @@ c so capture it on the first routine pass and restore it outside events.
           n=KXB(i)
           ReleaseMeasure=sngl(DripCoveredMeasure(i))
           If(ReleaseMeasure.le.DripTol) ReleaseMeasure=Width(i)
-          LocalCapFactor=1.0+amax1(0.0,-hNew(n))/25.0
+          LocalCapFactor=1.0+dmax1(0.0D0,-hNew(n))/25.0D0
           LocalCapFactor=amax1(1.0,amin1(5.0,LocalCapFactor))
           ReleaseCap=ConSat(MatNumN(n))*LocalCapFactor
           ReleaseVolume=dmin1(DripSurfaceStorage(i)/Step,
@@ -367,6 +439,7 @@ c so capture it on the first routine pass and restore it outside events.
       DripMode6Active=0
       DripMode6Count=0
       DripMode6IterationCount=0
+      DripMode6AdaptiveIter=0
       Do i=1,MaxDripMode6D
         DripMode6DemandFlux(i)=0.0D0
         DripMode6InputFlux(i)=0.0D0
@@ -382,7 +455,8 @@ c so capture it on the first routine pass and restore it outside events.
       EndDo
 
       Do jj=1,Drip_times
-        If(time.ge.tAppl_start(jj).and.time.lt.tAppl_stop(jj)) then
+        If(time.gt.tAppl_start(jj)+DripTimeTol.and.
+     !     time.le.tAppl_stop(jj)+DripTimeTol) then
           If(DripSpreadMode(jj).eq.5.or.
      !      DripSpreadMode(jj).eq.6) DripBypassRunoff=1
           Do in=1,Num_nodes(jj)
@@ -466,8 +540,10 @@ c so capture it on the first routine pass and restore it outside events.
                 MaxRadius=CandidateRadius
               Endif
             EndDo
-            If(DripSpreadMode(jj).eq.6.and.
-     !        MaxWetWidth.ge.SurfaceWidth-DripTol) then
+            If(DripSpreadMode(jj).eq.6) then
+c HYDRUS SurfaceDrip advances over the connected surface until the
+c emitter flow is accepted.  Mode 6 therefore uses the full half-domain;
+c DripWetWidthMax remains a Mode 5 calibration/control parameter only.
               MaxRadius=EdgeMaxRadius
             Endif
             If(DripSpreadMode(jj).eq.5) MaxRadius=EdgeMaxRadius
@@ -479,7 +555,7 @@ c so capture it on the first routine pass and restore it outside events.
             Endif
             PressureFactor=1.0
             If(DripMode(jj).gt.0.and.DripMode(jj).lt.3) then
-              HeadPressure=amax1(hNew(SourceNode),0.0)
+              HeadPressure=dmax1(hNew(SourceNode),0.0D0)
               Havail=DripHIn(jj)-HeadPressure
               If(Havail.le.0.0) then
                 PressureFactor=0.0
@@ -498,6 +574,9 @@ c so capture it on the first routine pass and restore it outside events.
             If(DripSpreadMode(jj).eq.6) then
 c Mode 6 registers a HYDRUS-style surface active boundary source.
 c WaterMover assigns the active flux/head boundaries from this state.
+              If(DripMode6Count.ge.1) then
+                Stop 'Only one active Mode 6 drip emitter is supported'
+              Endif
               SourceRate=wAppl(jj)/PERIOD
               SourceDemandFlux=SourceRate*DripSourceWidth(jj)
               SourceFlux=SourceDemandFlux*PressureFactor
@@ -528,16 +607,40 @@ c WaterMover assigns the active flux/head boundaries from this state.
               Do k=Mode6Left,Mode6Right
                 DripMode6CandidateOwner(DripSurfBnd(k))=Mode6Source
               EndDo
-              DesiredRadius=0
+c Continue the HYDRUS-style active surface boundary from the wetted
+c radius accepted in the preceding water step.  Rebuilding every step
+c from the emitter-only Neumann condition repeatedly forces the same
+c flux-to-head transitions and can trap the global integrator at dtMin.
+c Nodes inside the saved radius are the connected zero-pressure set;
+c nodes on its edge carry the finite residual flux.
+              DesiredRadius=min(WetRadius(jj,in),MaxRadius)
               DripMode6CurrentRadius(Mode6Source)=DesiredRadius
               If(SourceFlux.le.DripTol) then
                 DripMode6Closed(Mode6Source)=1
               Else
                 DripMode6Closed(Mode6Source)=0
-                DripMode6FluxActive(CenterBnd)=1
-                DripMode6AssignedFlux(CenterBnd)=
-     !            DripMode6AssignedFlux(CenterBnd)+dble(SourceFlux)
-                DripMode6BoundaryOwner(CenterBnd)=Mode6Source
+                TotalMeasure=0.0
+                Do k=Mode6Left,Mode6Right
+                  CandidateRadius=iabs(k-CenterPos)
+                  If(CandidateRadius.lt.DesiredRadius) then
+                    DripMode6HeadActive(DripSurfBnd(k))=1
+                    DripMode6BoundaryOwner(DripSurfBnd(k))=Mode6Source
+                  ElseIf(CandidateRadius.eq.DesiredRadius) then
+                    DripMode6FluxActive(DripSurfBnd(k))=1
+                    DripMode6BoundaryOwner(DripSurfBnd(k))=Mode6Source
+                    TotalMeasure=TotalMeasure+Width(DripSurfBnd(k))
+                  Endif
+                EndDo
+                If(TotalMeasure.le.DripTol) then
+                  Stop 'Mode 6 frontier has zero boundary measure'
+                Endif
+                Do k=Mode6Left,Mode6Right
+                  If(DripMode6FluxActive(DripSurfBnd(k)).eq.1) then
+                    DripMode6AssignedFlux(DripSurfBnd(k))=
+     !                dble(SourceFlux)*dble(Width(DripSurfBnd(k)))/
+     !                dble(TotalMeasure)
+                  Endif
+                EndDo
               Endif
               GoTo 520
             Endif
@@ -647,7 +750,8 @@ c surface wetting interval selected from local hydraulic acceptance.
      !              Width(DripSurfBnd(k)))
                   If(CoverWidth.le.DripTol.or.
      !              LocalMeasure.le.DripTol) GoTo 330
-                  LocalCapFactor=1.0+amax1(0.0,-hNew(TestNode))/25.0
+                  LocalCapFactor=1.0+
+     !              dmax1(0.0D0,-hNew(TestNode))/25.0D0
                   LocalCapFactor=amax1(1.0,
      !              amin1(5.0,LocalCapFactor))
                   LocalCap=ConSat(MatNumN(TestNode))*LocalCapFactor
@@ -875,7 +979,8 @@ c surface wetting interval selected from local hydraulic acceptance.
      !              Width(DripSurfBnd(k)))
                 Endif
                 If(LocalMeasure.le.DripTol) GoTo 410
-                LocalCapFactor=1.0+amax1(0.0,-hNew(TestNode))/25.0
+                LocalCapFactor=1.0+
+     !            dmax1(0.0D0,-hNew(TestNode))/25.0D0
                 LocalCapFactor=amax1(1.0,
      !            amin1(5.0,LocalCapFactor))
                 LocalCap=ConSat(MatNumN(TestNode))*LocalCapFactor
@@ -1055,7 +1160,7 @@ c surface wetting interval selected from local hydraulic acceptance.
             DripDiag_StepCount=DripDiag_StepCount+1.0D0
  520        Continue
           EndDo
-        ElseIf(time.ge.tAppl_stop(jj)) then
+        ElseIf(time.gt.tAppl_stop(jj)+DripTimeTol) then
           Do in=1,Num_nodes(jj)
             WetRadius(jj,in)=0
             ShrinkCount(jj,in)=0
@@ -1099,13 +1204,13 @@ c surface wetting interval selected from local hydraulic acceptance.
         LastBW(i)=VarBW(i,1)
       EndDo
 
-      NextTime=1.E+32
+      NextTime=1.0D32
       Do jj=1,Drip_times
-        If(tAppl_start(jj).gt.time+0.001*Step) then
-          NextTime=amin1(NextTime,tAppl_start(jj))
+        If(tAppl_start(jj).gt.time+0.001D0*Step) then
+          NextTime=dmin1(NextTime,tAppl_start(jj))
         Endif
-        If(tAppl_stop(jj).gt.time+0.001*Step) then
-          NextTime=amin1(NextTime,tAppl_stop(jj))
+        If(tAppl_stop(jj).gt.time+0.001D0*Step) then
+          NextTime=dmin1(NextTime,tAppl_stop(jj))
         Endif
       EndDo
       tNext(ModNum)=NextTime

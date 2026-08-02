@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "faloye_2025_wetting_front",
+  "benchmark_class": "soft_external_behavioral_benchmark",
+  "role": "diagnostic_only",
+  "decision_authority": {
+    "can_determine_pass_fail": false,
+    "can_determine_journal_ready": false,
+    "can_satisfy_external_field_validation_gate": false,
+    "reason": "Published aggregate wetting-front dimensions lack the hydraulic parameters, raw observations, uncertainty definition, and geometry mapping required for a strict solver validation."
+  },
+  "source_article": {
+    "citation": "Faloye, O. T.; Ezeh, A.; Kamchoom, V.; Abioye, O. M.; Ikubanni, P. P. Development of Soil Wetting Front Estimation Models in Sandy Soil with a Hard Pan Under Drip Irrigation Using Empirical and Response Surface Methodologies. Agronomy 2025, 15, 272.",
+    "doi": "10.3390/agronomy15020272",
+    "doi_url": "https://doi.org/10.3390/agronomy15020272",
+    "publication_date": "2025-01-22",
+    "journal": "Agronomy",
+    "volume": 15,
+    "article_number": 272,
+    "source_table": "Table 2",
+    "source_pdf_pages": [
+      4,
+      5,
+      8,
+      9
+    ]
+  },
+  "source_pdf": {
+    "url": "https://mdpi-res.com/d_attachment/agronomy/agronomy-15-00272/article_deploy/agronomy-15-00272.pdf",
+    "sha256": "BCEE7B215D4A77F3F49719F5B8EC693EC689E49D7F0D7C331F700A4C48802D60",
+    "hash_verified_date": "2026-07-31"
+  },
+  "journal_classification": {
+    "scheme": "Chinese Academy of Sciences journal partition",
+    "version": "March 2025 upgraded edition",
+    "broad_category": "Agricultural and Forestry Sciences",
+    "broad_category_tier": 2,
+    "agronomy_category_tier": 2,
+    "public_secondary_evidence_url": "https://www.iikx.com/sci/agriculture/19673.html",
+    "official_open_record_available": false,
+    "verification_note": "The public secondary record reports tier 2 in both the March 2025 and December 2023 upgraded editions. Institutional recognition must use the institution's licensed official partition table."
+  },
+  "license": {
+    "name": "Creative Commons Attribution 4.0 International",
+    "identifier": "CC BY 4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "reuse_note": "The CSV is a transcription of aggregate values published in the CC BY 4.0 article. Reuse must retain attribution, link the license, and identify changes."
+  },
+  "data_availability": {
+    "article_statement": "Data will be made available upon request.",
+    "raw_observations_public": false,
+    "raw_data_license_known": false,
+    "published_aggregate_values_only": true
+  },
+  "data_artifact": {
+    "path": "faloye_2025_wetting_front.csv",
+    "sha256": "8968AFF5CB88BD4E4617F27033F142E511A1DAEA84CDBD65C66EC9E9D64A5515",
+    "hash_scope": "UTF-8 CSV bytes after CRLF and CR line endings are normalized to LF.",
+    "row_count": 10,
+    "extraction_method": "Direct transcription of Table 2, followed by visual verification against the publisher PDF.",
+    "derived_field": "applied_volume_cm3",
+    "derived_field_formula": "emitter_rate_l_h * irrigation_time_min / 60 * 1000"
+  },
+  "statistical_reporting": {
+    "replicate_count": 3,
+    "reported_spread_semantics": "unknown",
+    "not_confirmed_as": [
+      "standard_deviation",
+      "standard_error",
+      "confidence_interval"
+    ],
+    "reason": "Table 2 reports mean plus-or-minus values but does not define the plus-or-minus statistic.",
+    "acceptance_threshold_allowed": false
+  },
+  "experiment": {
+    "trial_date": "2024-01",
+    "setting": "dry-season field trial",
+    "irrigation_type": "surface point-source drip irrigation",
+    "tank_volume_l": 200,
+    "emitter_conditions": [
+      {
+        "treatment": "Q1",
+        "tank_head_cm": 10,
+        "emitter_rate_l_h": 0.12
+      },
+      {
+        "treatment": "Q2",
+        "tank_head_cm": 20,
+        "emitter_rate_l_h": 0.18
+      }
+    ],
+    "reported_irrigation_times_min": [
+      10,
+      15,
+      20,
+      30,
+      40,
+      45,
+      60,
+      75,
+      80,
+      90,
+      105,
+      120
+    ],
+    "tabulated_irrigation_times_min": [
+      10,
+      20,
+      30,
+      60,
+      120
+    ],
+    "emitter_intra_row_spacing_cm": 30,
+    "lateral_inter_row_spacing_cm": 60,
+    "lateral_line_count": 3,
+    "replicates_per_condition": 3,
+    "reported_total_excavations": 72,
+    "excavated_cross_section_width_cm": 50,
+    "excavated_cross_section_depth_cm": 50,
+    "measurement_timing": "Immediately after each irrigation event.",
+    "measurement_method": "A vertical soil cross-section was excavated and the visible wetted width and depth were measured with a tape.",
+    "soil_summary": {
+      "sand_percent_mean": 93.233,
+      "clay_percent_mean": 3.437,
+      "silt_percent_mean": 3.333,
+      "initial_gravimetric_water_content_g_g": 0.02,
+      "field_capacity_gravimetric_g_g": 0.095,
+      "bulk_density_0_15_cm_g_cm3": 1.35,
+      "bulk_density_15_30_cm_g_cm3": 1.46,
+      "hardpan_top_depth_cm_approx": 30
+    }
+  },
+  "geometry": {
+    "faloye_reference_geometry": "A three-dimensional surface point source produces a wetting bulb; an axisymmetric r-z wetting body is the natural reduced modeling approximation.",
+    "faloye_observation_geometry": "A two-dimensional vertical excavation through the three-dimensional wetted body records horizontal width and vertical depth.",
+    "emitter_position": "At the soil surface at a point-source drip outlet; exact x-y coordinates, outlet radius, and wetted footprint are not reported.",
+    "wetted_width_semantics": "likely_full_cross_section_width_but_not_explicitly_confirmed",
+    "hutd06_geometry": {
+      "kat": 2,
+      "coordinate_system": "Cartesian vertical plane",
+      "source_representation": "line source per unit out-of-plane length"
+    },
+    "direct_geometry_compatibility": false,
+    "flow_rate_mapping": {
+      "paper_input_unit": "L h-1 per physical point emitter",
+      "hutd06_required_basis": "water input per unit out-of-plane line length",
+      "model_representative_out_of_plane_length_cm_reported": false,
+      "paper_reports_intra_row_emitter_spacing_cm": 30,
+      "may_assume_reported_spacing_as_representative_length": false,
+      "direct_l_h_comparison_allowed": false,
+      "reason": "A point-emitter discharge cannot be mapped to a KAT=2 Cartesian line source without an explicit and justified representative emitter-row length or periodic emitter spacing. The paper's 30 cm spacing is evidence, not an automatic model mapping."
+    }
+  },
+  "missing_for_richards_solver_reproduction": [
+    "residual volumetric water content theta_r",
+    "saturated volumetric water content theta_s",
+    "van Genuchten alpha",
+    "van Genuchten n",
+    "pore-connectivity parameter l",
+    "saturated hydraulic conductivity Ks",
+    "hardpan thickness",
+    "hardpan hydraulic retention and conductivity parameters",
+    "emitter outlet radius or wetted footprint",
+    "lateral and lower hydraulic boundary conditions",
+    "wetting-front water-content threshold"
+  ],
+  "known_source_inconsistencies": [
+    "The text gives particle density as 2.56 g cm-3, while the tabulated porosities are closer to values calculated with 2.65 g cm-3.",
+    "The Table 1 15-30 cm bulk-density row is labeled DD30cm, likely a typographical error.",
+    "Porosity means are reported as percentages while their STD values appear to use a fractional scale.",
+    "The methods list irrigation times through 120 min but also state that operation continued until 180 min; Table 3 uses 180 min.",
+    "The claimed optimum of 225 cm3 at 0.12 L h-1 for 75 min violates volume conservation; that rate and duration equal 150 cm3.",
+    "The Figure 2 depth curves are not numerically consistent with the Table 2 depth values."
+  ],
+  "usage_policy": {
+    "allowed_uses": [
+      "audit of published aggregate values",
+      "unit and volume-conservation checks",
+      "order-of-magnitude diagnostics after an explicit geometry mapping",
+      "qualitative wetting-front trend checks"
+    ],
+    "forbidden_uses": [
+      "direct comparison of L h-1 point-emitter discharge with a KAT=2 line-source input",
+      "hard pass-fail acceptance",
+      "journal-ready determination",
+      "claim of independent Richards-equation solver validation",
+      "treating reported_spread as a confirmed standard deviation"
+    ]
+  }
+}

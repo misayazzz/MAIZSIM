@@ -9,11 +9,11 @@ C it is called once a day, at 5:00 am
        include 'public.ins'
        include 'puWeath.ins'
       
-       Parameter (PERIOD =1./24.)
-     
-       
+       Double precision PERIOD,rPond_StartTime,rPond_EndTime
+       Parameter (PERIOD=1.0D0/24.0D0)
+
        character*20    Pond_StartTime, Pond_EndTime
-       real    Pond_Head, Day, rPond_StartTime, rPond_EndTime                 
+       real    Pond_Head, Day
        Integer i, j, l, pos, myHour, GetHour
        character*10 cDate
        
@@ -37,12 +37,12 @@ C
         Myhour=GetHour(Pond_StartTime)
         pos=index(Pond_StartTime,':')
         cDate=Pond_StartTime(1:pos-1)
-        rPond_StartTime=JulDay(cDate)+Myhour/24.
+        rPond_StartTime=dble(JulDay(cDate))+dble(Myhour)/24.0D0
         
         Myhour=GetHour(Pond_EndTime)
         pos=index(Pond_EndTime,':')
         cDate=Pond_EndTime(1:pos-1)
-        rPond_EndTime= JulDay(cDate)+Myhour/24.
+        rPond_EndTime=dble(JulDay(cDate))+dble(Myhour)/24.0D0
         
         tNext(ModNum) = rPond_StartTime
         

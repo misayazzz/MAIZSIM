@@ -76,7 +76,8 @@ C**                                                                   **
       Include 'puweath.ins'
       Include 'PuSurface.ins'
       
-      Parameter (PERIOD =1./24.)
+      Double precision PERIOD,NextCanonicalHour
+      Parameter (PERIOD=1.0D0/24.0D0)
       integer jday, m, DayofYear,CurYear, ModNum,ThisYear
       Common /weatherD/ il,im,isol,ModNum, TMIN, TMAX,Gamma_psy,
      &   BEERS(24)
@@ -1147,7 +1148,7 @@ c................... Gas movement
  
 c................... End gas movement      
 c................... This is the end of hourly calculations
-      tNext(ModNum)=tNext(ModNum)+PERIOD
+      tNext(ModNum)=NextCanonicalHour(Time)
       
       do i=1,NumBPD
 cccz extract useful variables for surface physical processes

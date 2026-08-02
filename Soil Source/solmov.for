@@ -182,10 +182,10 @@ c          CourMax=1.
               If(Level.eq.NLevel) then                        !compute max allwble time step size- based on velocity and element dim
                 delX=amax1(abs(Ci(1)),abs(Ci(2)),abs(Ci(3)))
                 delY=amax1(abs(Bi(1)),abs(Bi(2)),abs(Bi(3)))
-                VxMax=amax1(abs(Vx(i))/ThNew(i),
+                VxMax=max(dble(abs(Vx(i)))/ThNew(i),
      !                  abs(Vx(j))/ThNew(j),
      !                  abs(Vx(l))/ThNew(l))
-                VzMax=amax1(abs(Vz(i))/ThNew(i),
+                VzMax=max(dble(abs(Vz(i)))/ThNew(i),
      !                  abs(Vz(j))/ThNew(j),
      !                  abs(Vz(l))/ThNew(l))
                 CourX=VxMax*dt/delX                               !compute courant number in x and y direction
@@ -200,9 +200,9 @@ c          CourMax=1.
               If(Level.eq.NLevel) then                            !if final level- use current values 
                 Yb=hNew(i)*Bi(1)+hNew(j)*Bi(2)+hNew(l)*Bi(3)
                 Yc=hNew(i)*Ci(1)+hNew(j)*Ci(2)+hNew(l)*Ci(3)
-                DmE=Dmol(jjj)*(ThNew(i)*Tau(hNew(i))+             !Tsu effect of the soil matrix on diffusion
-     &                          ThNew(j)*Tau(hNew(j))+
-     &                          ThNew(l)*Tau(hNew(l)))/3.         !average of (theta*molecular diffusion)0each node of the element 
+                DmE=Dmol(jjj)*(ThNew(i)*Tau(sngl(hNew(i)))+       !Tsu effect of the soil matrix on diffusion
+     &                          ThNew(j)*Tau(sngl(hNew(j)))+
+     &                          ThNew(l)*Tau(sngl(hNew(l))))/3.   !average of (theta*molecular diffusion)0each node of the element
                 ConE=(Con(i)+Con(j)+Con(l))/3.                    !avg concentration
               Else
                 Yb=hOld(i)*Bi(1)+hOld(j)*Bi(2)+hOld(l)*Bi(3)      !if not final level- use old values 
@@ -486,9 +486,10 @@ C GR
      !          Dmol(NumSD),Dlng(NMatD,NumSD),Dtrn(NMatd,NumSD),
      !          Dispxx(NumNP),Dispzz(NumNP),Dispxz(NumNP),MatNum(NumNP),
      !          h(NumNP),theta(NumNP)
+      Double precision h,theta
       Do 11 i=1,NumNP
         M=MatNum(i)
-        Taun=Tau(h(i))
+        Taun=Tau(sngl(h(i)))
         Vabs=sqrt(VxH(i)*VxH(i)+VzH(i)*VzH(i))
         If(Vabs.gt.0.) then
           Dispxx(i)=Dlng(M,jjj)*VxH(i)*VxH(i)/Vabs+

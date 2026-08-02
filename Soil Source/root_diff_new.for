@@ -277,13 +277,16 @@ C I have cleaned it up though.
       Dimension 
      !  Dispxx(NumNP),Dispzz(NumNP),Dispxz(NumNP),
      !  hN(NumNP),Tm(NumNP),RD(NumNP)
+      Double precision hN
 
       Do 11 i=1,NumNP
           Adjust=1.0
 c          Alp=RD(i)-3.5+3.5*exp(-RD(i)/3.6)
           Alp=1.0D0
-          Dispxx(i)=DMolx*Adjust*Alp*min(f1(hN(i)),f2(Tm(i)))
-          Dispzz(i)=DMolz*Adjust*Alp*min(f1(hN(i)),f2(Tm(i)))
+          Dispxx(i)=DMolx*Adjust*Alp*
+     !      min(f1(sngl(hN(i))),f2(Tm(i)))
+          Dispzz(i)=DMolz*Adjust*Alp*
+     !      min(f1(sngl(hN(i))),f2(Tm(i)))
           Dispxz(i)=0.
 11    continue
       Return

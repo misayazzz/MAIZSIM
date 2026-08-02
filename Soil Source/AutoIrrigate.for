@@ -8,7 +8,8 @@ C it is called once a day, at 5:00 am
        include 'public.ins'
        include 'puweath.ins'
        include 'PuSurface.ins'
-       Parameter (PERIOD =1./24.)
+       Double precision PERIOD,NextCanonicalHour
+       Parameter (PERIOD=1.0D0/24.0D0)
 
        Real ThetaAvail50, ThetaFull50,AvailWaterRatio
        Real Thi, Thj, Thl, ThFl_i,ThFl_j, ThFl_l
@@ -25,7 +26,7 @@ C  Initialize
 C
         NumMod=NumMod+1
         ModNum=NumMod
-        tNext(ModNum) = time + 1
+        tNext(ModNum)=dble(idint(time))+1.0D0
 cccz initialize to zero
         do i=1,NumNPD
           Qautoirrig(i)=0.0D0
@@ -116,7 +117,7 @@ cccz                   if (Q(i).gt.0.0) CodeW(i)=-4   ! make sure bc changes if 
           End Do
               
          End If  ! end auto irrigation
-           tNext(ModNum) = time +PERIOD
+           tNext(ModNum)=NextCanonicalHour(time)
            
          End if  ! Tnext hourly calcs     
            
