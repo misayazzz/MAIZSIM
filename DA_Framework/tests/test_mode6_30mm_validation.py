@@ -15,9 +15,11 @@ from da_framework.mode6_30mm_validation import _water_balance_metrics
 from da_framework.mode6_30mm_validation import _wetting_shape
 from da_framework.mode6_30mm_validation import _write_drip_file
 from da_framework.mode6_30mm_validation import _write_homogeneous_soil
+from da_framework.mode6_30mm_validation import half_domain_mirror_metrics
 from da_framework.mode6_30mm_validation import three_grid_gci
 from da_framework.mode6_30mm_validation import wetting_geometry_from_field
 from da_framework.drip_regression import DEFAULT_SOILS
+from da_framework.mode6_convergence import convergence_report
 
 
 def test_default_soils_preserve_hutd06_near_saturation_bridge(tmp_path):
@@ -84,15 +86,17 @@ def test_drip_event_stop_is_derived_from_duration(tmp_path):
 
     _write_drip_file(
         path,
-        emitter_node=2,
-        w_appl_cm_h=3.125,
-        source_width_cm=1.0,
+        emitter_node=1,
+        emitter_flow_lph=0.1875,
+        emitter_spacing_cm=20.0,
+        contact_width_cm=2.0,
         duration_h=36.0,
     )
 
     event = path.read_text(encoding="utf-8").splitlines()[4]
     assert "'04/01/2006' 0" in event
     assert "'04/02/2006' 12" in event
+    assert event.split()[-4:] == ["0.1875", "20", "2", "1"]
 
 
 def test_select_soils_preserves_requested_order():
@@ -114,22 +118,25 @@ def test_select_soils_rejects_invalid_selection(soil_names, message):
         _select_soils(soil_names)
 
 
-def test_validator_accepts_physical_boundary_limited_runoff():
+def test_validator_accepts_closed_local_ponding_and_overflow_ledger():
     frame = pd.DataFrame(
         [
             {
                 "soil": "clay_loam",
                 "delivered_input_mm": 30.0,
-                "source_closure_error_mm": 0.0,
+                "emitter_input_error_mm": 0.0,
                 "accepted_actual_error_mm": 0.0,
-                "remaining_runoff_error_mm": 0.0,
-                "storage_change_mm": 0.0,
+                "terminal_ledger_error_mm": 0.0,
                 "mode6_closure_abs_max_mm": 0.0,
-                "acceptance_closure_abs_max_mm": 0.0,
+                "ledger_closure_abs_max_mm": 0.0,
+                "contact_width_error_cm": 0.0,
+                "contact_measure_error_cm": 0.0,
+                "contact_nodes": 3,
                 "solver_limit_max": 0.0,
-                "boundary_limit_max": 1.0,
+                "boundary_limit_max": 0.0,
                 "mode6_remaining_mm": 0.6,
-                "surface_runoff_mm": 0.6,
+                "overflow_mm": 0.4,
+                "final_ponding_mm": 0.2,
                 "uncategorized_step_cuts": 0.0,
                 "baseline_water_balance_residual_mm": 0.0,
                 "baseline_water_balance_max_step_residual_mm": 0.0,
@@ -138,11 +145,35 @@ def test_validator_accepts_physical_boundary_limited_runoff():
                 "mode6_water_balance_max_step_residual_mm": 0.0,
                 "delta_theta_max": 0.1,
                 "wetting_depth_cm": 10.0,
+                "mirror_volume_ratio": 2.0,
+                "mirror_pair_abs_max": 0.0,
             }
         ]
     )
 
     _validate_results(frame, expected_depth_mm=30.0)
+
+    frame.loc[0, "boundary_limit_max"] = 1.0
+    with pytest.raises(AssertionError, match="boundary limit"):
+        _validate_results(frame, expected_depth_mm=30.0)
+
+
+def test_half_domain_mirror_doubles_integrated_storage():
+    field = pd.DataFrame(
+        [
+            {"X": x_value, "Y": y_value, "delta_theta": x_value + y_value + 1.0}
+            for y_value in (2.0, 1.0, 0.0)
+            for x_value in (0.0, 1.0, 3.0)
+        ]
+    )
+
+    metrics = half_domain_mirror_metrics(field)
+
+    assert metrics["mirror_volume_ratio"] == pytest.approx(2.0)
+    assert metrics["mirror_pair_abs_max"] == 0.0
+    assert metrics["mirrored_full_delta_storage_cm2"] == pytest.approx(
+        2.0 * metrics["half_domain_delta_storage_cm2"]
+    )
 
 
 def test_wetting_shape_uses_linear_element_edge_intersections(tmp_path):
@@ -285,6 +316,7 @@ def test_three_grid_gci_accepts_known_asymptotic_sequence():
     [
         ((1.0, 3.0, 2.0), "non_monotonic"),
         ((1.0, 2.0, 4.0), "non_asymptotic_order"),
+        ((4.0, 3.0, 2.0), "non_asymptotic_order"),
         ((4.0, 2.0, 1.5), "non_asymptotic_ratio"),
     ],
 )
@@ -296,3 +328,42 @@ def test_three_grid_gci_rejects_non_asymptotic_sequences(values, status):
     assert result["gci_21"] is None
     assert result["gci_32"] is None
     assert result["gci_fine_pct"] is None
+
+
+def test_convergence_report_requires_guarded_gci_and_closed_ledgers():
+    records = []
+    for level, offset in zip((0, 1, 2), (4.0, 1.0, 0.25)):
+        records.append(
+            {
+                "grid_level": level,
+                "dtmx_days": 0.001,
+                "actual_infiltration_mm": 30.0,
+                "delta_theta_max": 100.0 + offset,
+                "wetting_depth_cm": 100.0 + offset,
+                "wetting_area_cm2": 100.0 + offset,
+                "half_domain_delta_storage_cm2": 100.0 + offset,
+                "terminal_ledger_error_mm": 0.0,
+                "ledger_closure_abs_max_mm": 0.0,
+                "solver_limit_max": 0.0,
+                "boundary_limit_max": 0.0,
+                "uncategorized_step_cuts": 0.0,
+                "baseline_water_balance_residual_mm": 0.0,
+                "baseline_water_balance_max_step_residual_mm": 0.0,
+                "mode6_water_balance_residual_mm": 0.0,
+                "mode6_water_balance_relative_error_pct": 0.0,
+                "mode6_water_balance_max_step_residual_mm": 0.0,
+                "mirror_volume_ratio": 2.0,
+                "mirror_pair_abs_max": 0.0,
+            }
+        )
+
+    report = convergence_report(records, axis="grid")
+
+    assert report["status"] == "pass"
+    assert report["ledger_and_mirror_pass"]
+    assert all(item["valid"] for item in report["gci"].values())
+
+    records[0]["boundary_limit_max"] = 1.0
+    failed = convergence_report(records, axis="grid")
+    assert failed["status"] == "fail"
+    assert not failed["ledger_and_mirror_pass"]

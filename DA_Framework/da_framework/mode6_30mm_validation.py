@@ -26,10 +26,11 @@ RUN_FILE = "run.dat"
 MODEL_PREFIX = "HUTD06"
 EVENT_START = pd.Timestamp("2006-04-01")
 FINAL_DATE = pd.Timestamp("2006-04-04")
-DEFAULT_EMITTER_NODE = 2
+DEFAULT_EMITTER_NODE = 1
 DEFAULT_DEPTH_MM = 30.0
 DEFAULT_DURATION_H = 24.0
-DEFAULT_SOURCE_WIDTH_CM = 1.0
+DEFAULT_EMITTER_SPACING_CM = 30.0
+DEFAULT_CONTACT_WIDTH_CM = 2.0
 DEFAULT_DOMAIN_WIDTH_CM = 37.5
 DEFAULT_REFINED_X_MAX_CM = REFINED_X_MAX_CM
 DEFAULT_REFINED_Y_MIN_CM = REFINED_Y_MIN_CM
@@ -54,7 +55,8 @@ def run_mode6_30mm_validation(
     emitter_node=None,
     irrigation_depth_mm=DEFAULT_DEPTH_MM,
     duration_h=DEFAULT_DURATION_H,
-    source_width_cm=DEFAULT_SOURCE_WIDTH_CM,
+    emitter_spacing_cm=DEFAULT_EMITTER_SPACING_CM,
+    contact_width_cm=DEFAULT_CONTACT_WIDTH_CM,
     domain_width_cm=DEFAULT_DOMAIN_WIDTH_CM,
     refined_x_max_cm=DEFAULT_REFINED_X_MAX_CM,
     refined_y_min_cm=DEFAULT_REFINED_Y_MIN_CM,
@@ -81,8 +83,10 @@ def run_mode6_30mm_validation(
         raise ValueError("duration_h must be positive")
     if EVENT_START + pd.Timedelta(hours=float(duration_h)) > FINAL_DATE:
         raise ValueError("duration_h extends the drip event beyond the run")
-    if source_width_cm <= 0.0:
-        raise ValueError("source_width_cm must be positive")
+    if emitter_spacing_cm <= 0.0:
+        raise ValueError("emitter_spacing_cm must be positive")
+    if contact_width_cm <= 0.0:
+        raise ValueError("contact_width_cm must be positive")
     if domain_width_cm <= 0.0:
         raise ValueError("domain_width_cm must be positive")
     if dtmx_days <= 0.0:
@@ -102,15 +106,17 @@ def run_mode6_30mm_validation(
         <= 1.0e-12
     ]
     if len(base_emitter_nodes) != 1:
-        raise ValueError("HUTD06 must contain exactly one x=0.75 cm surface node")
+        raise ValueError("HUTD06 must contain exactly one x=0 cm surface node")
     if float(domain_width_cm) < float(base_domain_width) - 1.0e-12:
         raise ValueError("Validation domain cannot be narrower than base HUTD06")
 
     depth_cm = float(irrigation_depth_mm) / 10.0
-    w_appl_cm_h = (
-        depth_cm
+    emitter_flow_lph = (
+        2.0
+        * float(emitter_spacing_cm)
+        * depth_cm
         * float(domain_width_cm)
-        / (float(duration_h) * float(source_width_cm))
+        / (1000.0 * float(duration_h))
     )
     rows = []
     run_dirs = {}
@@ -126,8 +132,11 @@ def run_mode6_30mm_validation(
                 emitter_node=(
                     int(emitter_node) if emitter_node is not None else None
                 ),
-                w_appl_cm_h=w_appl_cm_h if treatment == "mode6_30mm" else 0.0,
-                source_width_cm=source_width_cm,
+                emitter_flow_lph=(
+                    emitter_flow_lph if treatment == "mode6_30mm" else 0.0
+                ),
+                emitter_spacing_cm=emitter_spacing_cm,
+                contact_width_cm=contact_width_cm,
                 duration_h=duration_h,
                 dtmx_days=dtmx_days,
                 grid_level=int(grid_level),
@@ -164,6 +173,7 @@ def run_mode6_30mm_validation(
             emitter_x_cm=float(grid_metadata["emitter_x_cm"]),
             expected_depth_mm=float(irrigation_depth_mm),
             domain_width_cm=float(grid_metadata["domain_width_cm"]),
+            contact_width_cm=float(contact_width_cm),
             refinement_bounds=(
                 0.0,
                 float(grid_metadata["actual_refined_x_max_cm"]),
@@ -210,18 +220,17 @@ def run_mode6_30mm_validation(
         "emitter_node": int(grid_metadata["emitter_node"]),
         "emitter_x_cm": float(grid_metadata["emitter_x_cm"]),
         "domain_geometry": "2d_cartesian_vertical_half_domain",
-        "source_geometry": (
-            "surface_line_source_per_unit_out_of_plane_length"
-        ),
-        "irrigation_basis": "equivalent_depth_over_half_domain",
+        "source_geometry": "fixed_surface_contact_on_x0_half_domain_axis",
+        "irrigation_basis": "emitter_flow_and_spacing_to_half_line_supply",
         "requested_section_volume_cm2": depth_cm * float(domain_width_cm),
         "out_of_plane_representative_length_cm": None,
         "direct_point_emitter_rate_l_h_comparison_supported": False,
         "domain_width_cm": float(grid_metadata["domain_width_cm"]),
         "irrigation_depth_mm": float(irrigation_depth_mm),
         "duration_h": float(duration_h),
-        "source_width_cm": float(source_width_cm),
-        "w_appl_cm_h": w_appl_cm_h,
+        "emitter_flow_lph": emitter_flow_lph,
+        "emitter_spacing_cm": float(emitter_spacing_cm),
+        "contact_width_cm": float(contact_width_cm),
         "dtmx_days": float(dtmx_days),
         "grid": grid_metadata,
         "results": frame.to_dict(orient="records"),
@@ -242,8 +251,9 @@ def _prepare_case(
     run_dir,
     soil,
     emitter_node,
-    w_appl_cm_h,
-    source_width_cm,
+    emitter_flow_lph,
+    emitter_spacing_cm,
+    contact_width_cm,
     duration_h,
     dtmx_days,
     grid_level=0,
@@ -279,7 +289,7 @@ def _prepare_case(
     case_emitter_node = int(grid_metadata["emitter_node"])
     if emitter_node is not None and int(emitter_node) != case_emitter_node:
         raise ValueError(
-            "Emitter node is determined by physical x=0.75 cm on the generated "
+            "Emitter node is determined by physical x=0 cm on the generated "
             f"grid ({case_emitter_node})"
         )
     _write_mass_balance_file(run_dir / "MassBl.dat")
@@ -288,8 +298,9 @@ def _prepare_case(
     _write_drip_file(
         run_dir / "HUTD06.drp",
         emitter_node=case_emitter_node,
-        w_appl_cm_h=w_appl_cm_h,
-        source_width_cm=source_width_cm,
+        emitter_flow_lph=emitter_flow_lph,
+        emitter_spacing_cm=emitter_spacing_cm,
+        contact_width_cm=contact_width_cm,
         duration_h=duration_h,
     )
     _set_water_solver_controls(
@@ -385,13 +396,14 @@ def _write_drip_file(
     path,
     *,
     emitter_node,
-    w_appl_cm_h,
-    source_width_cm,
+    emitter_flow_lph,
+    emitter_spacing_cm,
+    contact_width_cm,
     duration_h,
 ):
-    if w_appl_cm_h <= 0.0:
+    if emitter_flow_lph <= 0.0:
         lines = [
-            "***** Mode 6 single-emitter validation",
+            "***** Fixed-contact half-domain drip validation",
             "Number of Drip irrigations(max=75)",
             " 0",
             "No drip irrigation",
@@ -401,18 +413,17 @@ def _write_drip_file(
         start_date, start_hour = _fortran_event_time(EVENT_START)
         stop_date, stop_hour = _fortran_event_time(event_stop)
         lines = [
-            "***** Mode 6 single-emitter validation",
+            "***** Fixed-contact half-domain drip validation",
             "Number of Drip irrigations(max=75)",
             " 1",
             (
-                "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes "
-                "DripMode DripHIn DripExp DripPcMin DripPcMax "
-                "DripWetWidthMax DripSpreadMode DripSourceWidth"
+                "Start_Date Start_hour Stop_Date Stop_hour EmitterFlowLph "
+                "EmitterSpacingCm ContactWidthCm Num_nodes"
             ),
             (
                 f"{start_date} {start_hour:.10g} "
-                f"{stop_date} {stop_hour:.10g} {w_appl_cm_h:.10g} "
-                f"1 0 0 1 0 0 0 6 {source_width_cm:.10g}"
+                f"{stop_date} {stop_hour:.10g} {emitter_flow_lph:.10g} "
+                f"{emitter_spacing_cm:.10g} {contact_width_cm:.10g} 1"
             ),
             "Drip application nodes",
             f" {int(emitter_node)}",
@@ -439,20 +450,27 @@ def _case_metrics(
     emitter_x_cm,
     expected_depth_mm,
     domain_width_cm,
+    contact_width_cm,
     refinement_bounds,
     wetting_evaluation_time,
 ):
     g05 = _read_csv(drip_dir / "HUTD06.G05")
     numeric = (
-        "DripInput",
-        "SeasDrip",
-        "DripActualInfil",
-        "DripMode6Accepted",
-        "DripMode6Remaining",
-        "DripStorageChange",
-        "DripSurfaceRunoff",
+        "DripEmitterInput_mm",
+        "SeasDrip_mm",
+        "DripActualInfil_mm",
+        "DripPondingChange_mm",
+        "DripOverflow_mm",
+        "DripPonded_mm",
+        "DripLedgerClosure_mm",
+        "DripContactWidth_cm",
+        "DripContactMeasure_cm",
+        "DripContactNodes",
+        "DripPondingCapacity_mm",
+        "DripMode6Available_mm",
+        "DripMode6Accepted_mm",
+        "DripMode6Remaining_mm",
         "DripMode6ClosureResidual",
-        "DripBoundaryAccClosure",
         "DripMode6SolverLimit",
         "DripMode6BoundaryLimit",
         "DripMode6StepCuts",
@@ -460,13 +478,12 @@ def _case_metrics(
         "DripMode6SupplyCuts",
         "DripMode6MassCuts",
         "DripMode6MinDtDays",
-        "DripWetWidthMax",
     )
     for column in numeric:
         if column not in g05:
             raise ValueError(f"Missing G05 Mode 6 column: {column}")
         g05[column] = pd.to_numeric(g05[column], errors="raise")
-    active = g05[g05["DripInput"] > 1.0e-10]
+    active = g05[g05["DripMode6Available_mm"] > 1.0e-10]
     shape = _wetting_shape(
         baseline_dir / "HUTD06.G03",
         drip_dir / "HUTD06.G03",
@@ -488,34 +505,52 @@ def _case_metrics(
     return {
         "soil": soil,
         "requested_input_mm": expected_depth_mm,
-        "delivered_input_mm": float(g05["SeasDrip"].iloc[-1]),
-        "input_mm": float(g05["DripInput"].sum()),
-        "actual_infiltration_mm": float(g05["DripActualInfil"].sum()),
-        "mode6_accepted_mm": float(g05["DripMode6Accepted"].sum()),
-        "mode6_remaining_mm": float(g05["DripMode6Remaining"].sum()),
-        "storage_change_mm": float(g05["DripStorageChange"].sum()),
-        "surface_runoff_mm": float(g05["DripSurfaceRunoff"].sum()),
-        "delivery_error_mm": (
-            float(g05["SeasDrip"].iloc[-1]) - expected_depth_mm
+        "delivered_input_mm": float(g05["SeasDrip_mm"].iloc[-1]),
+        "input_mm": float(g05["DripEmitterInput_mm"].sum()),
+        "actual_infiltration_mm": float(g05["DripActualInfil_mm"].sum()),
+        "ponding_change_mm": float(g05["DripPondingChange_mm"].sum()),
+        "overflow_mm": float(g05["DripOverflow_mm"].sum()),
+        "final_ponding_mm": float(g05["DripPonded_mm"].iloc[-1]),
+        "mode6_accepted_mm": float(g05["DripMode6Accepted_mm"].sum()),
+        "mode6_remaining_mm": float(g05["DripMode6Remaining_mm"].sum()),
+        "contact_width_cm": float(
+            g05["DripContactWidth_cm"].max()
         ),
-        "source_closure_error_mm": (
-            float(g05["SeasDrip"].iloc[-1])
-            - float(g05["DripMode6Accepted"].sum())
-            - float(g05["DripMode6Remaining"].sum())
+        "contact_measure_cm": float(
+            g05["DripContactMeasure_cm"].max()
+        ),
+        "contact_nodes": int(g05["DripContactNodes"].max()),
+        "ponding_capacity_mm": float(
+            g05["DripPondingCapacity_mm"].max()
+        ),
+        "delivery_error_mm": (
+            float(g05["SeasDrip_mm"].iloc[-1]) - expected_depth_mm
+        ),
+        "emitter_input_error_mm": (
+            float(g05["DripEmitterInput_mm"].sum())
+            - float(g05["SeasDrip_mm"].iloc[-1])
         ),
         "accepted_actual_error_mm": (
-            float(g05["DripMode6Accepted"].sum())
-            - float(g05["DripActualInfil"].sum())
+            float(g05["DripMode6Accepted_mm"].sum())
+            - float(g05["DripActualInfil_mm"].sum())
         ),
-        "remaining_runoff_error_mm": (
-            float(g05["DripMode6Remaining"].sum())
-            - float(g05["DripSurfaceRunoff"].sum())
+        "terminal_ledger_error_mm": (
+            float(g05["DripEmitterInput_mm"].sum())
+            - float(g05["DripActualInfil_mm"].sum())
+            - float(g05["DripOverflow_mm"].sum())
+            - float(g05["DripPonded_mm"].iloc[-1])
+        ),
+        "contact_width_error_cm": (
+            float(g05["DripContactWidth_cm"].max()) - contact_width_cm
+        ),
+        "contact_measure_error_cm": (
+            float(g05["DripContactMeasure_cm"].max()) - contact_width_cm
+        ),
+        "ledger_closure_abs_max_mm": float(
+            g05["DripLedgerClosure_mm"].abs().max()
         ),
         "mode6_closure_abs_max_mm": float(
             g05["DripMode6ClosureResidual"].abs().max()
-        ),
-        "acceptance_closure_abs_max_mm": float(
-            g05["DripBoundaryAccClosure"].abs().max()
         ),
         "solver_limit_max": float(g05["DripMode6SolverLimit"].max()),
         "boundary_limit_max": float(g05["DripMode6BoundaryLimit"].max()),
@@ -525,7 +560,9 @@ def _case_metrics(
         "mass_step_cuts": mass_step_cuts,
         "uncategorized_step_cuts": step_cuts - categorized_step_cuts,
         "min_dt_days": float(min_dt.min()) if not min_dt.empty else 0.0,
-        "active_surface_width_max_cm": float(active["DripWetWidthMax"].max()),
+        "active_contact_width_max_cm": float(
+            active["DripContactMeasure_cm"].max()
+        ),
         **_water_balance_metrics(
             baseline_dir / WATER_BALANCE_OUTPUT,
             prefix="baseline",
@@ -583,8 +620,113 @@ def _wetting_shape(
         "peak_x_cm": float(peak["X"]),
         "peak_depth_cm": float(peak["depth_cm"]),
         "peak_offset_from_emitter_cm": abs(float(peak["X"]) - emitter_x_cm),
+        **half_domain_mirror_metrics(
+            merged[["X", "Y", "delta_theta"]]
+        ),
         **geometry,
     }
+
+
+def half_domain_mirror_metrics(field):
+    """Reconstruct the x<0 field and verify the half-domain mirror invariant."""
+    required = {"X", "Y", "delta_theta"}
+    missing = sorted(required.difference(field.columns))
+    if missing:
+        raise ValueError(
+            "Mirror field is missing column(s): " + ", ".join(missing)
+        )
+    values = field.loc[:, ["X", "Y", "delta_theta"]].copy()
+    for column in values.columns:
+        values[column] = pd.to_numeric(values[column], errors="raise")
+    if not all(math.isfinite(value) for value in values.to_numpy().ravel()):
+        raise ValueError("Mirror field values must be finite")
+    x_values = sorted(float(value) for value in values["X"].unique())
+    y_values = sorted(
+        (float(value) for value in values["Y"].unique()), reverse=True
+    )
+    if not x_values or abs(x_values[0]) > 1.0e-12:
+        raise ValueError("Half-domain mirror field must start at x=0")
+    if len(x_values) < 2 or len(y_values) < 2:
+        raise ValueError("Half-domain mirror field must contain a 2D grid")
+    if len(values) != len(x_values) * len(y_values):
+        raise ValueError("Half-domain mirror field must be rectangular")
+    if values.duplicated(["X", "Y"]).any():
+        raise ValueError("Half-domain mirror field coordinates must be unique")
+
+    mirrored = pd.concat(
+        [
+            values.loc[values["X"] > 0.0].assign(
+                X=lambda item: -item["X"]
+            ),
+            values,
+        ],
+        ignore_index=True,
+    )
+    half_storage = _structured_field_integral(values)
+    full_storage = _structured_field_integral(mirrored)
+    expected_full = 2.0 * half_storage
+    scale = max(1.0, abs(expected_full))
+    mirror_error = abs(full_storage - expected_full)
+    if mirror_error > 1.0e-12 * scale:
+        raise AssertionError("Mirrored full-domain storage is not twice the half-domain")
+    positive = values.loc[values["X"] > 0.0].copy()
+    negative = mirrored.loc[mirrored["X"] < 0.0].copy()
+    negative["X"] = -negative["X"]
+    pairs = positive.merge(
+        negative,
+        on=["X", "Y"],
+        suffixes=("_positive", "_negative"),
+        validate="one_to_one",
+    )
+    pair_error = float(
+        (
+            pairs["delta_theta_positive"]
+            - pairs["delta_theta_negative"]
+        )
+        .abs()
+        .max()
+    )
+    return {
+        "half_domain_delta_storage_cm2": float(half_storage),
+        "mirrored_full_delta_storage_cm2": float(full_storage),
+        "mirror_volume_ratio": (
+            float(full_storage / half_storage)
+            if abs(half_storage) > 1.0e-15
+            else 2.0
+        ),
+        "mirror_pair_abs_max": pair_error,
+    }
+
+
+def _structured_field_integral(field):
+    x_values = sorted(float(value) for value in field["X"].unique())
+    y_values = sorted(
+        (float(value) for value in field["Y"].unique()), reverse=True
+    )
+    x_weights = _trapezoidal_control_weights(x_values)
+    y_weights = _trapezoidal_control_weights(y_values)
+    lookup = field.set_index(["X", "Y"])["delta_theta"]
+    return sum(
+        float(lookup.loc[(x_value, y_value)])
+        * x_weights[x_index]
+        * y_weights[y_index]
+        for x_index, x_value in enumerate(x_values)
+        for y_index, y_value in enumerate(y_values)
+    )
+
+
+def _trapezoidal_control_weights(coordinates):
+    values = [float(value) for value in coordinates]
+    return [
+        (
+            0.5 * abs(values[1] - values[0])
+            if index == 0
+            else 0.5 * abs(values[-1] - values[-2])
+            if index == len(values) - 1
+            else 0.5 * abs(values[index + 1] - values[index - 1])
+        )
+        for index in range(len(values))
+    ]
 
 
 def wetting_geometry_from_field(
@@ -840,7 +982,10 @@ def three_grid_gci(
     apparent_order = math.log(abs(epsilon_32 / epsilon_21)) / math.log(ratio)
     base["monotonic"] = True
     base["apparent_order"] = apparent_order
-    if not math.isfinite(apparent_order) or apparent_order <= 0.0:
+    # Equal successive changes imply p approximately zero and an unbounded
+    # Richardson denominator; do not label floating-point roundoff as an
+    # asymptotic convergence order.
+    if not math.isfinite(apparent_order) or apparent_order <= 1.0e-6:
         return {**base, "status": "non_asymptotic_order"}
     if abs(values[2]) <= tolerance or abs(values[1]) <= tolerance:
         return {**base, "status": "near_zero_reference"}
@@ -1109,7 +1254,9 @@ def _water_balance_metrics(path, *, prefix, domain_width_cm):
 
 
 def _read_csv(path):
-    frame = pd.read_csv(path, skipinitialspace=True)
+    # Legacy Fortran records end with a delimiter while the header does not.
+    # Disabling implicit index inference keeps Date_time and Date aligned.
+    frame = pd.read_csv(path, skipinitialspace=True, index_col=False)
     frame = frame.rename(columns=lambda column: str(column).strip().strip(","))
     return frame.dropna(how="all")
 
@@ -1133,27 +1280,33 @@ def _validate_results(frame, *, expected_depth_mm):
                 "requested delivery",
             ),
             (
-                abs(row["source_closure_error_mm"]) <= tolerance_mm,
-                "finite-supply source closure",
+                abs(row["emitter_input_error_mm"]) <= tolerance_mm,
+                "emitter input accounting",
             ),
             (
                 abs(row["accepted_actual_error_mm"]) <= tolerance_mm,
                 "accepted/actual closure",
             ),
             (
-                abs(row["remaining_runoff_error_mm"]) <= tolerance_mm,
-                "remaining/runoff closure",
+                abs(row["terminal_ledger_error_mm"]) <= tolerance_mm,
+                "terminal ponding/overflow ledger",
             ),
-            (abs(row["storage_change_mm"]) <= tolerance_mm, "storage fallback"),
             (
                 row["mode6_closure_abs_max_mm"] <= tolerance_mm,
                 "Mode 6 closure",
             ),
             (
-                row["acceptance_closure_abs_max_mm"] <= tolerance_mm,
-                "acceptance closure",
+                row["ledger_closure_abs_max_mm"] <= tolerance_mm,
+                "local ponding ledger closure",
             ),
+            (
+                abs(row["contact_width_error_cm"]) <= 1.0e-10
+                and abs(row["contact_measure_error_cm"]) <= 1.0e-10,
+                "fixed physical contact measure",
+            ),
+            (row["contact_nodes"] >= 1, "contact node count"),
             (row["solver_limit_max"] == 0.0, "solver limit"),
+            (row["boundary_limit_max"] == 0.0, "boundary limit"),
             (
                 abs(row["uncategorized_step_cuts"]) <= 0.5,
                 "classified step cuts",
@@ -1182,6 +1335,11 @@ def _validate_results(frame, *, expected_depth_mm):
             ),
             (row["delta_theta_max"] > WETTING_THRESHOLD, "wetting response"),
             (row["wetting_depth_cm"] > 0.0, "wetting depth"),
+            (
+                abs(row["mirror_volume_ratio"] - 2.0) <= 1.0e-12
+                and row["mirror_pair_abs_max"] <= 1.0e-12,
+                "half-domain mirror invariant",
+            ),
         )
         failures.extend(
             f"{soil}: failed {label}" for passed, label in checks if not passed
@@ -1242,13 +1400,22 @@ def _parse_args(arguments=None):
         "--emitter-node",
         type=int,
         help=(
-            "Optional assertion for the generated x=0.75 cm surface-node "
+            "Optional assertion for the generated x=0 cm surface-node "
             "number; normally derived from the grid"
         ),
     )
     parser.add_argument("--irrigation-depth-mm", type=float, default=DEFAULT_DEPTH_MM)
     parser.add_argument("--duration-h", type=float, default=DEFAULT_DURATION_H)
-    parser.add_argument("--source-width-cm", type=float, default=DEFAULT_SOURCE_WIDTH_CM)
+    parser.add_argument(
+        "--emitter-spacing-cm",
+        type=float,
+        default=DEFAULT_EMITTER_SPACING_CM,
+    )
+    parser.add_argument(
+        "--contact-width-cm",
+        type=float,
+        default=DEFAULT_CONTACT_WIDTH_CM,
+    )
     parser.add_argument(
         "--domain-width-cm",
         type=float,
@@ -1286,7 +1453,8 @@ def main(arguments=None):
         emitter_node=args.emitter_node,
         irrigation_depth_mm=args.irrigation_depth_mm,
         duration_h=args.duration_h,
-        source_width_cm=args.source_width_cm,
+        emitter_spacing_cm=args.emitter_spacing_cm,
+        contact_width_cm=args.contact_width_cm,
         domain_width_cm=args.domain_width_cm,
         refined_x_max_cm=args.refined_x_max_cm,
         refined_y_min_cm=args.refined_y_min_cm,

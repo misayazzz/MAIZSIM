@@ -18,7 +18,6 @@ from maizsim_inputs.drip import NO_DRIP_LINES  # noqa: E402
 from maizsim_inputs.drip import validate_drip_records_for_run  # noqa: E402
 from maizsim_inputs.drip import write_run_drip_file  # noqa: E402
 from maizsim_inputs.errors import ConfigError  # noqa: E402
-from maizsim_inputs.workbook_validation import build_index  # noqa: E402
 
 
 def _write_run_file(run_dir, drip_name="TEST.drp"):
@@ -40,13 +39,13 @@ def _write_run_file(run_dir, drip_name="TEST.drp"):
     (run_dir / "run.dat").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _write_grid_file(path, boundary_width=1.0):
+def _write_grid_file(path, kat=2):
     path.write_text(
         "\n".join(
             [
                 "***************** GRID GENERATOR INFORMATION **********************************************",
                 "KAT   NumNP    NumEl   NumBP    IJ   NumMat",
-                "  2       4       0       4     2     1",
+                f"  {kat}       4       0       4     2     1",
                 "   n           x          y      MatNum",
                 "    1     0       10       1",
                 "    2     5       10       1",
@@ -54,10 +53,10 @@ def _write_grid_file(path, boundary_width=1.0):
                 "    4     5        0       1",
                 "****************Boundary geometry information**************************************",
                 "    n  CodeW  CodeC  CodeH  CodeG  Width",
-                f"    1 -4    0     -4    -4      {boundary_width:g}",
-                f"    2  1    0     -4    -4      {boundary_width:g}",
-                f"    3  4    0     -4    -4      {boundary_width:g}",
-                f"    4 -2    0      1     1      {boundary_width:g}",
+                "    1 -4    0     -4    -4      2.5",
+                "    2 -4    0     -4    -4      5.0",
+                "    3  4    0     -4    -4      2.5",
+                "    4 -2    0      1     1      5.0",
             ]
         )
         + "\n",
@@ -65,285 +64,119 @@ def _write_grid_file(path, boundary_width=1.0):
     )
 
 
-def _drip_record(distance=8.6):
-    return {
+def _drip_record(**updates):
+    record = {
         "__row_number__": 2,
         "id": "TEST",
         "date": date(2024, 5, 1),
-        "ratecmhr": 0.25,
         "starttime": 8,
         "stoptime": 10,
-        "distance": distance,
+        "emitterflowlph": 1.6,
+        "emitterspacingcm": 30.0,
+        "contactwidthcm": 2.0,
     }
+    record.update(updates)
+    return record
 
 
 class MaizsimDripInputTests(unittest.TestCase):
-    def test_workbook_index_ignores_blank_key_rows(self):
-        records = [
-            {"__row_number__": 2, "id": "TEST"},
-            {"__row_number__": 3, "id": ""},
-            {"__row_number__": 4, "id": None},
-        ]
-
-        index = build_index(records, ["ID"], "Description")
-
-        self.assertEqual(list(index), ["TEST"])
-        self.assertEqual(index["TEST"]["__row_number__"], 2)
-
-    def test_zero_drip_writes_legacy_compatible_format(self):
+    def test_zero_drip_writes_supported_format(self):
         with tempfile.TemporaryDirectory(prefix="codex_drp_zero_") as tmp_dir:
             run_dir = Path(tmp_dir)
             _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-
             result = write_run_drip_file(
                 {"id": "TEST", "drip_records": [], "drip_node_records": []},
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+                {"id": "TEST", "run_dir": run_dir, "grid_file": run_dir / "TEST.grd"},
+            )
+            self.assertEqual(result["event_count"], 0)
+            self.assertEqual(
+                (run_dir / "TEST.drp").read_text(encoding="utf-8"),
+                "\n".join(NO_DRIP_LINES) + "\n",
             )
 
-            self.assertEqual(result["event_count"], 0)
-            self.assertEqual((run_dir / "TEST.drp").read_text(encoding="utf-8"), "\n".join(NO_DRIP_LINES) + "\n")
-
-    def test_distance_maps_to_nearest_surface_water_boundary_node(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_distance_") as tmp_dir:
+    def test_writer_uses_flow_spacing_contact_and_auto_x_zero_node(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_line_source_") as tmp_dir:
             run_dir = Path(tmp_dir)
             _write_run_file(run_dir)
             grid_file = run_dir / "TEST.grd"
             _write_grid_file(grid_file)
-
             write_run_drip_file(
                 {"id": "TEST", "drip_records": [_drip_record()], "drip_node_records": []},
                 {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
             )
-
             lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn("5/1/2024 8 5/1/2024 10 0.25 1", lines)
-            self.assertEqual(lines[-1].strip(), "3")
+            self.assertIn("EmitterFlowLph EmitterSpacingCm ContactWidthCm", lines[3])
+            self.assertEqual(lines[4], "5/1/2024 8 5/1/2024 10 1.6 30 2 1")
+            self.assertEqual(lines[-1].strip(), "1")
 
-    def test_optional_pressure_fields_are_written_when_enabled(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_pressure_") as tmp_dir:
+    def test_explicit_node_must_be_the_x_zero_surface_node(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_bad_axis_") as tmp_dir:
             run_dir = Path(tmp_dir)
             _write_run_file(run_dir)
             grid_file = run_dir / "TEST.grd"
             _write_grid_file(grid_file)
-            record = _drip_record()
-            record.update(
-                {
-                    "dripmode": 2,
-                    "driphin": 100,
-                    "dripexp": 0.5,
-                    "drippcmin": 50,
-                    "drippcmax": 150,
-                }
-            )
-
-            write_run_drip_file(
-                {
-                    "id": "TEST",
-                    "drip_records": [record],
-                    "drip_node_records": [],
-                },
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
-            )
-
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn(
-                "5/1/2024 8 5/1/2024 10 0.25 1 2 100 0.5 50 150",
-                lines,
-            )
-
-    def test_optional_wet_width_limit_is_written_without_pressure(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_wet_width_") as tmp_dir:
-            run_dir = Path(tmp_dir)
-            _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-            record = _drip_record()
-            record["dripwetwidthmax"] = 18
-
-            write_run_drip_file(
-                {
-                    "id": "TEST",
-                    "drip_records": [record],
-                    "drip_node_records": [],
-                },
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
-            )
-
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn(
-                "5/1/2024 8 5/1/2024 10 0.25 1 0 0 1 0 0 18",
-                lines,
-            )
-
-    def test_explicit_drip_nodes_take_priority_over_distance(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_nodes_") as tmp_dir:
-            run_dir = Path(tmp_dir)
-            _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-
-            write_run_drip_file(
-                {
-                    "id": "TEST",
-                    "drip_records": [_drip_record(distance=10)],
-                    "drip_node_records": [{"__row_number__": 2, "id": "TEST", "nodes": "1, 3"}],
-                },
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
-            )
-
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn("5/1/2024 8 5/1/2024 10 0.25 2", lines)
-            self.assertEqual(lines[-1].strip(), "1 3")
-
-    def test_explicit_drip_nodes_must_be_surface_water_boundary_nodes(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_bad_node_") as tmp_dir:
-            run_dir = Path(tmp_dir)
-            _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-
-            with self.assertRaisesRegex(ConfigError, "不是 abs\\(CodeW\\)==4"):
+            with self.assertRaisesRegex(ConfigError, "x=0"):
                 write_run_drip_file(
                     {
                         "id": "TEST",
                         "drip_records": [_drip_record()],
-                        "drip_node_records": [{"__row_number__": 2, "id": "TEST", "nodes": "2"}],
+                        "drip_node_records": [
+                            {"__row_number__": 2, "id": "TEST", "nodes": "3"}
+                        ],
                     },
                     {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
                 )
 
-    def test_distance_is_required_without_explicit_nodes(self):
-        record = _drip_record()
-        record["distance"] = ""
-
-        with self.assertRaisesRegex(ConfigError, "Distance"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_pressure_mode_requires_positive_head(self):
-        record = _drip_record()
-        record["dripmode"] = 1
-        record["driphin"] = 0
-
-        with self.assertRaisesRegex(ConfigError, "DripHIn"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_wet_width_limit_cannot_be_negative(self):
-        record = _drip_record()
-        record["dripwetwidthmax"] = -1
-
-        with self.assertRaisesRegex(ConfigError, "DripWetWidthMax"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_removed_spread_modes_are_rejected(self):
-        for spread_mode in (1, 2, 3, 4):
-            with self.subTest(spread_mode=spread_mode):
-                record = _drip_record()
-                record["dripspreadmode"] = spread_mode
-
-                with self.assertRaisesRegex(ConfigError, "DripSpreadMode"):
-                    validate_drip_records_for_run("TEST", [record], [])
-
-    def test_dynamic_surface_spread_mode5_is_written(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_spread5_") as tmp_dir:
+    def test_cartesian_grid_is_required(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_bad_kat_") as tmp_dir:
             run_dir = Path(tmp_dir)
             _write_run_file(run_dir)
             grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-            record = _drip_record(distance=10)
-            record["dripwetwidthmax"] = 18.5
-            record["dripspreadmode"] = 5
-            record["dripsourcewidth"] = 2.5
-
-            write_run_drip_file(
-                {
-                    "id": "TEST",
-                    "drip_records": [record],
-                    "drip_node_records": [],
-                },
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
-            )
-
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn("DripSourceWidth", lines[3])
-            self.assertTrue(lines[4].endswith("18.5 5 2.5"))
-
-    def test_dynamic_surface_spread_mode6_is_written(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_spread6_") as tmp_dir:
-            run_dir = Path(tmp_dir)
-            _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-            record = _drip_record(distance=10)
-            record["dripwetwidthmax"] = 18.5
-            record["dripspreadmode"] = 6
-            record["dripsourcewidth"] = 2.5
-
-            write_run_drip_file(
-                {
-                    "id": "TEST",
-                    "drip_records": [record],
-                    "drip_node_records": [],
-                },
-                {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
-            )
-
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertIn("DripSourceWidth", lines[3])
-            self.assertTrue(lines[4].endswith("18.5 6 2.5"))
-
-    def test_source_width_without_spread_mode_defaults_to_dynamic_surface(self):
-        with tempfile.TemporaryDirectory(prefix="codex_drp_source_width_mode5_") as tmp_dir:
-            run_dir = Path(tmp_dir)
-            _write_run_file(run_dir)
-            grid_file = run_dir / "TEST.grd"
-            _write_grid_file(grid_file)
-            record = _drip_record(distance=10)
-            record["dripsourcewidth"] = 2.5
-
-            with self.assertWarnsRegex(UserWarning, "DripSpreadMode=5"):
+            _write_grid_file(grid_file, kat=1)
+            with self.assertRaisesRegex(ConfigError, "KAT=2"):
                 write_run_drip_file(
-                    {
-                        "id": "TEST",
-                        "drip_records": [record],
-                        "drip_node_records": [],
-                    },
+                    {"id": "TEST", "drip_records": [_drip_record()], "drip_node_records": []},
                     {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
                 )
 
-            lines = (run_dir / "TEST.drp").read_text(encoding="utf-8").splitlines()
-            self.assertTrue(lines[4].endswith("0 5 2.5"))
+    def test_required_physical_fields_are_positive(self):
+        for field in ("emitterflowlph", "emitterspacingcm", "contactwidthcm"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ConfigError, "必须大于 0"):
+                    validate_drip_records_for_run("TEST", [_drip_record(**{field: 0})], [])
 
-    def test_dynamic_surface_spread_mode5_requires_source_width(self):
-        record = _drip_record()
-        record["dripspreadmode"] = 5
-        record["dripwetwidthmax"] = 18.5
+    def test_removed_mode_fields_are_rejected(self):
+        for field, value in (
+            ("ratecmhr", 0.25),
+            ("dripmode", 1),
+            ("dripspreadmode", 6),
+            ("dripsourcewidth", 2.0),
+            ("dripwetwidthmax", 20.0),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ConfigError, "已删除"):
+                    validate_drip_records_for_run(
+                        "TEST", [_drip_record(**{field: value})], []
+                    )
 
-        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_dynamic_surface_spread_mode6_requires_source_width(self):
-        record = _drip_record()
-        record["dripspreadmode"] = 6
-        record["dripwetwidthmax"] = 18.5
-
-        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_source_width_requires_dynamic_surface_mode5(self):
-        record = _drip_record()
-        record["dripspreadmode"] = 0
-        record["dripsourcewidth"] = 2.5
-
-        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
-            validate_drip_records_for_run("TEST", [record], [])
-
-    def test_source_width_cannot_be_negative(self):
-        record = _drip_record()
-        record["dripsourcewidth"] = -1
-
-        with self.assertRaisesRegex(ConfigError, "DripSourceWidth"):
-            validate_drip_records_for_run("TEST", [record], [])
+    def test_spacing_contact_and_event_windows_are_fixed(self):
+        with tempfile.TemporaryDirectory(prefix="codex_drp_fixed_contract_") as tmp_dir:
+            run_dir = Path(tmp_dir)
+            _write_run_file(run_dir)
+            grid_file = run_dir / "TEST.grd"
+            _write_grid_file(grid_file)
+            cases = [
+                ([_drip_record(), _drip_record(starttime=10, stoptime=12, emitterspacingcm=40)], "EmitterSpacingCm"),
+                ([_drip_record(), _drip_record(starttime=10, stoptime=12, contactwidthcm=3)], "ContactWidthCm"),
+                ([_drip_record(), _drip_record(starttime=9, stoptime=11)], "不能相互重叠"),
+            ]
+            for records, pattern in cases:
+                with self.subTest(pattern=pattern):
+                    with self.assertRaisesRegex(ConfigError, pattern):
+                        write_run_drip_file(
+                            {"id": "TEST", "drip_records": records, "drip_node_records": []},
+                            {"id": "TEST", "run_dir": run_dir, "grid_file": grid_file},
+                        )
 
 
 if __name__ == "__main__":

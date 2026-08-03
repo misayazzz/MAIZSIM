@@ -24,15 +24,11 @@ C summary output variables
      &     SeasonActualTranspiration, SeasonPotenSoilEvap,
      &     SeasonActualSoilEvap,SeasonActualInfil,
      &     SumArrayTh, MaxY, Cumulative_OM_N_sink,
-     &     DripInput, SeasonDripInput, DripDemand,
-     &     DripPressureLoss, DripHydraulicExcess,
-     &     DripActualInfil, DripSourceInput, DripSourceLoss,
-     &     DripStorageChange, DripSurfaceRunoff, DripStoredSurface,
-     &     DripBoundaryInputClosure, DripBoundaryAcceptanceClosure,
-     &     DripWetNodesMean, DripWetNodesMax,
-     &     DripWetWidthMean, DripWetWidthMax,
-     &     DripPressureFactorMean, DripPressureFactorMin,
-     &     DripMode6Accepted, DripMode6Remaining,
+     &     DripInput, SeasonDripInput,DripActualInfil,
+     &     DripStorageChange,DripOverflow,DripStoredSurface,
+     &     DripLedgerClosure,DripContactWidth,DripContactMeasure,
+     &     DripContactNodes,DripPondingCapacity,
+     &     DripMode6Available,DripMode6Accepted,DripMode6Remaining,
      &     DripMode6HeadNodes, DripMode6FluxNodes,
      &     DripMode6Iterations, DripMode6SolverLimit,
      &     DripMode6BoundaryLimit, DripMode6ClosureResidual,
@@ -129,21 +125,16 @@ cccz
         SeasonRainfall =0.0
         DripInput=0.0
         SeasonDripInput=0.0
-        DripDemand=0.0
-        DripPressureLoss=0.0
-        DripHydraulicExcess=0.0
         DripActualInfil=0.0
-        DripSourceInput=0.0
-        DripSourceLoss=0.0
         DripStorageChange=0.0
-        DripSurfaceRunoff=0.0
+        DripOverflow=0.0
         DripStoredSurface=0.0
-        DripWetNodesMean=0.0
-        DripWetNodesMax=0.0
-        DripWetWidthMean=0.0
-        DripWetWidthMax=0.0
-        DripPressureFactorMean=0.0
-        DripPressureFactorMin=0.0
+        DripLedgerClosure=0.0
+        DripContactWidth=0.0
+        DripContactMeasure=0.0
+        DripContactNodes=0.0
+        DripPondingCapacity=0.0
+        DripMode6Available=0.0
         DripMode6Accepted=0.0
         DripMode6Remaining=0.0
         DripMode6HeadNodes=0.0
@@ -158,28 +149,10 @@ cccz
         DripMode6MassCuts=0.0
         DripMode6MinDtDays=0.0
         DripInput_Flux=0.0D0
-        DripDemand_Flux=0.0D0
-        DripPressureLoss_Flux=0.0D0
-        DripHydraulicExcess_Flux=0.0D0
         DripActualInfil_Flux=0.0D0
-        DripSourceInput_Flux=0.0D0
-        DripSourceLoss_Flux=0.0D0
         DripStorageChange_Flux=0.0D0
-        DripSurfaceRunoff_Flux=0.0D0
-        DripWetNodes_Sum=0.0D0
-        DripWetNodes_Max=0.0D0
-        DripWetWidth_Sum=0.0D0
-        DripWetWidth_Max=0.0D0
-        DripPressureFactor_Sum=0.0D0
-        DripPressureFactor_Min=1.0D30
-        DripDiag_Time=0.0D0
-        DripWetNodes_StepSum=0.0D0
-        DripWetNodes_StepMax=0.0D0
-        DripWetWidth_StepSum=0.0D0
-        DripWetWidth_StepMax=0.0D0
-        DripPressureFactor_StepSum=0.0D0
-        DripPressureFactor_StepMin=1.0D30
-        DripDiag_StepCount=0.0D0
+        DripOverflow_Flux=0.0D0
+        DripMode6Available_Flux=0.0D0
         DripMode6Accepted_Flux=0.0D0
         DripMode6Remaining_Flux=0.0D0
         DripMode6HeadNodes_Sum=0.0D0
@@ -261,17 +234,13 @@ C G05 file  Surface Graphics
      &      "cover,","PSIM,", "SeasPSoEv,","SeasASoEv," ,"SeasPTran,",
      &      "SeasATran,","SeasRain,",    
      &      "SeasInfil,","ThetaAvail,","CO2FLux,","O2FLux,","N2OFLux,",
-     &      "DripInput,","SeasDrip,","DripDemand,",
-     &      "DripPressureLoss,","DripHydraulicExcess,",
-     &      "DripActualInfil,","DripSourceInput,","DripSourceLoss,",
-     &      "DripStorageChange,","DripSurfaceRunoff,",
-     &      "DripSurfaceStorage,",
-     &      "DripBoundaryInClosure,",
-     &      "DripBoundaryAccClosure,",
-     &      "DripWetNodesMean,","DripWetNodesMax,",
-     &      "DripWetWidthMean,","DripWetWidthMax,",
-     &      "DripPressureFactorMean,","DripPressureFactorMin,",
-     &      "DripMode6Accepted,","DripMode6Remaining,",
+     &      "DripEmitterInput_mm,","SeasDrip_mm,",
+     &      "DripActualInfil_mm,","DripPondingChange_mm,",
+     &      "DripOverflow_mm,","DripPonded_mm,",
+     &      "DripLedgerClosure_mm,","DripContactWidth_cm,",
+     &      "DripContactMeasure_cm,","DripContactNodes,",
+     &      "DripPondingCapacity_mm,","DripMode6Available_mm,",
+     &      "DripMode6Accepted_mm,","DripMode6Remaining_mm,",
      &      "DripMode6HeadNodes,","DripMode6FluxNodes,",
      &      "DripMode6Iterations,","DripMode6SolverLimit,",
      &      "DripMode6BoundaryLimit,","DripMode6ClosureResidual,",
@@ -355,39 +324,11 @@ cccz	           CumRain=CumRain+varBW(i,1)*width(i)*step
           endif
 cccz          if (codeW(n).eq.-4) Then
             CumRain=CumRain+Varbw_Air(i,1)*width(i)*step
-            DripDemand_Flux=DripDemand_Flux+
-     &        dble(DripDemand_Rate(i)*width(i))*Step
-            DripInput_Flux=DripInput_Flux+
-     &        dble(DripInput_Rate(i)*width(i))*Step
-            DripPressureLoss_Flux=DripPressureLoss_Flux+
-     &        dble(DripPressureLoss_Rate(i)*width(i))*Step
             SurInput_Flux=SurInput_Flux+Varbw_Mulch(i,1)*width(i)*step
             Cumulative_OM_N_sink=Cumulative_OM_N_sink+cSink_OM(i,1)
      &         *width(i)* step*thNew(i)*NO3mass_2_Nmass
 cccz         endif
 	  enddo
-        If(DripDiag_StepCount.gt.0.0D0) then
-          DripWetNodes_Sum=DripWetNodes_Sum+
-     &      DripWetNodes_StepSum/DripDiag_StepCount*Step
-          DripWetNodes_Max=dmax1(DripWetNodes_Max,
-     &      DripWetNodes_StepMax)
-          DripWetWidth_Sum=DripWetWidth_Sum+
-     &      DripWetWidth_StepSum/DripDiag_StepCount*Step
-          DripWetWidth_Max=dmax1(DripWetWidth_Max,
-     &      DripWetWidth_StepMax)
-          DripPressureFactor_Sum=DripPressureFactor_Sum+
-     &      DripPressureFactor_StepSum/DripDiag_StepCount*Step
-          DripPressureFactor_Min=dmin1(DripPressureFactor_Min,
-     &      DripPressureFactor_StepMin)
-          DripDiag_Time=DripDiag_Time+Step
-        Endif
-        DripWetNodes_StepSum=0.0D0
-        DripWetNodes_StepMax=0.0D0
-        DripWetWidth_StepSum=0.0D0
-        DripWetWidth_StepMax=0.0D0
-        DripPressureFactor_StepSum=0.0D0
-        DripPressureFactor_StepMin=1.0D30
-        DripDiag_StepCount=0.0D0
 	
 C Actual values
 
@@ -582,52 +523,36 @@ cccz the averaged process for runoff
               Runoff_03=Runoff_03/gridWidth*10.0  
 cccz
               CumRain=CumRain/gridWidth*10.0
-              DripDemand=DripDemand_Flux/gridWidth*10.0
               DripInput=DripInput_Flux/gridWidth*10.0
-              DripPressureLoss=DripPressureLoss_Flux/gridWidth*10.0
-              DripHydraulicExcess=DripHydraulicExcess_Flux/
-     &          gridWidth*10.0
               DripActualInfil=DripActualInfil_Flux/gridWidth*10.0
-              DripSourceInput=DripSourceInput_Flux/gridWidth*10.0
-              DripSourceLoss=DripSourceLoss_Flux/gridWidth*10.0
               DripStorageChange=DripStorageChange_Flux/gridWidth*10.0
-              DripSurfaceRunoff=DripSurfaceRunoff_Flux/gridWidth*10.0
+              DripOverflow=DripOverflow_Flux/gridWidth*10.0
+              DripMode6Available=DripMode6Available_Flux/
+     &          gridWidth*10.0
               DripMode6Accepted=DripMode6Accepted_Flux/
      &          gridWidth*10.0
               DripMode6Remaining=DripMode6Remaining_Flux/
      &          gridWidth*10.0
-              DripMode6ClosureResidual=(DripInput_Flux-
+              DripMode6ClosureResidual=(DripMode6Available_Flux-
      &          DripMode6Accepted_Flux-DripMode6Remaining_Flux)/
      &          gridWidth*10.0
-              DripBoundaryInputClosure=(DripDemand_Flux-
-     &          DripPressureLoss_Flux-DripInput_Flux)/
-     &          gridWidth*10.0
-              DripBoundaryAcceptanceClosure=(DripInput_Flux-
-     &          DripActualInfil_Flux-DripHydraulicExcess_Flux-
-     &          DripStorageChange_Flux-DripSurfaceRunoff_Flux)/
+              DripLedgerClosure=(DripInput_Flux-
+     &          DripActualInfil_Flux-DripStorageChange_Flux-
+     &          DripOverflow_Flux)/
      &          gridWidth*10.0
               DripStoredSurface=0.0
+              DripContactNodes=0.0
               Do i=1,NumBP
                 DripStoredSurface=DripStoredSurface+
      &            sngl(DripSurfaceStorage(i))
+                If(DripMode6ContactMeasure(i).gt.1.0D-12)
+     &            DripContactNodes=DripContactNodes+1.0
               EndDo
               DripStoredSurface=DripStoredSurface/gridWidth*10.0
-              If(DripDiag_Time.gt.0.0D0) then
-                DripWetNodesMean=DripWetNodes_Sum/DripDiag_Time
-                DripWetNodesMax=DripWetNodes_Max
-                DripWetWidthMean=DripWetWidth_Sum/DripDiag_Time
-                DripWetWidthMax=DripWetWidth_Max
-                DripPressureFactorMean=DripPressureFactor_Sum/
-     &            DripDiag_Time
-                DripPressureFactorMin=DripPressureFactor_Min
-              Else
-                DripWetNodesMean=0.0
-                DripWetNodesMax=0.0
-                DripWetWidthMean=0.0
-                DripWetWidthMax=0.0
-                DripPressureFactorMean=0.0
-                DripPressureFactorMin=0.0
-              Endif
+              DripContactWidth=sngl(DripMode6ContactWidth)
+              DripContactMeasure=sngl(DripMode6ContactTotal)
+              DripPondingCapacity=sngl(DripMode6ContactTotal*
+     &          dmax1(CriticalH,0.0D0)/gridWidth*10.0D0)
               If(DripMode6Diag_Time.gt.0.0D0) then
                 DripMode6HeadNodes=DripMode6HeadNodes_Sum/
      &            DripMode6Diag_Time
@@ -723,17 +648,12 @@ C     Gas unit conversion to ugCo2/cm2
      &               SeasonActualTranspiration,  SeasonRainfall,  
      &              SeasonActualInfil, ThetaRelative,
      &              (Surface_Gas_Flux(jjj),jjj=1,NumG),
-     &              DripInput, SeasonDripInput, DripDemand,
-     &              DripPressureLoss, DripHydraulicExcess,
-     &              DripActualInfil, DripSourceInput, DripSourceLoss,
-     &              DripStorageChange, DripSurfaceRunoff,
-     &              DripStoredSurface,
-     &              DripBoundaryInputClosure,
-     &              DripBoundaryAcceptanceClosure,
-     &              DripWetNodesMean, DripWetNodesMax,
-     &              DripWetWidthMean, DripWetWidthMax,
-     &              DripPressureFactorMean, DripPressureFactorMin,
-     &              DripMode6Accepted, DripMode6Remaining,
+     &              DripInput,SeasonDripInput,DripActualInfil,
+     &              DripStorageChange,DripOverflow,DripStoredSurface,
+     &              DripLedgerClosure,DripContactWidth,
+     &              DripContactMeasure,DripContactNodes,
+     &              DripPondingCapacity,DripMode6Available,
+     &              DripMode6Accepted,DripMode6Remaining,
      &              DripMode6HeadNodes, DripMode6FluxNodes,
      &              DripMode6Iterations, DripMode6SolverLimit,
      &              DripMode6BoundaryLimit, DripMode6ClosureResidual,
@@ -789,36 +709,15 @@ cccz ---------------------- finish mulch printing --------------------------
 	  CumRain=0.0
         DripInput=0.0
         DripInput_Flux=0.0D0
-        DripDemand=0.0
-        DripDemand_Flux=0.0D0
-        DripPressureLoss=0.0
-        DripPressureLoss_Flux=0.0D0
-        DripHydraulicExcess=0.0
-        DripHydraulicExcess_Flux=0.0D0
         DripActualInfil=0.0
         DripActualInfil_Flux=0.0D0
-        DripSourceInput=0.0
-        DripSourceInput_Flux=0.0D0
-        DripSourceLoss=0.0
-        DripSourceLoss_Flux=0.0D0
         DripStorageChange=0.0
         DripStorageChange_Flux=0.0D0
-        DripSurfaceRunoff=0.0
-        DripSurfaceRunoff_Flux=0.0D0
+        DripOverflow=0.0
+        DripOverflow_Flux=0.0D0
         DripStoredSurface=0.0
-        DripWetNodesMean=0.0
-        DripWetNodesMax=0.0
-        DripWetNodes_Sum=0.0D0
-        DripWetNodes_Max=0.0D0
-        DripWetWidthMean=0.0
-        DripWetWidthMax=0.0
-        DripWetWidth_Sum=0.0D0
-        DripWetWidth_Max=0.0D0
-        DripPressureFactorMean=0.0
-        DripPressureFactorMin=0.0
-        DripPressureFactor_Sum=0.0D0
-        DripPressureFactor_Min=1.0D30
-        DripDiag_Time=0.0D0
+        DripLedgerClosure=0.0
+        DripMode6Available=0.0
         DripMode6Accepted=0.0
         DripMode6Remaining=0.0
         DripMode6HeadNodes=0.0
@@ -832,6 +731,7 @@ cccz ---------------------- finish mulch printing --------------------------
         DripMode6SupplyCuts=0.0
         DripMode6MassCuts=0.0
         DripMode6MinDtDays=0.0
+        DripMode6Available_Flux=0.0D0
         DripMode6Accepted_Flux=0.0D0
         DripMode6Remaining_Flux=0.0D0
         DripMode6HeadNodes_Sum=0.0D0
@@ -884,10 +784,9 @@ C format 5 is water, 6 is roots Vy is the last on on this lin
      &     T152, A5,T165,A8,T176,A8,T187,A9 )   ! format for nodal data header
   6   Format (1x,A16,T20,A5,T36,A2,T46,A2,T56,A5,T65,A7,T78,A7, T90,A6,
      &        T102, A6, T112, A11, T124, A8, T136, A8)
-  10   Format (1x,F17.6,',', A15,',',9(F16.3, ','), F14.5, ',',
-     &        32(F16.3, ','),12(ES16.8,','),ES16.8)
-c Keep the Mode 6 closure ledger at scientific precision.  Hourly F16.3
-c rounding can otherwise accumulate to O(0.01 mm) over a one-day event.
+  10   Format (1x,F17.6,',',A15,',',100(ES16.8,','))
+c Use scientific precision for every numeric G05 field so the drip and
+c Richards closure ledgers can be recomputed without output-rounding drift.
  13   Format (1x,F17.6,',',A15,',',15(F16.3, ','), F16.3)  ! format for second flux data [G06]
   20   Format (1x,57A)                !untruncated CSV header [G05]
  21   Format (1x,12A16)           ! format for Organic Matter header

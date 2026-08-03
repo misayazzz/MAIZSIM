@@ -1,4 +1,4 @@
-"""Nested HUTD06 grids that preserve layers, boundaries, and emitter location."""
+"""Nested HUTD06 half-domain grids with the drip line on the x=0 axis."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 
 
-EMITTER_X_CM = 0.75
+EMITTER_X_CM = 0.0
 REFINED_X_MAX_CM = 37.5
 # Absolute grid elevation: the HUTD06 surface is y=183 cm, so this refines
 # the upper 61 cm and leaves a buffer below the 30 mm event wetting front.
@@ -92,7 +92,7 @@ def refine_hutd06_grid(
         if abs(x_value - EMITTER_X_CM) <= 1.0e-12
     ]
     if len(emitter_matches) != 1:
-        raise AssertionError("Emitter x=0.75 cm must remain exactly one surface node")
+        raise AssertionError("Emitter x=0 cm must remain exactly one surface node")
     emitter_node = emitter_matches[0]
 
     row_materials = [

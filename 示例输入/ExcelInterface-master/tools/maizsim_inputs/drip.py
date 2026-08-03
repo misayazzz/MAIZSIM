@@ -6,14 +6,13 @@ from datetime import time as Time
 from datetime import timedelta
 from pathlib import Path
 import re
-import warnings
 
 from .errors import ConfigError
 from .run_files import RUN_FILE_NAME
 from .shared_inputs import read_text_with_encoding
 
 
-DRIP_HEADER = "*****Script for Drip application module  ******* wAppl is cm water per hour; Mode5 uses dynamic local source; Mode6 uses surface active-boundary approximation"
+DRIP_HEADER = "***** Fixed-contact finite-supply equivalent drip-line source for a Cartesian half-domain"
 DRIP_COUNT_HEADER = "Number of Drip irrigations(max=75)  "
 NO_DRIP_LINES = [
     DRIP_HEADER,
@@ -22,29 +21,30 @@ NO_DRIP_LINES = [
     "No drip irrigation",
 ]
 MAX_DRIP_EVENTS = 75
-MAX_DRIP_NODES = 150
+MAX_DRIP_NODES = 1
 DRIP_FILE_LINE_INDEX = 11
-PRESSURE_MODE_FIELDS = ("dripmode", "pressuremode")
-PRESSURE_HEAD_FIELDS = ("driphin", "inlethead", "inletpressurehead")
-PRESSURE_EXP_FIELDS = ("dripexp", "pressureexponent")
-PRESSURE_PC_MIN_FIELDS = ("drippcmin", "pcmin", "pressurecompensationmin")
-PRESSURE_PC_MAX_FIELDS = ("drippcmax", "pcmax", "pressurecompensationmax")
-WET_WIDTH_MAX_FIELDS = (
+EMITTER_FLOW_FIELDS = ("emitterflowlph", "dripemitterflowlph", "flowlph")
+EMITTER_SPACING_FIELDS = (
+    "emitterspacingcm",
+    "dripemitterspacingcm",
+    "spacingcm",
+)
+CONTACT_WIDTH_FIELDS = (
+    "contactwidthcm",
+    "dripcontactwidthcm",
+    "sourcecontactwidthcm",
+)
+REMOVED_MODE_FIELDS = (
+    "ratecmhr",
+    "dripmode",
+    "pressuremode",
+    "driphin",
+    "dripexp",
+    "drippcmin",
+    "drippcmax",
     "dripwetwidthmax",
-    "dripwetwidthmaxcm",
-    "wetwidthmax",
-    "wetwidthmaxcm",
-)
-SPREAD_MODE_FIELDS = (
     "dripspreadmode",
-    "spreadmode",
-    "wettingmode",
-)
-SOURCE_WIDTH_FIELDS = (
     "dripsourcewidth",
-    "dripsourcewidthcm",
-    "sourcewidth",
-    "sourcewidthcm",
 )
 
 
@@ -211,7 +211,7 @@ def collect_explicit_nodes(run_id, drip_node_records):
     return nodes
 
 
-def normalize_drip_record(run_id, record, require_distance):
+def normalize_drip_record(run_id, record):
     """Validate one Drip row and return normalized values used by the writer."""
     context = row_context("Drip", run_id, record)
     event_date = parse_date(get_cell(record, "date", context, "date"), context, "date")
@@ -221,73 +221,37 @@ def normalize_drip_record(run_id, record, require_distance):
         raise ConfigError(f"{context} 的 StartTime 和 StopTime 不能相同.")
     stop_date = event_date + timedelta(days=1) if stop_hour < start_hour else event_date
 
-    pressure_mode = parse_optional_int(record, PRESSURE_MODE_FIELDS, context, "DripMode", 0)
-    pressure_head = parse_optional_float(record, PRESSURE_HEAD_FIELDS, context, "DripHIn", 0.0)
-    pressure_exp = parse_optional_float(record, PRESSURE_EXP_FIELDS, context, "DripExp", 1.0)
-    pressure_pc_min = parse_optional_float(record, PRESSURE_PC_MIN_FIELDS, context, "DripPcMin", 0.0)
-    pressure_pc_max = parse_optional_float(record, PRESSURE_PC_MAX_FIELDS, context, "DripPcMax", 0.0)
-    wet_width_max = parse_optional_float(record, WET_WIDTH_MAX_FIELDS, context, "DripWetWidthMax", 0.0)
-    source_width = parse_optional_float(record, SOURCE_WIDTH_FIELDS, context, "DripSourceWidth", 0.0)
-    spread_mode_value = get_optional_cell(record, SPREAD_MODE_FIELDS)
-    if spread_mode_value is None and source_width > 0.0:
-        spread_mode = 5
-        warnings.warn(
-            f"{context} 填写了 DripSourceWidth 但未填写 DripSpreadMode，已按 DripSpreadMode=5 写出.",
-            UserWarning,
-            stacklevel=2,
-        )
-    elif spread_mode_value is None:
-        spread_mode = 0
-    else:
-        spread_mode = parse_optional_int(record, SPREAD_MODE_FIELDS, context, "DripSpreadMode", 0)
-    if pressure_mode not in (0, 1, 2, 3):
-        raise ConfigError(f"{context} 的 DripMode 必须是 0、1、2 或 3: {pressure_mode}")
-    if spread_mode not in (0, 5, 6):
-        raise ConfigError(f"{context} 的 DripSpreadMode 必须是 0、5 或 6: {spread_mode}")
-    if pressure_mode in (1, 2) and pressure_head <= 0:
-        raise ConfigError(f"{context} 的 DripHIn 在 DripMode=1/2 时必须大于 0.")
-    if pressure_exp <= 0:
-        raise ConfigError(f"{context} 的 DripExp 必须大于 0: {pressure_exp}")
-    if pressure_pc_min < 0 or pressure_pc_max < 0:
-        raise ConfigError(f"{context} 的 DripPcMin/DripPcMax 不能为负数.")
-    if wet_width_max < 0:
-        raise ConfigError(f"{context} 的 DripWetWidthMax 不能为负数.")
-    if source_width < 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 不能为负数.")
-    if spread_mode not in (5, 6) and source_width > 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 只能在 DripSpreadMode=5 或 6 时填写.")
-    if spread_mode in (5, 6) and source_width <= 0:
-        raise ConfigError(f"{context} 的 DripSourceWidth 在 DripSpreadMode=5/6 时必须大于 0.")
-    if spread_mode in (5, 6) and 0 < wet_width_max <= source_width:
-        warnings.warn(
-            (
-                f"{context} 的 DripSpreadMode={spread_mode} 设置了 DripWetWidthMax={wet_width_max:g} cm, "
-                f"不大于 DripSourceWidth={source_width:g} cm；该算例会接近固定宽度源，"
-                "建议把 DripWetWidthMax 设为更大的最大湿润斑宽度."
-            ),
-            UserWarning,
-            stacklevel=2,
-        )
+    removed = [field for field in REMOVED_MODE_FIELDS if not is_blank(record.get(field))]
+    if removed:
+        fields = ", ".join(removed)
+        raise ConfigError(f"{context} 使用了已删除的滴灌字段: {fields}.")
+
+    emitter_flow = get_optional_cell(record, EMITTER_FLOW_FIELDS)
+    emitter_spacing = get_optional_cell(record, EMITTER_SPACING_FIELDS)
+    contact_width = get_optional_cell(record, CONTACT_WIDTH_FIELDS)
+    if emitter_flow is None:
+        raise ConfigError(f"{context} 缺少 EmitterFlowLph.")
+    if emitter_spacing is None:
+        raise ConfigError(f"{context} 缺少 EmitterSpacingCm.")
+    if contact_width is None:
+        raise ConfigError(f"{context} 缺少 ContactWidthCm.")
 
     event = {
         "date": event_date,
         "start_hour": start_hour,
         "stop_date": stop_date,
         "stop_hour": stop_hour,
-        "rate": parse_positive_float(get_cell(record, "ratecmhr", context, "rate(cm/hr)"), context, "rate(cm/hr)"),
-        "distance": None,
+        "emitter_flow_lph": parse_positive_float(
+            emitter_flow, context, "EmitterFlowLph"
+        ),
+        "emitter_spacing_cm": parse_positive_float(
+            emitter_spacing, context, "EmitterSpacingCm"
+        ),
+        "contact_width_cm": parse_positive_float(
+            contact_width, context, "ContactWidthCm"
+        ),
         "row_number": record.get("__row_number__"),
-        "pressure_mode": pressure_mode,
-        "pressure_head": pressure_head,
-        "pressure_exp": pressure_exp,
-        "pressure_pc_min": pressure_pc_min,
-        "pressure_pc_max": pressure_pc_max,
-        "wet_width_max": wet_width_max,
-        "spread_mode": spread_mode,
-        "source_width": source_width,
     }
-    if require_distance:
-        event["distance"] = parse_float(get_cell(record, "distance", context, "Distance"), context, "Distance")
     return event
 
 
@@ -296,8 +260,7 @@ def validate_drip_records_for_run(run_id, drip_records, drip_node_records):
     explicit_nodes = collect_explicit_nodes(run_id, drip_node_records)
     if len(drip_records) > MAX_DRIP_EVENTS:
         raise ConfigError(f"Drip.ID={run_id} 事件数超过 {MAX_DRIP_EVENTS}: {len(drip_records)}")
-    require_distance = not explicit_nodes
-    return [normalize_drip_record(run_id, record, require_distance) for record in drip_records]
+    return [normalize_drip_record(run_id, record) for record in drip_records]
 
 
 def parse_grid_file(grid_file):
@@ -403,9 +366,8 @@ def write_drip_file(path, events):
         DRIP_COUNT_HEADER,
         f" {len(events)} ",
         (
-            "Start_Date Start_hour Stop_Date Stop_hour wAppl Num_nodes "
-            "DripMode DripHIn DripExp DripPcMin DripPcMax DripWetWidthMax "
-            "DripSpreadMode DripSourceWidth"
+            "Start_Date Start_hour Stop_Date Stop_hour EmitterFlowLph "
+            "EmitterSpacingCm ContactWidthCm Num_nodes"
         ),
     ]
     for event in events:
@@ -415,34 +377,11 @@ def write_drip_file(path, events):
             format_number(event["start_hour"]),
             format_date(event["stop_date"]),
             format_number(event["stop_hour"]),
-            format_number(event["rate"]),
+            format_number(event["emitter_flow_lph"]),
+            format_number(event["emitter_spacing_cm"]),
+            format_number(event["contact_width_cm"]),
             str(len(nodes)),
         ]
-        if (
-            event.get("pressure_mode", 0) != 0
-            or event.get("wet_width_max", 0.0) > 0.0
-            or event.get("spread_mode", 0) != 0
-            or event.get("source_width", 0.0) > 0.0
-        ):
-            fields.extend(
-                [
-                    str(event["pressure_mode"]),
-                    format_number(event["pressure_head"]),
-                    format_number(event["pressure_exp"]),
-                    format_number(event["pressure_pc_min"]),
-                    format_number(event["pressure_pc_max"]),
-                ]
-            )
-            if (
-                event.get("wet_width_max", 0.0) > 0.0
-                or event.get("spread_mode", 0) != 0
-                or event.get("source_width", 0.0) > 0.0
-            ):
-                fields.append(format_number(event["wet_width_max"]))
-            if event.get("spread_mode", 0) != 0 or event.get("source_width", 0.0) > 0.0:
-                fields.append(str(event["spread_mode"]))
-            if event.get("source_width", 0.0) > 0.0:
-                fields.append(format_number(event["source_width"]))
         lines.append(
             " ".join(fields)
         )
@@ -451,29 +390,46 @@ def write_drip_file(path, events):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def validate_mode6_emitter_contract(events):
-    """Enforce one physical, non-overlapping emitter for all Mode 6 events."""
-    mode6_events = [event for event in events if event.get("spread_mode", 0) == 6]
-    if not mode6_events:
+def validate_line_source_contract(events, grid_data):
+    """Enforce one fixed x=0 line source and non-overlapping events."""
+    if not events:
         return
-    for event in mode6_events:
+    if grid_data["kat"] != 2:
+        raise ConfigError("固定接触等效滴灌线源只支持笛卡尔 KAT=2 网格.")
+    for event in events:
         if len(event["nodes"]) != 1:
-            raise ConfigError("DripSpreadMode=6 的每个事件必须且只能包含一个滴头节点.")
-    emitter_nodes = {event["nodes"][0] for event in mode6_events}
+            raise ConfigError("每个滴灌事件必须且只能包含一个 x=0 地表节点.")
+        node = event["nodes"][0]
+        if abs(grid_data["nodes"][node]["x"]) > 1.0e-6:
+            raise ConfigError("等效滴灌带必须位于 x=0.")
+    emitter_nodes = {event["nodes"][0] for event in events}
     if len(emitter_nodes) != 1:
-        raise ConfigError("所有 DripSpreadMode=6 事件必须使用同一个物理滴头节点.")
-    for event_index, event in enumerate(mode6_events):
-        event_start = event["date"] + timedelta(hours=event["start_hour"])
-        event_stop = event["stop_date"] + timedelta(hours=event["stop_hour"])
-        for earlier in mode6_events[:event_index]:
-            earlier_start = earlier["date"] + timedelta(
+        raise ConfigError("所有滴灌事件必须使用同一个 x=0 地表节点.")
+    spacings = {event["emitter_spacing_cm"] for event in events}
+    contact_widths = {event["contact_width_cm"] for event in events}
+    if len(spacings) != 1:
+        raise ConfigError("同一算例的 EmitterSpacingCm 必须固定.")
+    if len(contact_widths) != 1:
+        raise ConfigError("同一算例的 ContactWidthCm 必须固定.")
+    surface_x_max = max(node["x"] for node in grid_data["surface_nodes"])
+    if next(iter(contact_widths)) > surface_x_max:
+        raise ConfigError("ContactWidthCm 超出笛卡尔半域地表范围.")
+    for event_index, event in enumerate(events):
+        event_start = DateTime.combine(event["date"], Time()) + timedelta(
+            hours=event["start_hour"]
+        )
+        event_stop = DateTime.combine(event["stop_date"], Time()) + timedelta(
+            hours=event["stop_hour"]
+        )
+        for earlier in events[:event_index]:
+            earlier_start = DateTime.combine(earlier["date"], Time()) + timedelta(
                 hours=earlier["start_hour"]
             )
-            earlier_stop = earlier["stop_date"] + timedelta(
+            earlier_stop = DateTime.combine(earlier["stop_date"], Time()) + timedelta(
                 hours=earlier["stop_hour"]
             )
             if event_start < earlier_stop and earlier_start < event_stop:
-                raise ConfigError("DripSpreadMode=6 的滴灌事件不能相互重叠.")
+                raise ConfigError("固定接触滴灌事件不能相互重叠.")
 
 
 def build_drip_events(run, grid_file):
@@ -493,8 +449,10 @@ def build_drip_events(run, grid_file):
             event["nodes"] = list(explicit_nodes)
     else:
         for event in normalized_events:
-            event["nodes"] = [map_distance_to_surface_node(event["distance"], grid_data["surface_nodes"])]
-    validate_mode6_emitter_contract(normalized_events)
+            event["nodes"] = [
+                map_distance_to_surface_node(0.0, grid_data["surface_nodes"])
+            ]
+    validate_line_source_contract(normalized_events, grid_data)
     return normalized_events
 
 

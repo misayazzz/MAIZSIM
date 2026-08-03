@@ -11,7 +11,6 @@
       Include 'puplant.ins'
       Include 'puweath.ins'
       include 'PuSurface.ins'
-      Parameter (Max_times=75, Max_nodes=150)
       Parameter (NTabD=100,NPar=13)
       
       Double precision A,B,C, B_1, A_1
@@ -26,11 +25,10 @@
      !                 Mode6DiagBottom,Mode6DiagEmitter,
      !                 Mode6DiagOtherSurface,Mode6DiagEq,
      !                 Mode6DiagDesired,Mode6DiagEqSum,Mode6DiagEqMax
-      Double precision DripShare,DripExcess,DripPotential,
-     !                 DripActual,DripNew,DripStored,DripNewExcess,
-     !                 DripStoredExcess,DripStorageDelta,
-     !                 DripOverflow,DripStorageLimit,
-     !                 DripStorageMeasure
+       Double precision DripShare,Mode6OldStorage,
+     !                 Mode6AvailableVolume,Mode6AcceptedVolume,
+     !                 Mode6NewStorage,Mode6StorageCapacity,
+     !                 Mode6OverflowVolume
        Double precision Mode6Accepted(MaxDripMode6D),
      !                 Mode6Remaining(MaxDripMode6D),
      !                 Mode6FluxCapacity(MaxDripMode6D),
@@ -41,17 +39,11 @@
      !                 Mode6SourceBracketHigh(MaxDripMode6D),
      !                 Mode6BoundaryActual(NumBPD),
      !                 Mode6BoundaryCapacity(NumBPD),
-     !                 Mode6NewMeasure,Mode6WetWidth,
      !                 Mode6Actual,Mode6HeadTol,Mode6FluxTol,
      !                 Mode6MeasureTol,Mode6Term,
      !                 Mode6MassResidual,Mode6MassScale,
      !                 Mode6MassRoundoff,Mode6MassTolerance,
      !                 Mode6MassAbsoluteTolerance
-      Real wAppl,LastRate(NumBPD),
-     !     LastAir(NumBPD),LastMulch(NumBPD),LastBW(NumBPD),
-     !     DripHIn(Max_times),DripExp(Max_times),
-     !     DripPcMin(Max_times),DripPcMax(Max_times),
-     !     DripWetWidthMax(Max_times),DripSourceWidth(Max_times)
       real ATG,HSP
       Double precision Mode6Correction,Mode6CorrectionChange,
      !                 Mode6Relaxation,Mode6RelaxNumerator,
@@ -59,7 +51,6 @@
      !                 Mode6RawEps,Mode6TrustFactor,
      !                 Mode6TrustLimit,
      !                 Mode6Continuation,Mode6ContinuationAccepted
-      Double precision tAppl_start,tAppl_stop
       Double precision Mode6CorrectionVector(NumNPD)
       Double precision WaterOuterTime,WaterOuterStep,WaterLocalEnd,
      !                 WaterRemaining,WaterNextDt,WaterTimeTol,
@@ -74,14 +65,10 @@ cccz  Double precision CriticalH, CriticalH_R
       Dimension hOld_1(NumNPD),Dif(NumNPD),
      !          Mode6BracketLow(NumNPD),Mode6BracketHigh(NumNPD),
      !          Mode6BoundaryHead(NumNPD),BaseHOld(NumNPD)
-      Integer trigger_Runoff, p_Runoff,Drip_times,Num_nodes,
-     !        nAppl,SourceBnd,SourceSurfPos,WetRadius,
-     !        DripSurfNode,DripSurfBnd,DripSurfCount,DripMode,
-     !        ShrinkCount,DripSpreadMode,applied,
+       Integer trigger_Runoff,p_Runoff,
      !        Mode6NeedResolve,Mode6Source,Mode6Bnd,
-     !        Mode6Node,Mode6Radius,Mode6NewLeft,Mode6NewRight,
      !        Mode6HeadCount,Mode6FluxCount,Mode6ActiveCount,
-     !        Mode6MaxIter,Mode6SolverMaxIt,Mode6Converted,Mode6Done,
+     !        Mode6MaxIter,Mode6SolverMaxIt,Mode6Converted,
      !        Mode6BoundaryActive,Mode6LimitedClosure,
      !        Mode6RetryCount,Mode6OverAccepted,Mode6FluxNodeUpdate
       Integer WaterSubstepCount,WaterOuterMaxIter,WaterOuterRetryCount
@@ -124,18 +111,6 @@ cccz  Double precision CriticalH, CriticalH_R
      !                MaxIt,TolTh,TolH,dt,dtOld,tOld,
      !                thR(NMatD),hSat(NMatD),
      !                isat(NumBPD),FreeD
-      Common /DripC/ tAppl_start(Max_times), tAppl_stop(Max_times),
-     !     wAppl(Max_times), Drip_times,
-     !     Num_nodes(Max_times), nAppl(Max_times, Max_nodes),
-     !     LastRate,LastAir,LastMulch,LastBW,
-     !     SourceBnd(Max_times,Max_nodes),
-     !     SourceSurfPos(Max_times,Max_nodes),
-     !     WetRadius(Max_times,Max_nodes),DripSurfNode(NumBPD),
-     !     ShrinkCount(Max_times,Max_nodes),
-     !     DripSurfBnd(NumBPD),DripSurfCount,DripMode(Max_times),
-     !     DripHIn,DripExp,DripPcMin,DripPcMax,
-     !     DripWetWidthMax,DripSpreadMode(Max_times),
-     !     DripSourceWidth,applied,ModNum
       Common /HydPar/ SoilPar(NPar,NMatD),
      !                hTab(NTabD),ConTab(NTabD,NMatD),
      !                CapTab(NTabD,NMatD),ConSat(NMatD),
@@ -250,6 +225,55 @@ c time-partition correction, not a bypass of the nonlinear solve.
       t=tOld+dt
       Time=t
       Step=dt
+      If(DripMode6Active.eq.1) then
+c Reoffer only the ponded volume present at the start of this accepted
+c Richards substep.  Retries leave this storage untouched.  The fixed
+c contact quadrature is the sole spatial support for the finite supply.
+        Mode6OldStorage=0.0D0
+        Do k=1,NumBP
+          Mode6OldStorage=Mode6OldStorage+DripSurfaceStorage(k)
+          DripMode6AssignedFlux(k)=0.0D0
+          DripMode6FluxActive(k)=0
+          DripMode6HeadActive(k)=0
+          DripMode6BoundaryOwner(k)=0
+        EndDo
+        DripMode6StorageStart(1)=Mode6OldStorage
+        DripMode6InputFlux(1)=DripMode6ExternalFlux(1)+
+     !    Mode6OldStorage/dt
+        DripMode6RemainingFlux(1)=DripMode6InputFlux(1)
+        DripMode6AcceptedFlux(1)=0.0D0
+        Mode6FluxTol=dmax1(1.0D-4,
+     !    1.0D-4*dabs(DripMode6InputFlux(1)))
+        If(DripMode6InputFlux(1).gt.Mode6FluxTol) then
+          DripMode6Count=1
+          DripMode6Closed(1)=0
+          Do k=1,NumBP
+            If(DripMode6ContactMeasure(k).gt.1.0D-12) then
+              DripMode6FluxActive(k)=1
+              DripMode6BoundaryOwner(k)=1
+              DripMode6AssignedFlux(k)=DripMode6InputFlux(1)*
+     !          DripMode6ContactMeasure(k)/DripMode6ContactTotal
+            Endif
+          EndDo
+        Else
+          DripMode6Active=0
+          DripMode6Count=0
+          DripMode6Closed(1)=1
+          DripBypassRunoff=0
+          Do k=1,NumBP
+            If(DripMode6CandidateOwner(k).gt.0) then
+              n=KXB(k)
+              If(DripMode6AtmosHeadActive(k).eq.1) then
+                Q(n)=0.0
+                CodeW(n)=4
+              Else
+                Q(n)=-VarBW(k,3)*Width(k)
+                CodeW(n)=-4
+              Endif
+            Endif
+          EndDo
+        Endif
+      Endif
       If(DripMode6Active.eq.1.and.WaterSubstepCount.gt.0)
      !  DripMode6IterationCount=0
       Do i=1,NumNP
@@ -399,8 +423,8 @@ C
 *
       If(DripMode6Active.eq.1) then
 c Solve one fixed HYDRUS activity set with a current-state consistent
-c Newton method.  Mode 5 and ordinary water steps continue through the
-c unchanged legacy Picard path below.
+c Newton method.  Ordinary non-drip water steps continue through the
+c unchanged Picard path below.
         Mode6ContinuationRetryAvailable=0
         If(Mode6ContinuationAccepted.lt.
      !    Mode6Continuation-1.0D-12) then
@@ -1363,7 +1387,12 @@ c parameter.
         Mode6HeadTol=dmax1(1.0D-8,2.0D0*dble(TolH))
         Mode6MeasureTol=1.0D-10
         Mode6LimitedClosure=0
-        Mode6MaxIter=20*DripSurfCount+50
+        Mode6ActiveCount=0
+        Do k=1,NumBP
+          If(DripMode6CandidateOwner(k).gt.0)
+     !      Mode6ActiveCount=Mode6ActiveCount+1
+        EndDo
+        Mode6MaxIter=20*max(1,Mode6ActiveCount)+50
         DripMode6IterationCount=DripMode6IterationCount+1
         Mode6NeedResolve=0
         Do Mode6Source=1,DripMode6Count
@@ -1393,7 +1422,7 @@ c positive-flux ledger and systematically under-supplies the soil domain.
      !          dmax1(DripMode6AssignedFlux(k),0.0D0)
               Mode6FluxWeight(Mode6Source)=
      !          Mode6FluxWeight(Mode6Source)+
-     !          dble(Width(k))
+     !          DripMode6ContactMeasure(k)
             Endif
           Endif
         EndDo
@@ -1403,24 +1432,19 @@ c positive-flux ledger and systematically under-supplies the soil domain.
  1595     Continue
           If(Mode6Accepted(Mode6Source).gt.
      !      DripMode6InputFlux(Mode6Source)+Mode6FluxTol) then
-c Coupling can raise the intake of previously saturated nodes after the
-c frontier changes.  Contract the zero-head set from its outer edge until
-c the retained head nodes no longer exceed the finite emitter supply.
+c Coupling can raise the intake of zero-head contact nodes after the active
+c set changes.  Return the largest accepting head node to the Neumann set
+c until the retained head set no longer exceeds the finite supply.  This
+c selection depends only on the fixed contact set, never on a wetting radius.
             Mode6Bnd=0
-            Mode6Radius=-1
+            Mode6Actual=-1.0D30
             Do k=1,NumBP
               If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
      !          DripMode6HeadActive(k).eq.1) then
-                Do Mode6NewLeft=1,DripSurfCount
-                  If(DripSurfBnd(Mode6NewLeft).eq.k) then
-                    Mode6NewRight=iabs(Mode6NewLeft-
-     !                DripMode6CenterPos(Mode6Source))
-                    If(Mode6NewRight.gt.Mode6Radius) then
-                      Mode6Radius=Mode6NewRight
-                      Mode6Bnd=k
-                    Endif
-                  Endif
-                EndDo
+                If(Mode6BoundaryActual(k).gt.Mode6Actual) then
+                  Mode6Actual=Mode6BoundaryActual(k)
+                  Mode6Bnd=k
+                Endif
               Endif
             EndDo
             If(Mode6Bnd.le.0) then
@@ -1435,7 +1459,7 @@ c the retained head nodes no longer exceed the finite emitter supply.
      !        Mode6BoundaryActual(Mode6Bnd)
             Mode6FluxWeight(Mode6Source)=
      !        Mode6FluxWeight(Mode6Source)+
-     !        dble(Width(Mode6Bnd))
+     !        DripMode6ContactMeasure(Mode6Bnd)
             Mode6SourceHasLow(Mode6Source)=0
             Mode6SourceHasHigh(Mode6Source)=0
             GoTo 1595
@@ -1480,11 +1504,12 @@ c zero-head intake changes strongly with the frontier load.
               Do k=1,NumBP
                 If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
      !            DripMode6FluxActive(k).eq.1) then
-                  DripShare=Mode6Actual*dble(Width(k))/
+                  DripShare=Mode6Actual*DripMode6ContactMeasure(k)/
      !              Mode6FluxWeight(Mode6Source)
                   If(dabs(DripMode6AssignedFlux(k)-DripShare).gt.
      !              dmax1(1.0D-10,Mode6FluxTol*
-     !              dble(Width(k))/Mode6FluxWeight(Mode6Source)))
+     !              DripMode6ContactMeasure(k)/
+     !              Mode6FluxWeight(Mode6Source)))
      !              Mode6FluxNodeUpdate=1
                   DripMode6AssignedFlux(k)=DripShare
                 Endif
@@ -1523,124 +1548,29 @@ c zero-head intake changes strongly with the frontier load.
               If(DripMode6AcceptedFlux(Mode6Source).gt.
      !          DripMode6InputFlux(Mode6Source)+Mode6FluxTol)
      !          Mode6OverAccepted=1
-              If(Mode6Remaining(Mode6Source).le.Mode6FluxTol) then
-                Mode6Converted=0
-                Do k=1,NumBP
-                  If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
-     !              DripMode6FluxActive(k).eq.1) then
-                    n=KXB(k)
-                     If(hNew(n).gt.Mode6HeadTol) then
-                      DripMode6FluxActive(k)=0
-                      DripMode6HeadActive(k)=1
-                      DripMode6AssignedFlux(k)=0.0D0
-                      hNew(n)=0.0
-                      Mode6SourceHasLow(Mode6Source)=0
-                      Mode6SourceHasHigh(Mode6Source)=0
-                      Mode6Converted=1
-                    Endif
-                  Endif
-                EndDo
-                If(Mode6Converted.eq.1) then
-                  Mode6NeedResolve=1
-                Else
-                  DripMode6Closed(Mode6Source)=1
-                Endif
-              Else
-                Mode6Converted=0
-                Do k=1,NumBP
-                  If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
-     !              DripMode6FluxActive(k).eq.1) then
-                    n=KXB(k)
-                     If(hNew(n).gt.Mode6HeadTol) then
-                      DripMode6FluxActive(k)=0
-                      DripMode6HeadActive(k)=1
-                      DripMode6AssignedFlux(k)=0.0D0
-                      hNew(n)=0.0
-                      Mode6SourceHasLow(Mode6Source)=0
-                      Mode6SourceHasHigh(Mode6Source)=0
-                      Mode6Converted=1
-                    Endif
-                  Endif
-                EndDo
-                If(Mode6Converted.eq.1) then
-                  Mode6NeedResolve=1
-                Else
-                  Mode6Done=0
-                  Mode6Radius=DripMode6CurrentRadius(Mode6Source)
- 1601             Continue
-                  If(Mode6Done.eq.0.and.
-     !              Mode6Radius.lt.
-     !              DripMode6MaxRadius(Mode6Source)) then
-                    Mode6Radius=Mode6Radius+1
-                    Mode6NewMeasure=0.0D0
-                    Mode6NewLeft=DripMode6CenterPos(Mode6Source)-
-     !                Mode6Radius
-                    Mode6NewRight=DripMode6CenterPos(Mode6Source)+
-     !                Mode6Radius
-                    If(Mode6NewLeft.ge.1) then
-                      Mode6Bnd=DripSurfBnd(Mode6NewLeft)
-                      If(DripMode6CandidateOwner(Mode6Bnd).eq.
-     !                  Mode6Source.and.
-     !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
-     !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
-                        Mode6NewMeasure=Mode6NewMeasure+
-     !                    dble(Width(Mode6Bnd))
-                      Endif
-                    Endif
-                    If(Mode6NewRight.le.DripSurfCount.and.
-     !                Mode6NewRight.ne.Mode6NewLeft) then
-                      Mode6Bnd=DripSurfBnd(Mode6NewRight)
-                      If(DripMode6CandidateOwner(Mode6Bnd).eq.
-     !                  Mode6Source.and.
-     !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
-     !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
-                        Mode6NewMeasure=Mode6NewMeasure+
-     !                    dble(Width(Mode6Bnd))
-                      Endif
-                    Endif
-                    If(Mode6NewMeasure.le.Mode6MeasureTol) GoTo 1601
-                    DripMode6CurrentRadius(Mode6Source)=Mode6Radius
-                    If(Mode6NewLeft.ge.1) then
-                      Mode6Bnd=DripSurfBnd(Mode6NewLeft)
-                      If(DripMode6CandidateOwner(Mode6Bnd).eq.
-     !                  Mode6Source.and.
-     !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
-     !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
-                        DripMode6FluxActive(Mode6Bnd)=1
-                        DripMode6BoundaryOwner(Mode6Bnd)=Mode6Source
-                        DripMode6AssignedFlux(Mode6Bnd)=
-     !                    Mode6Remaining(Mode6Source)*
-     !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
-                      Endif
-                    Endif
-                    If(Mode6NewRight.le.DripSurfCount.and.
-     !                Mode6NewRight.ne.Mode6NewLeft) then
-                      Mode6Bnd=DripSurfBnd(Mode6NewRight)
-                      If(DripMode6CandidateOwner(Mode6Bnd).eq.
-     !                  Mode6Source.and.
-     !                  DripMode6HeadActive(Mode6Bnd).eq.0.and.
-     !                  DripMode6FluxActive(Mode6Bnd).eq.0) then
-                        DripMode6FluxActive(Mode6Bnd)=1
-                        DripMode6BoundaryOwner(Mode6Bnd)=Mode6Source
-                        DripMode6AssignedFlux(Mode6Bnd)=
-     !                    Mode6Remaining(Mode6Source)*
-     !                    dble(Width(Mode6Bnd))/Mode6NewMeasure
-                      Endif
-                    Endif
-                    Mode6SourceHead(Mode6Source)=0.0D0
-                    Mode6SourceBracketLow(Mode6Source)=0.0D0
-                    Mode6SourceBracketHigh(Mode6Source)=0.0D0
+              Mode6Converted=0
+              Do k=1,NumBP
+                If(DripMode6BoundaryOwner(k).eq.Mode6Source.and.
+     !            DripMode6FluxActive(k).eq.1) then
+                  n=KXB(k)
+                  If(hNew(n).gt.Mode6HeadTol) then
+                    DripMode6FluxActive(k)=0
+                    DripMode6HeadActive(k)=1
+                    DripMode6AssignedFlux(k)=0.0D0
+                    hNew(n)=0.0
                     Mode6SourceHasLow(Mode6Source)=0
                     Mode6SourceHasHigh(Mode6Source)=0
-                    Mode6NeedResolve=1
-                    Mode6Done=1
-                  Endif
-                  If(Mode6Done.eq.0) then
-                    DripMode6Closed(Mode6Source)=1
-                    If(Mode6Remaining(Mode6Source).gt.Mode6FluxTol)
-     !                Mode6LimitedClosure=1
+                    Mode6Converted=1
                   Endif
                 Endif
+              EndDo
+              If(Mode6Converted.eq.1) then
+                Mode6NeedResolve=1
+              Else
+c Every physical contact node has now satisfied complementarity.  Any
+c remaining finite supply belongs to the local ponding/overflow ledger;
+c no new surface node is activated.
+                DripMode6Closed(Mode6Source)=1
               Endif
             Endif
           EndDo
@@ -1665,7 +1595,6 @@ c accept or clip the over-supplied Richards solution.
      !            ' input=',DripMode6InputFlux(Mode6Source),
      !            ' accepted=',DripMode6AcceptedFlux(Mode6Source),
      !            ' remaining=',Mode6Remaining(Mode6Source),
-     !            ' radius=',DripMode6CurrentRadius(Mode6Source),
      !            ' head_nodes=',Mode6HeadCount,
      !            ' flux_nodes=',Mode6FluxCount
               EndDo
@@ -1709,7 +1638,6 @@ c state at a shorter time step, consistently with the Richards iteration.
      !          ' input=',DripMode6InputFlux(Mode6Source),
      !          ' accepted=',DripMode6AcceptedFlux(Mode6Source),
      !          ' remaining=',Mode6Remaining(Mode6Source),
-     !          ' radius=',DripMode6CurrentRadius(Mode6Source),
      !          ' head_nodes=',Mode6HeadCount,
      !          ' flux_nodes=',Mode6FluxCount
             EndDo
@@ -1819,7 +1747,6 @@ c without hiding a resolved mass-balance error.
         Mode6HeadCount=0
         Mode6FluxCount=0
         Mode6ActiveCount=0
-        Mode6WetWidth=0.0D0
         Do k=1,NumBP
           If(DripMode6BoundaryOwner(k).gt.0) then
             If(DripMode6HeadActive(k).eq.1) then
@@ -1831,7 +1758,6 @@ c without hiding a resolved mass-balance error.
             If(DripMode6HeadActive(k).eq.1.or.
      !        DripMode6FluxActive(k).eq.1) then
               Mode6ActiveCount=Mode6ActiveCount+1
-              Mode6WetWidth=Mode6WetWidth+dble(Width(k))
             Endif
           Endif
         EndDo
@@ -1841,40 +1767,49 @@ c without hiding a resolved mass-balance error.
           DripMode6RemainingFlux(Mode6Source)=dmax1(
      !      DripMode6InputFlux(Mode6Source)-
      !      DripMode6AcceptedFlux(Mode6Source),0.0D0)
-          DripDemand_Flux=DripDemand_Flux+
-     !      DripMode6DemandFlux(Mode6Source)*dt
-          DripPressureLoss_Flux=DripPressureLoss_Flux+
-     !      DripMode6PressureLossFlux(Mode6Source)*dt
           DripInput_Flux=DripInput_Flux+
-     !      DripMode6InputFlux(Mode6Source)*dt
+     !      DripMode6ExternalFlux(Mode6Source)*dt
           DripActualInfil_Flux=DripActualInfil_Flux+
      !      DripMode6AcceptedFlux(Mode6Source)*dt
+          DripMode6Available_Flux=DripMode6Available_Flux+
+     !      DripMode6InputFlux(Mode6Source)*dt
           DripMode6Accepted_Flux=DripMode6Accepted_Flux+
      !      DripMode6AcceptedFlux(Mode6Source)*dt
           DripMode6Remaining_Flux=DripMode6Remaining_Flux+
      !      DripMode6RemainingFlux(Mode6Source)*dt
           Mode6FluxTol=dmax1(1.0D-4,
      !      1.0D-4*dabs(DripMode6InputFlux(Mode6Source)))
-          If(DripMode6RemainingFlux(Mode6Source).gt.Mode6FluxTol) then
-c The complete connected surface has already been tested by Mode 6.
-c Any residual is physical outflow from this half-domain, not water to
-c be released later through the empirical Mode 5 storage-capacity path.
-            DripSurfaceRunoff_Flux=DripSurfaceRunoff_Flux+
-     !        DripMode6RemainingFlux(Mode6Source)*dt
+
+c Close the physical source ledger after, and only after, the Richards
+c state has passed Newton and mass-balance acceptance.  Solver availability
+c contains reoffered ponding; external input does not.  Residual water is
+c stored on the same fixed contact quadrature before any overflow is booked.
+          Mode6OldStorage=DripMode6StorageStart(Mode6Source)
+          Mode6AvailableVolume=Mode6OldStorage+
+     !      DripMode6ExternalFlux(Mode6Source)*dt
+          Mode6AcceptedVolume=
+     !      DripMode6AcceptedFlux(Mode6Source)*dt
+          Mode6NewStorage=Mode6AvailableVolume-Mode6AcceptedVolume
+          If(Mode6NewStorage.lt.-dmax1(1.0D-10,
+     !      Mode6FluxTol*dt)) then
+            Stop 'Mode 6 accepted more than external plus stored water'
           Endif
-        EndDo
-        Do Mode6Source=1,DripMode6Count
-          Do jj=1,Drip_times
-            If(DripSpreadMode(jj).eq.6.and.
-     !      t.ge.tAppl_start(jj)-0.001D0*dt.and.
-     !      t.lt.tAppl_stop(jj)+0.001D0*dt) then
-              Do in=1,Num_nodes(jj)
-                If(SourceSurfPos(jj,in).eq.
-     !          DripMode6CenterPos(Mode6Source)) then
-                  WetRadius(jj,in)=max(WetRadius(jj,in),
-     !            DripMode6CurrentRadius(Mode6Source))
-                Endif
-              EndDo
+          Mode6NewStorage=dmax1(Mode6NewStorage,0.0D0)
+          Mode6StorageCapacity=DripMode6ContactTotal*
+     !      dmax1(CriticalH,0.0D0)
+          Mode6OverflowVolume=dmax1(
+     !      Mode6NewStorage-Mode6StorageCapacity,0.0D0)
+          Mode6NewStorage=dmin1(Mode6NewStorage,
+     !      Mode6StorageCapacity)
+          DripStorageChange_Flux=DripStorageChange_Flux+
+     !      Mode6NewStorage-Mode6OldStorage
+          DripOverflow_Flux=DripOverflow_Flux+Mode6OverflowVolume
+          Do k=1,NumBP
+            If(DripMode6ContactMeasure(k).gt.1.0D-12) then
+              DripSurfaceStorage(k)=Mode6NewStorage*
+     !          DripMode6ContactMeasure(k)/DripMode6ContactTotal
+            Else
+              DripSurfaceStorage(k)=0.0D0
             Endif
           EndDo
         EndDo
@@ -1891,20 +1826,6 @@ c be released later through the empirical Mode 5 storage-capacity path.
           DripMode6BoundaryLimit_Sum=DripMode6BoundaryLimit_Sum+dt
         Endif
         DripMode6Diag_Time=DripMode6Diag_Time+dt
-        DripWetNodes_StepSum=DripWetNodes_StepSum+
-     !    dble(Mode6ActiveCount)*dt
-        DripWetNodes_StepMax=dmax1(DripWetNodes_StepMax,
-     !    dble(Mode6ActiveCount))
-        DripWetWidth_StepSum=DripWetWidth_StepSum+Mode6WetWidth*dt
-        DripWetWidth_StepMax=dmax1(DripWetWidth_StepMax,
-     !    Mode6WetWidth)
-        Do Mode6Source=1,DripMode6Count
-          DripPressureFactor_StepSum=DripPressureFactor_StepSum+
-     !      DripMode6PressureFactor(Mode6Source)*dt
-          DripPressureFactor_StepMin=dmin1(DripPressureFactor_StepMin,
-     !      DripMode6PressureFactor(Mode6Source))
-          DripDiag_StepCount=DripDiag_StepCount+dt
-        EndDo
       Endif
       Endif
 c Apply the same discrete-domain conservation acceptance test to ordinary
@@ -2075,57 +1996,6 @@ c only calculate this when the surface nodes are atmospheric boundary nodes
           hNew(i)=CriticalH+h_Pond(k)         ! cccz could be CriticalH_R, but we force it to 
           hOld(i)=hNew(i)
         endif
-        If(DripInput_Rate(k).gt.0.0.or.
-     !    DripStorageRelease_Rate(k).gt.0.0) then
-          DripNew=dble(DripInput_Rate(k)*Width(k))
-          DripStored=dble(DripStorageRelease_Rate(k)*Width(k))
-          DripPotential=DripNew+DripStored
-          If(Q(i).gt.1.0E-5) then
-            DripShare=dmin1(1.0D0,DripPotential/dble(Q(i)))
-            DripExcess=dmax1(dble(Q(i)-QAct(i)),0.0D0)*DripShare
-            DripExcess=dmin1(DripExcess,DripPotential)
-          Else
-            DripExcess=DripPotential
-          Endif
-          DripActual=dmax1(DripPotential-DripExcess,0.0D0)
-          DripActualInfil_Flux=DripActualInfil_Flux+
-     !      DripActual*Step
-          If(DripStorageActive(k).eq.1) then
-            If(DripPotential.gt.0.0D0) then
-              DripNewExcess=DripExcess*DripNew/DripPotential
-              DripStoredExcess=DripExcess-DripNewExcess
-            Else
-              DripNewExcess=0.0D0
-              DripStoredExcess=0.0D0
-            Endif
-            DripStorageDelta=DripNewExcess-
-     !        dmax1(DripStored-DripStoredExcess,0.0D0)
-            DripSurfaceStorage(k)=dmax1(0.0D0,
-     !        DripSurfaceStorage(k)+DripStorageDelta*Step)
-            DripStorageChange_Flux=DripStorageChange_Flux+
-     !        DripStorageDelta*Step
-            DripStorageMeasure=DripCoveredMeasure(k)
-            If(DripStorageMeasure.le.1.0D-12) then
-              DripStorageMeasure=dble(Width(k))
-            Endif
-            DripStorageLimit=DripStorageMeasure*dble(CriticalH)
-            If(DripStorageLimit.gt.0.0D0.and.
-     !        DripSurfaceStorage(k).gt.DripStorageLimit) then
-              DripOverflow=DripSurfaceStorage(k)-DripStorageLimit
-              DripSurfaceStorage(k)=DripStorageLimit
-              DripStorageChange_Flux=DripStorageChange_Flux-
-     !          DripOverflow
-              DripSurfaceRunoff_Flux=DripSurfaceRunoff_Flux+
-     !          DripOverflow
-              If(Step.gt.0.0D0) then
-                RO(i)=amax1(RO(i),sngl(DripOverflow/Step))
-              Endif
-            Endif
-          ElseIf(DripExcess.gt.0.0D0) then
-            DripHydraulicExcess_Flux=DripHydraulicExcess_Flux+
-     !        DripExcess*Step
-          Endif
-        Endif
        Enddo
 cccz turn this on for Ex_4 plastic mulching
 cccz #ifdef EX_4P
@@ -3412,15 +3282,18 @@ c*
       Do i=1,DripMode6Count
         DripMode6AcceptedFlux(i)=0.0D0
         DripMode6RemainingFlux(i)=DripMode6InputFlux(i)
-        DripMode6CurrentRadius(i)=0
         Mode6FluxTol=dmax1(1.0D-4,
      !    1.0D-4*dabs(DripMode6InputFlux(i)))
         If(DripMode6InputFlux(i).gt.Mode6FluxTol) then
           DripMode6Closed(i)=0
-          k=DripMode6CenterBnd(i)
-          DripMode6FluxActive(k)=1
-          DripMode6AssignedFlux(k)=DripMode6InputFlux(i)
-          DripMode6BoundaryOwner(k)=i
+          Do k=1,NumBP
+            If(DripMode6ContactMeasure(k).gt.1.0D-12) then
+              DripMode6FluxActive(k)=1
+              DripMode6AssignedFlux(k)=DripMode6InputFlux(i)*
+     !          DripMode6ContactMeasure(k)/DripMode6ContactTotal
+              DripMode6BoundaryOwner(k)=i
+            Endif
+          EndDo
         Else
           DripMode6Closed(i)=1
         Endif

@@ -1,5 +1,7 @@
 # MAIZSIM IES 数据同化框架
 
+MAIZSIM有限供水等效滴灌线源的30 mm三土壤验证入口为`python -m da_framework.mode6_30mm_validation`，三网格和三时间步收敛入口为`python -m da_framework.mode6_convergence --kind grid|time`。输入输出契约、守恒方程和当前验收结果见[FINITE_SUPPLY_DRIP_LINE_SOURCE.md](../FINITE_SUPPLY_DRIP_LINE_SOURCE.md)。
+
 本目录放 MAIZSIM/2DSOIL 的第一版 IES 数据同化框架。所有配置、运行入口、示例观测和运行产物都限制在 `DA_Framework/` 下。
 
 ## 目录结构
@@ -157,9 +159,9 @@ python -m unittest discover -s DA_Framework/tests
 
 ## 滴灌验证工具
 
-`da_framework.drip_validation`、`hydrus_aligned_validation`和示例输入生成器当前接受`DripSpreadMode=0/5/6`，并拒绝已废弃的`1/2/3/4`。`Mode5`和`Mode6`都必须提供正的`DripSourceWidth`；如果输入记录提供`DripSourceWidth`但省略`DripSpreadMode`，工具仍按兼容规则默认写出`Mode5`。
+当前运行时只有固定接触区有限供水等效滴灌线源。示例输入生成器接受`EmitterFlowLph`、`EmitterSpacingCm`、`ContactWidthCm`、事件起止时刻和一个`x=0`地表节点；它拒绝旧格式的`wAppl`、`DripMode`、`DripWetWidthMax`、`DripSpreadMode`和`DripSourceWidth`。旧的`drip_validation`、`drip_regression`、`drip_precision_validation`和`hydrus_aligned_validation`是历史研究辅助代码，不是当前`.drp`输入生成器或验收入口；它们生成的旧格式不能被当前Fortran滴灌入口接受。
 
-`Mode6`表示地表滴灌活动边界：有限供水率先施加于滴头地表节点；当通量边界需要正压力时，该节点转为`h=0`头边界，剩余供水再沿连通地表传给相邻节点。整个滴灌事件只由`Mode6`求解，不回退到`Mode5`、均布地表源或储水容量近似。`DripWetWidthMax`仅保留为`Mode5`参数；`Mode6`会检查完整连通地表。全域仍不能接纳的水量在物理意义上是“未接纳供水/边界溢出”，现阶段沿用兼容输出字段`DripSurfaceRunoff`，不能直接解释为已建立地表汇流路径的径流。G05解析会识别以下额外列：
+求解器保留原Mode6的Newton活动边界内核：有限供水只在`[0, ContactWidthCm]`固定接触区内守恒分配；通量边界若需要正压力，该节点切换为`h=0`水头边界。求解失败只能缩小同一Richards子步并重算，不能回退、跳步或放宽闭合阈值。未入渗水先进入固定接触区的局部积水，超过`hCritS`容量后记入溢流账本，不扩大接触区。G05输出包括：
 
 ```text
 DripMode6Accepted
@@ -177,18 +179,18 @@ DripMode6MassCuts
 DripMode6MinDtDays
 ```
 
-`da_framework.mode6_30mm_validation`用于HUTD06半域的单源30 mm事件验证。滴头固定在最靠近作物行的非轴地表节点；壤土、砂壤土和黏壤土均使用相同事件契约。湿润宽度、深度和面积在停水时刻计算，阈值为`delta_theta = 0.005`，采用三角形单元内线性插值，并报告远端横边界、底边界和局部加密区截断。三网格GCI仅在单调、正表观阶且进入渐近区时有效。
+`da_framework.mode6_30mm_validation`用于笛卡尔半域的单源30 mm事件验证。滴灌带固定在地表对称轴`x=0`；壤土、砂壤土和黏壤土均使用相同的滴头流量、间距、接触宽度和事件历时。湿润宽度、深度和面积在停水时刻计算，阈值为`delta_theta=0.005`，采用三角形单元内线性插值，并报告远端横边界、底边界和局部加密区截断。三网格GCI仅在单调、正表观阶且进入渐近区时有效。
 
 三种质地的标准van Genuchten参数需补充MAIZSIM近饱和导水率桥接参数。验证工具沿用HUTD06七层材料的一致规则：`Kk = 0.9 Ks`、`thk = ths - 0.004`，并拒绝`Kk = Ks`或`thk = ths`。后两种退化输入会关闭近饱和桥接；尤其在较小`n`的黏壤土中，会保留Mualem导水率在饱和端附近的奇异斜率，不能把由此产生的Newton失败误判为滴灌边界机制失败。
 
-HUTD06的`KAT=2`表示Cartesian垂直剖面，滴灌源在数学上是单位出平面长度上的线源。验证脚本中的30 mm表示半域等效灌水深度，不等同于物理三维点滴头的L/h流量。若要转换为单滴头体积流量，必须另行给出并论证出平面代表长度或周期滴头间距。
+HUTD06的`KAT=2`表示Cartesian垂直剖面，滴灌源在数学上是单位出平面长度上的线源。验证脚本使用滴头间距把L/h换算为半域线供水率；其中30 mm表示整个半域上的等效灌水深度，而不是接触区局部水深。
 
 `da_framework.faloye_2025_reference`提供Faloye等（2025）的10组地表点源湿润宽度/深度汇总值及可审计来源信息。该数据缺少完整土壤水力参数、硬盘层参数、滴头作用面积、原始重复和`±`统计量定义，且三维点源几何与HUTD06线源不直接兼容，因此只允许用于趋势和量级软诊断，不能单独判定通过或论文就绪。
 
 相关最小测试命令：
 
 ```powershell
-pixi run --manifest-path pixi.toml python -m pytest DA_Framework/tests/test_maizsim_drip_inputs.py DA_Framework/tests/test_drip_validation.py DA_Framework/tests/test_hydrus_aligned_validation.py DA_Framework/tests/test_drip_precision_validation.py DA_Framework/tests/test_mode5_fortran_contract.py DA_Framework/tests/test_mode6_fortran_contract.py DA_Framework/tests/test_mode6_active_boundary_scenarios.py DA_Framework/tests/test_mode6_30mm_validation.py DA_Framework/tests/test_hutd06_grid_refinement.py DA_Framework/tests/test_faloye_2025_reference.py -q
+pixi run --manifest-path pixi.toml python -m pytest DA_Framework/tests/test_maizsim_drip_inputs.py DA_Framework/tests/test_mode6_fortran_contract.py DA_Framework/tests/test_mode6_active_boundary_scenarios.py DA_Framework/tests/test_mode6_30mm_validation.py DA_Framework/tests/test_hutd06_grid_refinement.py DA_Framework/tests/test_faloye_2025_reference.py -q
 ```
 
 ## 第一版限制

@@ -33,15 +33,19 @@ https://github.com/precision-sustainable-ag/BuildMaizsim
 
 More documention is being prepared. See the "how to run model" file for information on how to set up the input files and run the executable from the command line. 
 
-## Drip irrigation spread modes
+## Finite-supply drip-line source
 
-Current drip input validation accepts only these `DripSpreadMode` values:
+MAIZSIM now has one drip formulation for a two-dimensional Cartesian
+half-domain. The drip tape is on `x=0`; emitter discharge and emitter spacing
+define the half-domain line supply, which is distributed conservatively over a
+fixed physical surface-contact interval. The Richards solver retains the
+Mode6 Newton active-boundary treatment and reports local ponding and overflow
+as an explicit ledger. Mode5, dynamic wetting radii, and automatic spreading
+to the whole surface are not supported.
 
-- `0`: legacy compatible surface drip input.
-- `5`: dynamic local surface-source approximation using positive `DripSourceWidth`.
-- `6`: HYDRUS-style surface drip approximation. This is surface drip only. Water is first assigned to the emitter-center surface node, positive-head flux nodes switch to `h=0`, and WaterMover recursively passes remaining water to neighboring surface nodes until accepted or explicitly reported in G05 as remaining/storage/runoff, `DripMode6SolverLimit`, or `DripMode6BoundaryLimit`.
-
-Modes `1`, `2`, `3`, and `4` remain obsolete and are rejected as spread modes. For `Mode5` and `Mode6`, `DripSourceWidth` is required and must be positive. The implementation notes and validation summary for `Mode6` are in `2026-06-06-mode6-hydrus-surface-drip-design.md`.
+See [FINITE_SUPPLY_DRIP_LINE_SOURCE.md](FINITE_SUPPLY_DRIP_LINE_SOURCE.md) for
+the input contract, units, output columns, conservation equations, and
+validation commands.
 
 
 See the ExcelInterface repository for an excel based interface and example input files.

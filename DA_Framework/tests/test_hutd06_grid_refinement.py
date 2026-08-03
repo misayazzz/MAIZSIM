@@ -31,9 +31,9 @@ EXPECTED_AREAS = {
         "emitter_node",
     ),
     (
-        (0, 10, 52, 520, 459, 20, 12, 2),
-        (1, 19, 76, 1444, 1350, 38, 21, 3),
-        (2, 37, 124, 4588, 4428, 74, 39, 5),
+        (0, 10, 52, 520, 459, 20, 12, 1),
+        (1, 19, 76, 1444, 1350, 38, 21, 1),
+        (2, 37, 124, 4588, 4428, 74, 39, 1),
     ),
 )
 def test_refinement_preserves_hutd06_contract(
@@ -64,7 +64,7 @@ def test_refinement_preserves_hutd06_contract(
     assert result["boundary_count"] == boundaries
     assert result["solver_bandwidth"] == band
     assert result["emitter_node"] == emitter_node
-    assert result["emitter_x_cm"] == pytest.approx(0.75)
+    assert result["emitter_x_cm"] == pytest.approx(0.0)
     assert result["domain_width_cm"] == pytest.approx(37.5)
     assert result["material_areas_cm2"] == pytest.approx(EXPECTED_AREAS)
 
@@ -73,7 +73,7 @@ def test_refinement_preserves_hutd06_contract(
     emitter_row = grid_lines[3 + emitter_node].split()
     assert emitter_row[:4] == [
         str(emitter_node),
-        "0.75",
+        "0",
         "183",
         "1",
     ]
@@ -130,9 +130,9 @@ def test_refinement_preserves_hutd06_contract(
 @pytest.mark.parametrize(
     ("level", "x_count", "y_count", "nodes", "elements", "band", "emitter_node"),
     (
-        (0, 13, 52, 676, 612, 15, 2),
-        (1, 23, 72, 1656, 1562, 25, 3),
-        (2, 43, 112, 4816, 4662, 45, 5),
+        (0, 13, 52, 676, 612, 15, 1),
+        (1, 23, 72, 1656, 1562, 25, 1),
+        (2, 43, 112, 4816, 4662, 45, 1),
     ),
 )
 def test_extended_validation_domain_fits_solver_limits(
